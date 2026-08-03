@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_brand">Astral Game</string>
+    <string name="widget_connect_label">Astral · 快捷连接</string>
+    <string name="widget_connect_description">当前房间与连接状态，点击打开应用</string>
+    <string name="widget_connect_default_title">未选择房间</string>
+    <string name="widget_connect_default_status">未连接</string>
+    <string name="widget_rooms_label">Astral · 房间列表</string>
+    <string name="widget_rooms_description">已保存的房间，点击打开应用</string>
+    <string name="widget_rooms_title">我的房间</string>
+    <string name="widget_rooms_empty">暂无保存的房间</string>
+    <string name="widget_members_label">Astral · 在线成员</string>
+    <string name="widget_members_description">当前房间在线成员预览</string>
+    <string name="widget_members_title">在线成员</string>
+    <string name="widget_members_count_fmt">%1$d 人</string>
+</resources>

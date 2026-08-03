@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "774291421347",
+    "project_id": "astral-game-6213b",
+    "storage_bucket": "astral-game-6213b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:774291421347:android:75aa4f77a30c7371c56716",
+        "android_client_info": {
+          "package_name": "com.example.astral_game"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAqwyNk9KnREtjeaCFLtwZ4rhBd4uKKeKY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,0 +1,264 @@
+# 发布 Astral Game
+#
+# 自动：推送 v* 标签 → Build 成功后创建正式 Release
+# 手动：Actions 里 Run workflow，先跑完 Build（platform: all）
+#
+# Secret：GOOGLE 或 GOOGLE_API_KEY（Gemini，可选；无则回退为提交列表）
+# 附件命名：astral-game-<semver>-<platform>-<arch>.<ext>
+
+name: 发布
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Git 标签（如 v1.0.0）'
+        required: true
+        type: string
+      base_ref:
+        description: 'changelog 起点（上一 tag 或 SHA）'
+        required: true
+        type: string
+      head_ref:
+        description: 'changelog 终点'
+        required: false
+        default: 'main'
+        type: string
+      package_version:
+        description: '包文件名版本（留空则从 tag 去 v）'
+        required: false
+        default: ''
+        type: string
+      draft:
+        description: '草稿 Release'
+        required: false
+        default: true
+        type: boolean
+      prerelease:
+        description: '预发布'
+        required: false
+        default: true
+        type: boolean
+  workflow_run:
+    workflows: ['🚀 Build Astral Game']
+    types: [completed]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        startsWith(github.event.workflow_run.head_branch, 'v')
+      )
+    steps:
+      - name: 检出
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.head_ref || github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: 解析发布参数
+        id: cfg
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euxo pipefail
+          AUTO="${{ github.event_name == 'workflow_run' && '1' || '0' }}"
+
+          if [ "$AUTO" = "1" ]; then
+            TAG="${{ github.event.workflow_run.head_branch }}"
+            BASE=$(git fetch --tags --force 2>/dev/null; git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || git rev-list --max-parents=0 HEAD | tail -1)
+            HEAD="$TAG"
+            DRAFT=false
+            PRE=false
+            TARGET="${{ github.event.workflow_run.head_sha }}"
+            RUN_ID="${{ github.event.workflow_run.id }}"
+            SEARCH=false
+            if gh release view "$TAG" >/dev/null 2>&1; then
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              echo "Release $TAG 已存在，跳过"
+              exit 0
+            fi
+          else
+            TAG="${{ inputs.tag_name }}"
+            BASE="${{ inputs.base_ref }}"
+            HEAD="${{ inputs.head_ref }}"
+            DRAFT="${{ inputs.draft }}"
+            PRE="${{ inputs.prerelease }}"
+            TARGET="${{ inputs.head_ref }}"
+            RUN_ID=""
+            SEARCH=true
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          PV="${{ inputs.package_version }}"
+          if [ -n "$PV" ]; then VER="$PV"; else VER="${TAG#v}"; fi
+
+          {
+            echo "tag=$TAG"
+            echo "version=$VER"
+            echo "base=$BASE"
+            echo "head=$HEAD"
+            echo "draft=$DRAFT"
+            echo "prerelease=$PRE"
+            echo "target=$TARGET"
+            echo "run_id=$RUN_ID"
+            echo "search=$SEARCH"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "PKG_VER=$VER" >> "$GITHUB_ENV"
+          echo "TAG_NAME=$TAG" >> "$GITHUB_ENV"
+          echo "BASE_REF=$BASE" >> "$GITHUB_ENV"
+          echo "HEAD_REF=$HEAD" >> "$GITHUB_ENV"
+
+      - name: 拉取 Windows zip
+        if: steps.cfg.outputs.skip != 'true'
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          run_id: ${{ steps.cfg.outputs.run_id }}
+          workflow: build.yml
+          name: astral-game-windows-x64
+          path: _dl/windows
+          search_artifacts: ${{ steps.cfg.outputs.search == 'true' }}
+          if_no_artifact_found: warn
+
+      - name: 拉取 Linux
+        if: steps.cfg.outputs.skip != 'true'
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          run_id: ${{ steps.cfg.outputs.run_id }}
+          workflow: build.yml
+          name: astral-game-linux-x64
+          path: _dl/linux
+          search_artifacts: ${{ steps.cfg.outputs.search == 'true' }}
+          if_no_artifact_found: warn
+
+      - name: 拉取 Android arm64
+        if: steps.cfg.outputs.skip != 'true'
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          run_id: ${{ steps.cfg.outputs.run_id }}
+          workflow: build.yml
+          name: astral-game-android-arm64
+          path: _dl/android-arm64
+          search_artifacts: ${{ steps.cfg.outputs.search == 'true' }}
+          if_no_artifact_found: warn
+
+      - name: 拉取 Android universal
+        if: steps.cfg.outputs.skip != 'true'
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          run_id: ${{ steps.cfg.outputs.run_id }}
+          workflow: build.yml
+          name: astral-game-android-universal
+          path: _dl/android-universal
+          search_artifacts: ${{ steps.cfg.outputs.search == 'true' }}
+          if_no_artifact_found: warn
+
+      - name: 拉取 Windows 安装包
+        if: steps.cfg.outputs.skip != 'true'
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          run_id: ${{ steps.cfg.outputs.run_id }}
+          workflow: build.yml
+          name: astral-game-windows-x64-setup
+          path: _dl/installer
+          search_artifacts: ${{ steps.cfg.outputs.search == 'true' }}
+          if_no_artifact_found: warn
+
+      - name: 规范命名 release/
+        if: steps.cfg.outputs.skip != 'true'
+        env:
+          PKG_VER: ${{ steps.cfg.outputs.version }}
+        run: |
+          set -euxo pipefail
+          mkdir -p release
+          pick() { find _dl -type f -name "$1" 2>/dev/null | head -1; }
+          f=$(pick '*.zip'); [ -n "$f" ] && cp -f "$f" "release/astral-game-${PKG_VER}-windows-x64.zip"
+          f=$(pick '*.tar.gz'); [ -n "$f" ] && cp -f "$f" "release/astral-game-${PKG_VER}-linux-x64.tar.gz"
+          f=$(find _dl/android-arm64 -name '*.apk' 2>/dev/null | head -1); [ -n "$f" ] && cp -f "$f" "release/astral-game-${PKG_VER}-android-arm64.apk"
+          f=$(find _dl/android-universal -name '*.apk' 2>/dev/null | head -1); [ -n "$f" ] && cp -f "$f" "release/astral-game-${PKG_VER}-android-universal.apk"
+          f=$(find _dl/installer -name '*.exe' 2>/dev/null | head -1); [ -n "$f" ] && cp -f "$f" "release/astral-game-${PKG_VER}-windows-x64-setup.exe"
+          ls -la release/ || true
+
+      - name: 导出 commits & 生成 Release 说明
+        if: steps.cfg.outputs.skip != 'true'
+        id: changelog
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          GOOGLE: ${{ secrets.GOOGLE }}
+          REPO_FULL: ${{ github.repository }}
+          SERVER_URL: ${{ github.server_url }}
+        run: |
+          set -euxo pipefail
+          git log --reverse --pretty=format:'%H%x1f%h%x1f%s%x1f%an%x1f%ae%x1f%ci' \
+            "${{ steps.cfg.outputs.base }}..${{ steps.cfg.outputs.head }}" > commits.tsv || true
+
+          export GOOGLE_API_KEY="${GOOGLE_API_KEY:-$GOOGLE}"
+          pip install --quiet google-generativeai 2>/dev/null || true
+
+          python3 <<'PY'
+          import os, pathlib
+          repo = os.environ.get("REPO_FULL", "")
+          server = os.environ.get("SERVER_URL", "https://github.com").rstrip("/")
+          tag = os.environ.get("TAG_NAME", "")
+          ver = os.environ.get("PKG_VER", "")
+          base = os.environ.get("BASE_REF", "")
+          head = os.environ.get("HEAD_REF", "")
+          rows = []
+          p = pathlib.Path("commits.tsv")
+          if p.is_file():
+              for line in p.read_text(encoding="utf-8").splitlines():
+                  parts = line.split("\x1f")
+                  if len(parts) >= 6:
+                      rows.append(f"- {parts[1]} | {parts[2]} | {parts[3]}")
+          block = "\n".join(rows) if rows else "(无提交)"
+          body = None
+          key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GOOGLE")
+          if key:
+              try:
+                  import google.generativeai as genai
+                  genai.configure(api_key=key)
+                  m = genai.GenerativeModel("gemini-2.0-flash")
+                  prompt = (
+                      f"为 Astral Game {tag} 写 GitHub Release 正文（Markdown，简体中文）。\n"
+                      f"包版本 {ver}，对比 {base}..{head}，仓库 {server}/{repo}。\n"
+                      f"含亮点、变更分组、安装包平台说明（windows/linux/android）。\n"
+                      f"只输出 Markdown，不要代码围栏。\n提交：\n{block}"
+                  )
+                  body = (m.generate_content(prompt).text or "").strip()
+              except Exception as e:
+                  print(f"gemini fallback: {e}")
+          if not body:
+              body = f"## Astral Game {tag}\n\n### 提交\n{block}\n"
+          pathlib.Path("CHANGELOG.md").write_text(body + "\n", encoding="utf-8")
+          PY
+
+          DELIM="CHLOG_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          { echo "body<<${DELIM}"; cat CHANGELOG.md; echo "${DELIM}"; } >> "$GITHUB_OUTPUT"
+
+      - name: 创建 GitHub Release
+        if: steps.cfg.outputs.skip != 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Astral Game ${{ steps.cfg.outputs.tag }}
+          tag_name: ${{ steps.cfg.outputs.tag }}
+          target_commitish: ${{ steps.cfg.outputs.target }}
+          body: ${{ steps.changelog.outputs.body }}
+          draft: ${{ steps.cfg.outputs.draft == 'true' }}
+          prerelease: ${{ steps.cfg.outputs.prerelease == 'true' }}
+          fail_on_unmatched_files: false
+          files: release/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

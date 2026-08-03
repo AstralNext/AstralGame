@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="overlay_title">Astral · 在线</string>
+    <string name="overlay_empty">暂无在线用户</string>
+    <string name="overlay_not_connected">未连接房间</string>
+    <string name="overlay_avatar_desc">用户头像</string>
+</resources>

@@ -1,0 +1,74 @@
+name: astral_game
+description: "Astral Game Client"
+publish_to: 'none'
+
+version: 1.0.2
+
+environment:
+  sdk: ^3.8.0
+  
+
+dependencies:
+  flutter:
+    sdk: flutter
+  astral_rust_core:
+    git:
+      url: https://github.com/AstralNext/astral_rust_core.git
+      ref: v0.1.0
+  vpn_service_plugin:
+    git:
+      url: https://github.com/AstralNext/vpn_service_plugin.git
+      ref: v0.2.0
+  pointycastle: ^3.9.1
+  window_manager: ^0.4.3
+  get_it: ^9.2.0
+  signals: ^6.3.0
+  signals_flutter: ^6.3.0
+  url_launcher: ^6.3.0
+  shared_preferences: ^2.3.3
+  path_provider: ^2.1.4
+  webdav_client: ^1.2.2
+  archive: ^4.0.2
+  path: ^1.9.0
+  package_info_plus: ^8.3.0
+  image_picker: ^1.1.1
+  http: ^1.2.2
+  logger: ^2.0.0
+  tray_manager: ^0.5.2
+  device_info_plus: ^12.4.0
+  connectivity_plus: ^7.1.1
+  home_widget: ^0.7.0
+  firebase_core: ^4.9.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  image_path: assets/logo.png
+  adaptive_icon_background: "#FAFAFA"
+  adaptive_icon_foreground: assets/logo.png
+  windows:
+    generate: true
+    image_path: assets/logo.png
+    icon_size: 256
+  macos:
+    generate: true
+    image_path: assets/logo.png
+  web:
+    generate: true
+    image_path: assets/logo.png
+    background_color: "#FAFAFA"
+    theme_color: "#BFA89E"
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/logo.png
+    # Windows 托盘图标优先用 .ico
+    - assets/icon.ico

@@ -1,0 +1,300 @@
+name: 🚀 Build Astral Game
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: 'Select platform to build'
+        required: true
+        type: choice
+        options:
+          - all
+          - android-arm64
+          - android-universal
+          - linux-x64
+          - windows-x64
+        default: 'all'
+  push:
+    branches: [main, develop]
+    tags:
+      - 'v*'
+    paths:
+      - 'lib/**'
+      - 'android/**'
+      - 'ios/**'
+      - 'linux/**'
+      - 'macos/**'
+      - 'windows/**'
+      - 'assets/**'
+      - 'installer/**'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - '.github/workflows/build.yml'
+      - '.github/workflows/release.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'lib/**'
+      - 'android/**'
+      - 'ios/**'
+      - 'linux/**'
+      - 'macos/**'
+      - 'windows/**'
+      - 'assets/**'
+      - 'installer/**'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - '.github/workflows/build.yml'
+      - '.github/workflows/release.yml'
+
+jobs:
+  # job 级 if 不能使用 matrix；手动触发时在此按 inputs.platform 过滤矩阵。
+  matrix-prep:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - id: set-matrix
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          SELECTED: ${{ inputs.platform }}
+        run: |
+          set -euo pipefail
+          # 必须保持单行 JSON；多行写入 GITHUB_OUTPUT 会触发 Invalid format。
+          ALL=$(jq -nc '
+            [
+              {"platform":"android-arm64","os":"ubuntu-22.04","flutter_platform":"android","rust_target":"aarch64-linux-android","build_cmd":"flutter build apk --release --target-platform android-arm64","artifact_path":"build/app/outputs/flutter-apk/app-release.apk","artifact_name":"astral-game-android-arm64","package":false},
+              {"platform":"android-universal","os":"ubuntu-22.04","flutter_platform":"android","rust_target":"aarch64-linux-android","build_cmd":"flutter build apk --release","artifact_path":"build/app/outputs/flutter-apk/app-release.apk","artifact_name":"astral-game-android-universal","package":false},
+              {"platform":"linux-x64","os":"ubuntu-22.04","flutter_platform":"linux","rust_target":"x86_64-unknown-linux-gnu","build_cmd":"flutter build linux --release","artifact_path":"build/linux/x64/release/bundle","artifact_name":"astral-game-linux-x64","package":true},
+              {"platform":"windows-x64","os":"windows-2022","flutter_platform":"windows","rust_target":"x86_64-pc-windows-msvc","build_cmd":"flutter build windows --release","artifact_path":"build/windows/x64/runner/Release","artifact_name":"astral-game-windows-x64","package":false}
+            ]
+          ')
+          if [[ "$EVENT" == "workflow_dispatch" && "$SELECTED" != "all" ]]; then
+            INCLUDE=$(echo "$ALL" | jq -c --arg p "$SELECTED" '[.[] | select(.platform == $p)]')
+          else
+            INCLUDE=$(echo "$ALL" | jq -c '.')
+          fi
+          if [[ "$INCLUDE" == "[]" ]]; then
+            echo "::error::Unknown platform: $SELECTED"
+            exit 1
+          fi
+          MATRIX=$(echo "$INCLUDE" | jq -c '{include: .}')
+          {
+            echo 'matrix<<MATRIX_EOF'
+            echo "$MATRIX"
+            echo 'MATRIX_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    name: 🏗️ ${{ matrix.platform }}
+    needs: matrix-prep
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.matrix-prep.outputs.matrix) }}
+
+    env:
+      FLUTTER_VERSION: '3.41.0'
+      # cargokit 使用 `rustup run stable cargo build`，须保证 stable ≥ easytier MSRV。
+      NDK_VERSION: '28.2.13676358'
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v5
+
+      - name: ☕ Setup JDK (Android)
+        if: matrix.flutter_platform == 'android'
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: 🤖 Setup Android SDK
+        if: matrix.flutter_platform == 'android'
+        uses: android-actions/setup-android@v4
+        with:
+          packages: >-
+            tools platform-tools platforms;android-35 build-tools;35.0.0 ndk;${{ env.NDK_VERSION }} cmake;3.22.1
+
+      - name: 🔧 Setup bindgen for Android
+        if: matrix.flutter_platform == 'android'
+        run: |
+          NDK_PATH=$ANDROID_HOME/ndk/${{ env.NDK_VERSION }}
+          SYSROOT=$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/sysroot
+          echo "BINDGEN_EXTRA_CLANG_ARGS=--sysroot=$SYSROOT" >> $GITHUB_ENV
+          echo "✅ Configured bindgen for Android NDK"
+
+      - name: 📦 Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            ninja-build \
+            libgtk-3-dev \
+            clang \
+            cmake \
+            pkg-config \
+            libcurl4-openssl-dev \
+            protobuf-compiler \
+            libayatana-appindicator3-dev \
+            libnotify-dev \
+            fonts-noto-cjk \
+            fonts-wqy-zenhei \
+            fontconfig
+
+      - name: 🐦 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: 🎯 Enable desktop platform
+        if: matrix.flutter_platform == 'linux' || matrix.flutter_platform == 'windows'
+        run: flutter config --enable-${{ matrix.flutter_platform }}-desktop
+
+      - name: 🦀 Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+
+      - name: 🪟 Windows native build prerequisites
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Add-Content -Path $env:GITHUB_ENV -Value "CARGOKIT_VERBOSE=1"
+          Add-Content -Path $env:GITHUB_ENV -Value "CARGO_BUILD_JOBS=2"
+          New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' `
+            -Name 'LongPathsEnabled' -Value 1 -PropertyType DWORD -Force | Out-Null
+          choco install protoc nasm --yes --no-progress
+          $machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+          $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+          $env:Path = "$machinePath;$userPath"
+          $nasmDir = 'C:\Program Files\NASM'
+          if (Test-Path $nasmDir) {
+            Add-Content -Path $env:GITHUB_PATH -Value $nasmDir
+            $env:Path = "$nasmDir;$env:Path"
+          }
+          Write-Host '--- toolchain ---'
+          rustc -V
+          rustup show
+          Write-Host '--- protoc / nasm ---'
+          & protoc --version
+          Get-Command nasm -ErrorAction SilentlyContinue | Out-String | Write-Host
+
+      - name: 📚 Get dependencies
+        run: flutter pub get
+
+      # astral_rust_core 通过 git 依赖拉取到 pub-cache；构建前清理避免脏 target 缓存。
+      - name: 🧹 Clean Rust cache (astral_rust_core)
+        shell: bash
+        run: |
+          set -euo pipefail
+          CACHE="${PUB_CACHE:-$HOME/.pub-cache}/git"
+          RUST_MANIFEST=$(find "$CACHE" -path '*/astral_rust_core*/rust/Cargo.toml' 2>/dev/null | head -1)
+          if [ -n "$RUST_MANIFEST" ]; then
+            cargo clean --manifest-path "$RUST_MANIFEST"
+            echo "✅ Cleaned $(dirname "$RUST_MANIFEST")"
+          else
+            echo "⚠️ astral_rust_core not found in pub cache, skipping cargo clean"
+          fi
+
+      - name: ✅ Verify Windows runtime DLLs
+        if: matrix.flutter_platform == 'windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          dlls=(dlls/*.dll)
+          if [ ${#dlls[@]} -eq 0 ]; then
+            echo "::error::dlls/*.dll missing (need wintun.dll, Packet.dll)"
+            exit 1
+          fi
+          ls -la dlls/
+
+      - name: 🛠️ Build for ${{ matrix.platform }}
+        run: ${{ matrix.build_cmd }}
+        shell: bash
+
+      - name: 📦 Package Linux app
+        if: matrix.flutter_platform == 'linux' && matrix.package
+        run: |
+          mkdir -p release
+          cd ${{ matrix.artifact_path }}
+          tar -czf $GITHUB_WORKSPACE/release/${{ matrix.artifact_name }}.tar.gz *
+        shell: bash
+
+      - name: 📦 Compress Windows app
+        if: matrix.flutter_platform == 'windows' && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $releaseDir = "release"
+          $buildDir = "${{ matrix.artifact_path }}"
+          $zipPath = Join-Path $releaseDir "${{ matrix.artifact_name }}.zip"
+          New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
+          Compress-Archive -Path (Join-Path $buildDir "*") `
+                          -DestinationPath $zipPath `
+                          -Force
+          Write-Host "✅ Created package: $zipPath"
+
+      - name: 📜 App semver for installer (pubspec, no +build)
+        if: matrix.flutter_platform == 'windows' && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $line = Get-Content "pubspec.yaml" | Where-Object { $_ -match '^\s*version:\s*' } | Select-Object -First 1
+          if (-not $line) { throw "version: not found in pubspec.yaml" }
+          if ($line -match 'version:\s*([\d.]+)') {
+            $v = $Matches[1]
+          } else {
+            throw "Could not parse version from: $line"
+          }
+          Add-Content -Path $env:GITHUB_ENV -Value "APP_VERSION=$v"
+          Write-Host "Installer semver: $v"
+
+      - name: 📦 Install Inno Setup
+        if: matrix.flutter_platform == 'windows' && runner.os == 'Windows'
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: 📦 Build Windows installer (Inno Setup)
+        if: matrix.flutter_platform == 'windows' && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { throw "ISCC.exe not found: $iscc" }
+          & $iscc "installer/astral_game.iss" "/DMyAppVersion=$env:APP_VERSION"
+
+      - name: 📤 Upload Android APK
+        if: matrix.flutter_platform == 'android'
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_path }}
+          retention-days: 14
+
+      - name: 📤 Upload Linux package
+        if: matrix.flutter_platform == 'linux' && matrix.package
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: release/*.tar.gz
+          retention-days: 14
+
+      - name: 📤 Upload Windows package
+        if: matrix.flutter_platform == 'windows' && runner.os == 'Windows'
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: release/*.zip
+          retention-days: 14
+
+      - name: 📤 Upload Windows installer
+        if: matrix.flutter_platform == 'windows' && runner.os == 'Windows'
+        uses: actions/upload-artifact@v5
+        with:
+          name: astral-game-windows-x64-setup
+          path: release_installer/astral-game-*-windows-x64-setup.exe
+          retention-days: 14

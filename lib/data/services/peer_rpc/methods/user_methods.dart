@@ -1,0 +1,65 @@
+import 'dart:convert';
+
+import 'package:get_it/get_it.dart';
+
+import 'package:astral_game/data/services/app_settings_service.dart';
+import 'package:astral_game/data/services/connectivity_status_service.dart';
+import 'package:astral_game/data/services/firewall_service.dart';
+import 'package:astral_game/data/services/peer_rpc/peer_rpc_router.dart';
+import 'package:astral_game/utils/client_runtime_info.dart';
+
+/// 用户相关方法
+class UserMethods {
+  final AppSettingsService _settings;
+
+  UserMethods(this._settings);
+
+  /// 获取用户信息
+  ///
+  /// 除昵称、头像外附带本机环境：`os`、`osVersion`、`appName`、`appVersion`、
+  /// `network`、`firewall`（Windows 专用配置文件），便于房间内共享展示。
+  Future<Map<String, dynamic>> getInfo(dynamic params) async {
+    final avatar = _settings.getAvatar();
+    final connectivity = GetIt.I.isRegistered<ConnectivityStatusService>()
+        ? GetIt.I<ConnectivityStatusService>().current.value
+        : NetworkKind.unknown;
+    if (GetIt.I.isRegistered<FirewallService>()) {
+      await GetIt.I<FirewallService>().refreshPrivateProfile();
+    }
+    final firewall = GetIt.I.isRegistered<FirewallService>()
+        ? GetIt.I<FirewallService>().firewallWireValue()
+        : 'unsupported';
+    return {
+      'name': _settings.getUsername(),
+      'avatar': avatar != null ? base64Encode(avatar) : null,
+      'os': ClientRuntimeInfo.operatingSystem,
+      'osVersion': ClientRuntimeInfo.operatingSystemVersion,
+      'appName': ClientRuntimeInfo.appName,
+      'appVersion': ClientRuntimeInfo.appVersion,
+      'network': connectivity.wireValue,
+      'firewall': firewall,
+    };
+  }
+
+  /// 更新用户信息
+  Future<Map<String, dynamic>> update(dynamic params) async {
+    if (params is Map) {
+      if (params['name'] != null) {
+        await _settings.setUsername(params['name'] as String);
+      }
+
+      if (params['avatar'] != null) {
+        final avatarBase64 = params['avatar'] as String;
+        await _settings.setAvatar(base64Decode(avatarBase64));
+      }
+    }
+
+    return {'success': true};
+  }
+
+  /// 获取所有方法
+  Map<String, MethodHandler> get methods => {
+        'user.getInfo': getInfo,
+        'user.update': update,
+      };
+}
