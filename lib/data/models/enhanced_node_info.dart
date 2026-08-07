@@ -40,6 +40,8 @@ class EnhancedNodeInfo {
   /// 虚拟网 IPv6（通常带 `/prefix`），无则为空串。
   String get ipv6 => baseInfo.ipv6;
   String get displayName => customName ?? baseInfo.hostname;
+  String get remoteStaticPubkeyB64 => baseInfo.remoteStaticPubkeyB64;
+  bool get isCredentialPeer => baseInfo.isCredentialPeer;
 
   /// 对端 `user.getInfo` 上报的 `os`（如 `windows` / `android`）。
   String? get peerOs => metadata['peerOs'] as String?;

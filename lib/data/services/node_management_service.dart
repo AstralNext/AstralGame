@@ -53,6 +53,9 @@ class NodeManagementService {
 
   Timer? _pollingTimer;
   int _pollTick = 0;
+  /// 已连接但尚未拿到虚拟 IP 时，节流告警，避免每秒刷屏。
+  DateTime? _noIpSince;
+  DateTime? _lastNoIpWarnAt;
 
   /// 本机在当前 EasyTier instance 内的 peer_id。`null` 表示尚未取到（首次轮询
   /// 期间会在后台异步刷新）。用于在拉取资料时把"自己"过滤掉，避免无意义的
@@ -91,6 +94,9 @@ class NodeManagementService {
   void start(String instanceId) {
     currentInstanceId.value = instanceId;
     _myPeerId = null;
+    _noIpSince = DateTime.now();
+    _lastNoIpWarnAt = null;
+    myVirtualIpv4.value = '';
     // 后台异步取本机 peer_id，不阻塞 polling 启动；取到之前 polling 已经会用
     // `peerId == 0` 这个守卫挡掉合成本机节点。
     unawaited(_refreshMyPeerId(instanceId));
@@ -107,7 +113,7 @@ class NodeManagementService {
       );
     }
     _startPolling(instanceId);
-    appLogger.d('[NodeManagementService] 已启动，实例ID: $instanceId');
+    appLogger.i('[NodeManagementService] 已启动，实例ID: $instanceId');
   }
 
   /// 停止节点管理
@@ -120,6 +126,8 @@ class NodeManagementService {
     _myPeerId = null;
     userNodes.value = [];
     myVirtualIpv4.value = '';
+    _noIpSince = null;
+    _lastNoIpWarnAt = null;
     _peerInfoFetchStartedAt.clear();
     appLogger.d('[NodeManagementService] 已停止');
   }
@@ -264,8 +272,14 @@ class NodeManagementService {
       // 真实 peer_id 的条目，做一个兜底匹配。任意一种都拿不到时清空。
       final myIp = _resolveMyVirtualIpv4(normalized);
       if (myIp != myVirtualIpv4.value) {
+        final prev = myVirtualIpv4.value;
         myVirtualIpv4.value = myIp;
+        appLogger.i(
+          '[NodeManagementService] 本机虚拟 IP: '
+          '${prev.isEmpty ? '(空)' : prev} -> ${myIp.isEmpty ? '(空)' : myIp}',
+        );
       }
+      _trackMissingVirtualIp(myIp, normalized);
 
       if (_verbosePollLogs) {
         // 每秒打印“本次实际获取到的节点列表”（非常刷屏）
@@ -291,6 +305,16 @@ class NodeManagementService {
       peerId == _localSyntheticPeerId ||
       (_myPeerId != null && peerId == _myPeerId);
 
+  /// 是否为本机节点（含 Rust 合成本机哨兵 id）。
+  bool isLocalPeer(int peerId) => _isLocalPeer(peerId);
+
+  /// 成员是否为当前房间房主（管理节点 / 本机会话房主）。
+  /// 是否为当前房间房主节点。共享密码模式下客人侧无法可靠识别，仅房主本人标为房主。
+  bool isRoomHostPeer(int peerId, {required bool sessionIsHost, required bool isCredentialPeer}) {
+    if (sessionIsHost) return _isLocalPeer(peerId);
+    return false;
+  }
+
   /// 从节点列表里挑出"本机"的虚拟 IPv4（去掉 CIDR 后缀），找不到返回空串。
   String _resolveMyVirtualIpv4(List<EnhancedNodeInfo> nodes) {
     EnhancedNodeInfo? candidate;
@@ -303,6 +327,34 @@ class NodeManagementService {
     if (candidate == null) return '';
     final raw = candidate.ipv4.split('/').first.trim();
     return raw == '0.0.0.0' ? '' : raw;
+  }
+
+  /// 连接后长时间无虚拟 IP 时打告警，并带上节点摘要，方便对照内核日志。
+  void _trackMissingVirtualIp(String myIp, List<EnhancedNodeInfo> nodes) {
+    if (myIp.isNotEmpty) {
+      _noIpSince = null;
+      _lastNoIpWarnAt = null;
+      return;
+    }
+    _noIpSince ??= DateTime.now();
+    final waited = DateTime.now().difference(_noIpSince!);
+    if (waited < const Duration(seconds: 8)) return;
+    final last = _lastNoIpWarnAt;
+    if (last != null && DateTime.now().difference(last) < const Duration(seconds: 15)) {
+      return;
+    }
+    _lastNoIpWarnAt = DateTime.now();
+    final preview = nodes
+        .map((n) {
+          final ip = n.hasValidIpv4 ? n.ipv4.split('/').first : '-';
+          return '${n.peerId}:${n.hostname}:$ip';
+        })
+        .join(', ');
+    appLogger.w(
+      '[NodeManagementService] 已连接 ${waited.inSeconds}s 仍无虚拟 IP；'
+      'nodes=[$preview]。请对照 [EasyTier] 是否出现 '
+      'tun device ready / dhcp ip changed / tun device error',
+    );
   }
 
   /// 把本地持久化的用户名/头像盖到一个本机 [`EnhancedNodeInfo`] 上。
@@ -343,7 +395,9 @@ class NodeManagementService {
         (a.lossRate * 10).round() == (b.lossRate * 10).round() &&
         a.hops.length == b.hops.length &&
         a.version == b.version &&
-        a.cost == b.cost;
+        a.cost == b.cost &&
+        a.remoteStaticPubkeyB64 == b.remoteStaticPubkeyB64 &&
+        a.isCredentialPeer == b.isCredentialPeer;
   }
 
   bool _bytesEqualNullable(Uint8List? a, Uint8List? b) {

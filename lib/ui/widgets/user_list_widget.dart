@@ -1,19 +1,23 @@
-import 'package:flutter/material.dart';
 import 'package:astral_game/data/models/enhanced_node_info.dart';
 import 'package:astral_game/ui/pages/dashboard_user_item.dart';
 import 'package:astral_game/ui/widgets/empty_state_widget.dart';
+import 'package:flutter/material.dart';
 
 class UserListWidget extends StatelessWidget {
-  final List<EnhancedNodeInfo> users;
-  final bool shrinkWrap;
-  final ScrollPhysics? physics;
-
   const UserListWidget({
     super.key,
     required this.users,
     this.shrinkWrap = false,
     this.physics,
+    this.onKick,
+    this.isRoomHostOf,
   });
+
+  final List<EnhancedNodeInfo> users;
+  final bool shrinkWrap;
+  final ScrollPhysics? physics;
+  final Future<void> Function(EnhancedNodeInfo node)? onKick;
+  final bool Function(EnhancedNodeInfo node)? isRoomHostOf;
 
   @override
   Widget build(BuildContext context) {
@@ -33,6 +37,8 @@ class UserListWidget extends StatelessWidget {
         return DashboardUserItem(
           key: ValueKey<int>(node.peerId),
           node: node,
+          isRoomHost: isRoomHostOf?.call(node) ?? false,
+          onKick: onKick,
         );
       },
     );

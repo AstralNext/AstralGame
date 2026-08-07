@@ -6,9 +6,7 @@ import 'package:astral_game/firebase_options.dart';
 import 'package:astral_game/utils/single_instance_guard.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:home_widget/home_widget.dart';
-import 'package:astral_game/data/services/room_persistence_service.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
-import 'package:astral_game/data/state/room_state.dart';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -47,16 +45,8 @@ Future<void> main() async {
 
   await setupDI();
 
-  // 初始化用户信息（从持久化存储加载）
   final nodeManager = getIt<NodeManagementService>();
   nodeManager.initUserInfo();
-
-  // 初始化房间持久化
-  final roomPersistence = getIt<RoomPersistenceService>();
-  final roomState = getIt<RoomState>();
-  roomState.initPersistence(roomPersistence);
-  await roomState.loadFromPersistence();
-  roomState.restoreSelectedRoom(roomPersistence.loadSelectedRoomId());
 
   if (Platform.isAndroid) {
     refreshAndroidHomeWidgets();

@@ -1,62 +1,70 @@
+import 'package:astral_game/data/models/active_room_session.dart';
 import 'package:astral_game/data/models/room_mod.dart';
 import 'package:astral_game/data/services/room_persistence_service.dart';
-import 'package:astral_game/utils/room_display.dart' as room_display;
 import 'package:signals/signals_core.dart';
 
-/// 房间状态管理
-///
-/// 管理房间列表、选中的房间和连接状态
+/// 房间会话状态（仅内存）。历史列表 API 保留空实现以兼容小组件/备份。
 class RoomState {
-  RoomPersistenceService? _persistence;
-
-  /// 房间列表
-  final roomsList = signal<List<RoomMod>>([]);
-
-  /// 选中的房间 ID
-  int? _selectedRoomId;
-
-  /// 选中的房间
-  final selectedRoom = signal<RoomMod?>(null);
-
-  /// 连接状态
   final isConnected = signal<bool>(false);
+  final session = signal<ActiveRoomSession?>(null);
 
-  /// 当前 P2P 会话房间名（连接成功时写入，断开时清空）。
+  /// 房主「暂时退出」后的可恢复快照。
+  final pausedHost = signal<HostResumeSnapshot?>(null);
+
+  /// 强制结束提示（被踢 / 房主离线等），UI 消费后应 [clearForceEndNotice]。
+  final forceEndNotice = signal<String?>(null);
+
+  /// 客人侧：房主当前是否在线（基于成员列表推断）。
+  final hostOnline = signal<bool>(true);
+
+  /// 兼容旧代码：始终空。
+  final roomsList = signal<List<RoomMod>>([]);
+  final selectedRoom = signal<RoomMod?>(null);
   final connectedRoomName = signal<String?>(null);
 
-  /// 初始化持久化服务
-  void initPersistence(RoomPersistenceService persistence) {
-    _persistence = persistence;
-  }
+  void initPersistence(RoomPersistenceService persistence) {}
 
-  /// 从持久化存储加载房间
   Future<void> loadFromPersistence() async {
-    if (_persistence != null) {
-      roomsList.value = await _persistence!.loadRooms();
-    }
+    roomsList.value = const [];
   }
 
-  /// 恢复选中的房间（与 prefs 同步；无效 ID 时清空选中态）
   void restoreSelectedRoom(int? roomId) {
-    _selectedRoomId = roomId;
-    if (roomId == null) {
-      selectedRoom.value = null;
-      return;
-    }
-    final index = roomsList.value.indexWhere((r) => r.id == roomId);
-    if (index != -1) {
-      selectedRoom.value = roomsList.value[index];
-    } else {
-      selectedRoom.value = null;
-    }
+    selectedRoom.value = null;
   }
 
-  /// 设置连接状态
-  void setConnected(bool value) {
+  void setConnected(bool value, {bool clearSession = true}) {
     isConnected.value = value;
     if (!value) {
+      if (clearSession) {
+        session.value = null;
+      }
       connectedRoomName.value = null;
+      hostOnline.value = true;
     }
+  }
+
+  void setSession(ActiveRoomSession? value) {
+    session.value = value;
+    connectedRoomName.value = value?.networkName;
+    if (value != null) {
+      hostOnline.value = true;
+    }
+  }
+
+  void setPausedHost(HostResumeSnapshot? value) {
+    pausedHost.value = value;
+  }
+
+  void setForceEndNotice(String? message) {
+    forceEndNotice.value = message;
+  }
+
+  void clearForceEndNotice() {
+    forceEndNotice.value = null;
+  }
+
+  void setHostOnline(bool value) {
+    hostOnline.value = value;
   }
 
   void setConnectedRoomName(String? roomName) {
@@ -64,40 +72,20 @@ class RoomState {
         roomName == null || roomName.trim().isEmpty ? null : roomName.trim();
   }
 
-  /// 设置选中的房间
   void setSelectedRoom(RoomMod? room) {
     selectedRoom.value = room;
-    if (room != null) {
-      _selectedRoomId = room.id;
-      _persistence?.saveSelectedRoomId(room.id);
-    }
   }
 
-  /// 获取房间列表
   List<RoomMod> get rooms => roomsList.value;
 
-  /// 当前连接会话对应的房间记录（若有）。
-  RoomMod? get activeSessionRoom => room_display.activeSessionRoom(this);
+  String? get activeShareCode => session.value?.shortCode;
 
-  /// 仪表盘 / 列表标题用房间名。
-  String? get activeRoomDisplayLabel =>
-      room_display.activeRoomDisplayLabel(this);
-
-  /// 分享房间用分享码。
-  String? get activeShareCode => room_display.activeRoomShareCode(this);
-
-  /// 获取选中的房间 ID
-  int? get selectedRoomId => _selectedRoomId;
-
-  /// 移除房间
-  void removeRoom(int roomId) {
-    final updated = roomsList.value.where((r) => r.id != roomId).toList();
-    roomsList.value = updated;
-    _persistence?.saveRooms(updated);
-    if (_selectedRoomId == roomId) {
-      selectedRoom.value = null;
-      _selectedRoomId = null;
-      _persistence?.saveSelectedRoomId(null);
-    }
+  String? get activeRoomDisplayLabel {
+    final s = session.value;
+    if (s == null) return null;
+    if (s.displayName.isNotEmpty) return s.displayName;
+    return s.gameName.isNotEmpty ? s.gameName : s.networkName;
   }
+
+  void removeRoom(int roomId) {}
 }

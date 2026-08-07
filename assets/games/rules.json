@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "games": [
+    {
+      "id": "other",
+      "name": "其他",
+      "color": "#6B7280",
+      "icon": "sports_esports_outlined",
+      "show_in_picker": true,
+      "sort": 900,
+      "platforms": {
+        "windows": {
+          "network": {
+            "enable_udp_broadcast_relay": false
+          },
+          "magic_wall": { "enabled": false, "rules": [] },
+          "forwards": []
+        }
+      }
+    }
+  ]
+}

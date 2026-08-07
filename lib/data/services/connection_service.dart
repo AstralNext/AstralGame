@@ -1,120 +1,466 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 
-import 'package:astral_game/utils/logger.dart';
+import 'package:astral_game/data/models/active_room_session.dart';
+import 'package:astral_game/data/models/server_mod.dart';
+import 'package:astral_game/data/services/app_settings_service.dart';
+import 'package:astral_game/data/services/game_assist_rules_service.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
+import 'package:astral_game/data/services/open_games_service.dart';
 import 'package:astral_game/data/services/p2p_config_service.dart';
-import 'package:astral_game/data/services/room_persistence_service.dart';
-import 'package:astral_game/data/services/vpn_manager.dart';
 import 'package:astral_game/data/services/peer_rpc/peer_rpc_client.dart';
 import 'package:astral_game/data/services/peer_rpc/peer_rpc_router.dart';
+import 'package:astral_game/data/services/room_assist_service.dart';
+import 'package:astral_game/data/services/share_code_service.dart';
+import 'package:astral_game/data/services/vpn_manager.dart';
 import 'package:astral_game/data/state/room_state.dart';
-import 'package:astral_game/data/models/room_mod.dart';
+import 'package:astral_game/utils/logger.dart';
+import 'package:astral_game/utils/room_share.dart';
 import 'package:astral_rust_core/p2p_service.dart';
 import 'package:get_it/get_it.dart';
 import 'package:signals/signals_core.dart';
 
-/// 连接服务
+/// 连接服务：建房 / 进房（9 位短码或离线 Base64）/ 会话，不落盘房间历史。
 ///
-/// 负责管理 P2P 网络连接、房间创建和加入等操作
+/// 进网方式：双方共享随机 [network_name] + [network_secret]（旧版密码进房）。
 class ConnectionService {
   ConnectionService(
     this._p2pService,
     this._p2pConfig,
     this._nodeManagement,
-    this._roomPersistence,
     this._roomState,
     this._vpnManager,
+    this._shareCodes,
+    this._roomAssist,
+    this._gameRules,
+    this._appSettings,
+    this._openGames,
   );
 
   final P2PService _p2pService;
   final P2PConfigService _p2pConfig;
   final NodeManagementService _nodeManagement;
-  final RoomPersistenceService _roomPersistence;
   final RoomState _roomState;
   final VpnManager _vpnManager;
+  final ShareCodeService _shareCodes;
+  final RoomAssistService _roomAssist;
+  final GameAssistRulesService _gameRules;
+  final AppSettingsService _appSettings;
+  final OpenGamesService _openGames;
 
   bool _isConnecting = false;
-
   bool get isConnecting => _isConnecting;
 
-  /// 连接到指定房间
-  ///
-  /// [roomName] 房间名称
-  /// [roomPassword] 房间密码
-  /// 返回连接是否成功
-  Future<bool> connectToRoom(String roomName, String roomPassword) async {
+  EffectCleanup? _guestPresenceDispose;
+  DateTime? _hostMissingSince;
+
+  /// 最近一次创建/加入时生成的 EasyTier TOML（调试弹窗用）。
+  String? lastConfigToml;
+
+  /// 最近一次离线邀请串（短码服务失败时的回退）。
+  String? lastOfflineInvite;
+
+  /// 创建房间：选游戏 → 开网（随机名+密码）→ 尽量上传短码。
+  Future<ActiveRoomSession> createAndConnect({
+    required String gameId,
+    required String gameName,
+    String? displayName,
+  }) async {
+    lastConfigToml = null;
+    lastOfflineInvite = null;
+    _roomState.setPausedHost(null);
+    final hostPeers = _p2pConfig.enabledPeers();
+    if (hostPeers.isEmpty) {
+      throw StateError('请先在服务器列表中启用至少一个服务器，再创建房间');
+    }
+    final networkName = 'ag_${_randomId(10)}';
+    final secret = _p2pConfig.generateRoomCode(length: 16);
+    final label = (displayName == null || displayName.trim().isEmpty)
+        ? gameName
+        : displayName.trim();
+
+    final ok = await _connect(
+      networkName: networkName,
+      secret: secret,
+      purpose: 'create',
+      gameId: gameId,
+    );
+    if (!ok) {
+      throw StateError('连接失败，请重试');
+    }
+
+    final payload = RoomInvitePayload(
+      gameId: gameId,
+      gameName: gameName,
+      networkName: networkName,
+      networkSecret: secret,
+      peers: hostPeers,
+      displayName: label,
+    );
+    lastOfflineInvite = encodeOfflineInvite(payload);
+
+    String? shortCode;
+    String? adminToken;
+    try {
+      final created = await _shareCodes.create(payload);
+      shortCode = created.code;
+      adminToken = created.adminToken;
+    } catch (e) {
+      appLogger.w('[ConnectionService] 短码服务不可用，改用离线邀请: $e');
+    }
+
+    final session = ActiveRoomSession(
+      isHost: true,
+      gameId: gameId,
+      gameName: gameName,
+      networkName: networkName,
+      networkSecret: secret,
+      displayName: label,
+      shortCode: shortCode,
+      adminToken: adminToken,
+    );
+    _roomState.setSession(session);
+    await _roomAssist.startForRoom(isHost: true, gameId: gameId);
+    await _openGames.startForRoom(isHost: true, gameId: gameId);
+    return session;
+  }
+  Future<ActiveRoomSession> joinWithInviteInput(String raw) async {
+    final text = raw.trim();
+    if (text.isEmpty) {
+      throw StateError('请输入短码或离线邀请码');
+    }
+    if (looksLikeShortCode(text)) {
+      return joinWithShortCode(text);
+    }
+    if (looksLikeOfflineInvite(text)) {
+      final payload = decodeOfflineInvite(text);
+      return _joinWithPayload(payload, shortCode: null);
+    }
+    throw StateError('无法识别：请输入 9 位短码，或粘贴 AG1. 开头的离线邀请码');
+  }
+
+  /// 加入房间：9 位短码。
+  Future<ActiveRoomSession> joinWithShortCode(String code) async {
+    lastConfigToml = null;
+    final payload = await _shareCodes.fetch(code);
+    return _joinWithPayload(payload, shortCode: code.trim());
+  }
+
+  Future<ActiveRoomSession> _joinWithPayload(
+    RoomInvitePayload payload, {
+    String? shortCode,
+  }) async {
+    lastConfigToml = null;
+    if (payload.networkSecret.isEmpty) {
+      throw StateError('邀请无效：缺少房间密码（请让房主用新版重新分享）');
+    }
+    final invitePeers =
+        payload.peers.where((p) => p.uri.trim().isNotEmpty).toList();
+    if (invitePeers.isEmpty) {
+      throw StateError('邀请未包含服务器，无法加入（请让房主启用服务器后重新分享）');
+    }
+    final ok = await _connect(
+      networkName: payload.networkName,
+      secret: payload.networkSecret,
+      peersOverride: invitePeers,
+      purpose: 'join',
+      gameId: payload.gameId,
+    );
+    if (!ok) {
+      throw StateError('连接失败，请重试');
+    }
+    final session = ActiveRoomSession(
+      isHost: false,
+      gameId: payload.gameId,
+      gameName: payload.gameName.isEmpty ? '房间' : payload.gameName,
+      networkName: payload.networkName,
+      networkSecret: payload.networkSecret,
+      displayName: payload.displayName?.isNotEmpty == true
+          ? payload.displayName!
+          : (payload.gameName.isEmpty ? payload.networkName : payload.gameName),
+      shortCode: shortCode,
+    );
+    _roomState.setSession(session);
+    await _roomAssist.startForRoom(isHost: false, gameId: session.gameId);
+    await _openGames.startForRoom(isHost: false, gameId: session.gameId);
+    return session;
+  }
+
+  /// 导出当前离线邀请（优先缓存；否则用会话重建）。
+  String? currentOfflineInvite() {
+    final cached = lastOfflineInvite?.trim();
+    if (cached != null && cached.isNotEmpty) return cached;
+    final session = _roomState.session.value;
+    if (session == null || !session.isHost) return null;
+    if (session.networkSecret.isEmpty) return null;
+    final hostPeers = _p2pConfig.enabledPeers();
+    if (hostPeers.isEmpty) return null;
+    final payload = RoomInvitePayload(
+      gameId: session.gameId,
+      gameName: session.gameName,
+      networkName: session.networkName,
+      networkSecret: session.networkSecret,
+      peers: hostPeers,
+      displayName: session.displayName,
+    );
+    return encodeOfflineInvite(payload);
+  }
+
+  /// 房主刷新分享：作废旧短码，用同一网名/密码重新上传。
+  Future<({String? shortCode, String offlineInvite})> refreshShareInvite() async {
+    final current = _roomState.session.value;
+    if (current == null || !current.isHost) {
+      throw StateError('仅房主可分享');
+    }
+
+    if (current.shortCode != null && current.adminToken != null) {
+      try {
+        await _shareCodes.revoke(current.shortCode!, current.adminToken!);
+      } catch (e) {
+        appLogger.w('[ConnectionService] 作废旧短码失败: $e');
+      }
+    }
+
+    final hostPeers = _p2pConfig.enabledPeers();
+    if (hostPeers.isEmpty) {
+      throw StateError('请先启用至少一个服务器，再刷新分享');
+    }
+
+    final payload = RoomInvitePayload(
+      gameId: current.gameId,
+      gameName: current.gameName,
+      networkName: current.networkName,
+      networkSecret: current.networkSecret,
+      peers: hostPeers,
+      displayName: current.displayName,
+    );
+    final offline = encodeOfflineInvite(payload);
+    lastOfflineInvite = offline;
+
+    String? shortCode;
+    String? adminToken;
+    try {
+      final created = await _shareCodes.create(payload);
+      shortCode = created.code;
+      adminToken = created.adminToken;
+    } catch (e) {
+      appLogger.w('[ConnectionService] 刷新短码失败，仅离线邀请: $e');
+    }
+
+    _roomState.setSession(
+      current.copyWith(
+        shortCode: shortCode,
+        adminToken: adminToken,
+      ),
+    );
+    return (shortCode: shortCode, offlineInvite: offline);
+  }
+
+  /// 兼容旧调用：只返回短码。
+  Future<String> refreshShareCode() async {
+    final r = await refreshShareInvite();
+    final code = r.shortCode;
+    if (code == null || code.isEmpty) {
+      throw StateError('短码服务不可用，请复制离线邀请码');
+    }
+    return code;
+  }
+
+  Future<void> revokeCurrentShortCode() async {
+    final s = _roomState.session.value;
+    if (s?.shortCode == null || s?.adminToken == null) return;
+    await _shareCodes.revoke(s!.shortCode!, s.adminToken!);
+  }
+
+  /// 离开房间：作废短码（若有）并关闭实例。
+  Future<void> leaveRoom() async {
+    await disconnect(revokeShare: true, pauseHost: false);
+  }
+
+  /// 房主暂时退出：保留可恢复快照，并作废旧短码（恢复时会发新码）。
+  Future<void> pauseHostRoom() async {
+    final session = _roomState.session.value;
+    if (session == null || !session.isHost) {
+      await leaveRoom();
+      return;
+    }
+    await disconnect(revokeShare: true, pauseHost: true);
+  }
+
+  /// 房主用快照恢复同房间（同 networkName/secret）；重新上传短码。
+  Future<ActiveRoomSession> resumeHostRoom() async {
+    final snap = _roomState.pausedHost.value;
+    if (snap == null) {
+      throw StateError('没有可恢复的房间');
+    }
+    final hostPeers = _p2pConfig.enabledPeers();
+    if (hostPeers.isEmpty) {
+      throw StateError('请先启用至少一个服务器，再恢复房间');
+    }
+
+    lastConfigToml = null;
+    lastOfflineInvite = null;
+    final ok = await _connect(
+      networkName: snap.networkName,
+      secret: snap.networkSecret,
+      purpose: 'resume-host',
+      gameId: snap.gameId,
+    );
+    if (!ok) {
+      throw StateError('恢复连接失败，请重试');
+    }
+
+    final payload = RoomInvitePayload(
+      gameId: snap.gameId,
+      gameName: snap.gameName,
+      networkName: snap.networkName,
+      networkSecret: snap.networkSecret,
+      peers: hostPeers,
+      displayName: snap.displayName,
+    );
+    lastOfflineInvite = encodeOfflineInvite(payload);
+
+    String? shortCode;
+    String? adminToken;
+    try {
+      final created = await _shareCodes.create(payload);
+      shortCode = created.code;
+      adminToken = created.adminToken;
+    } catch (e) {
+      appLogger.w('[ConnectionService] 恢复房间短码失败: $e');
+    }
+
+    final session = ActiveRoomSession(
+      isHost: true,
+      gameId: snap.gameId,
+      gameName: snap.gameName,
+      networkName: snap.networkName,
+      networkSecret: snap.networkSecret,
+      displayName: snap.displayName,
+      shortCode: shortCode,
+      adminToken: adminToken,
+    );
+    _roomState.setPausedHost(null);
+    _roomState.setSession(session);
+    _armGuestPresenceWatch();
+    await _roomAssist.startForRoom(isHost: true, gameId: session.gameId);
+    await _openGames.startForRoom(isHost: true, gameId: session.gameId);
+    return session;
+  }
+
+  Future<bool> _connect({
+    required String networkName,
+    required String secret,
+    List<PeerEndpoint>? peersOverride,
+    String purpose = 'connect',
+    String? gameId,
+  }) async {
     if (_isConnecting) {
       appLogger.w('[ConnectionService] 已有连接正在进行中，跳过');
       return false;
     }
-
     _isConnecting = true;
-
     try {
       if (_nodeManagement.isRunning) {
-        await disconnect();
+        await disconnect(revokeShare: false, pauseHost: false);
       }
-
-      // 鉴权由 EasyTier 的 network_secret 在传输层完成，业务侧不再需要 token。
       if (Platform.isAndroid) {
         _vpnManager.startListening();
         if (!await _vpnManager.ensurePermission()) {
-          appLogger.w('[ConnectionService] Android VPN 权限未授予，取消连接');
+          appLogger.w('[ConnectionService] Android VPN 权限未授予');
           return false;
         }
       }
 
-      final configToml = _p2pConfig.buildTomlConfig(roomName, roomPassword);
-      appLogger.d('[ConnectionService] 正在连接房间: $roomName');
+      final fromGame = gameId != null && gameId.isNotEmpty
+          ? await _gameRules.wantsUdpBroadcastRelay(gameId)
+          : false;
+      final fromUser = _appSettings.isEnableUdpBroadcastRelay();
+      final udpRelay = fromGame || fromUser;
 
+      final configToml = _p2pConfig.buildTomlConfig(
+        networkName,
+        secret,
+        peersOverride: peersOverride,
+        enableUdpBroadcastRelay: udpRelay,
+      );
+      lastConfigToml = configToml;
+      appLogger.i(
+        '[ConnectionService] $purpose 启动实例 network=$networkName '
+        'shared_secret=true\n'
+        '----- TOML begin -----\n'
+        '$configToml'
+        '----- TOML end -----',
+      );
       final instanceId = await _p2pService.createInstance(
         configToml: configToml,
         watchEvent: true,
       );
-
+      appLogger.i('[ConnectionService] 实例已创建 id=$instanceId');
       final isRunning = await _p2pService.isEasytierRunning(instanceId);
       if (!isRunning) {
-        appLogger.e('[ConnectionService] 连接失败：实例启动异常');
+        appLogger.e('[ConnectionService] 实例启动异常 id=$instanceId');
         return false;
       }
 
-      // 与 Windows 等桌面完全一致：实例就绪即视为"连接已建立"，绑定 RPC、setRunning、
-      // UI 跳转。本机虚拟 IPv4 不参与判定 —— 它什么时候被 DHCP 发出来都行，由
-      // `NodeManagementService.myVirtualIpv4` signal 持续广播。
-      // Android 唯一的差异：拿到本机虚拟 IPv4 后，把 VPN/TUN 拉起来；拉不起来也
-      // 不影响房间生命周期。
       await _bindPeerRpc(instanceId);
       _nodeManagement.setRunning(instanceId);
       _roomState.setConnected(true);
-      _roomState.setConnectedRoomName(roomName);
-      final matched = _roomState.rooms
-          .where((r) => r.roomName == roomName && r.password == roomPassword)
-          .toList();
-      if (matched.isNotEmpty) {
-        _roomState.setSelectedRoom(matched.first);
-      }
-      appLogger.d('[ConnectionService] 实例已启动，进入房间: $instanceId');
-
+      _armGuestPresenceWatch();
       if (Platform.isAndroid) {
         unawaited(_startAndroidVpnWhenIpReady(instanceId));
       }
       return true;
-    } catch (e, stackTrace) {
-      appLogger.e(
-        '[ConnectionService] 连接失败: $e',
-        error: e,
-        stackTrace: stackTrace,
-      );
+    } catch (e, st) {
+      appLogger.e('[ConnectionService] 连接失败: $e', error: e, stackTrace: st);
       await _unbindPeerRpc();
+      final msg = e.toString().toLowerCase();
+      if (Platform.isWindows &&
+          (msg.contains('tun') ||
+              msg.contains('wintun') ||
+              msg.contains('access is denied') ||
+              msg.contains('privilege'))) {
+        throw StateError('虚拟网卡启动失败，请以管理员身份重新运行 Astral Game');
+      }
       return false;
     } finally {
       _isConnecting = false;
     }
   }
 
-  /// 断开当前连接
-  Future<void> disconnect() async {
+  /// [revokeShare] 作废当前短码；[pauseHost] 房主保留可恢复快照。
+  Future<void> disconnect({
+    bool revokeShare = false,
+    bool pauseHost = false,
+    String? forceEndNotice,
+  }) async {
+    await _roomAssist.stopAll();
+    await _openGames.stop();
+
+    final session = _roomState.session.value;
+    if (pauseHost && session != null && session.isHost) {
+      _roomState.setPausedHost(HostResumeSnapshot.fromSession(session));
+    } else if (revokeShare || forceEndNotice != null) {
+      if (!pauseHost) {
+        _roomState.setPausedHost(null);
+      }
+    }
+
+    if (revokeShare &&
+        session != null &&
+        session.isHost &&
+        session.shortCode != null &&
+        session.adminToken != null) {
+      try {
+        await _shareCodes.revoke(session.shortCode!, session.adminToken!);
+        appLogger.i('[ConnectionService] 已作废短码 ${session.shortCode}');
+      } catch (e) {
+        appLogger.w('[ConnectionService] 作废短码失败: $e');
+      }
+    }
+
+    _disarmGuestPresenceWatch();
     final instanceId = _nodeManagement.instanceId;
     if (Platform.isAndroid) {
       await _vpnManager.stop();
@@ -122,32 +468,62 @@ class ConnectionService {
     if (instanceId != null) {
       try {
         await _p2pService.closeInstance(instanceId);
-        appLogger.d('[ConnectionService] 已断开连接，实例ID: $instanceId');
-      } catch (e, stackTrace) {
-        appLogger.e(
-          '[ConnectionService] 断开连接时发生错误: $e',
-          error: e,
-          stackTrace: stackTrace,
-        );
+      } catch (e, st) {
+        appLogger.e('[ConnectionService] 断开异常: $e', error: e, stackTrace: st);
       }
     }
     _nodeManagement.setStopped();
     _roomState.setConnected(false);
+    if (forceEndNotice != null && forceEndNotice.isNotEmpty) {
+      _roomState.setForceEndNotice(forceEndNotice);
+    }
     await _unbindPeerRpc();
   }
 
-  /// 等到 [`NodeManagementService.myVirtualIpv4`] 这个 signal 派发出非空 IPv4 后，
-  /// 把 Android VPN 拉起来。
-  ///
-  /// 这里**不轮询**：本身 NodeManagement 已经在以 1s 间隔轮询 `getNetworkStatus`
-  /// 并写入 `myVirtualIpv4`，连接服务只需订阅。
-  /// - 没有超时：DHCP 几秒、几十秒，甚至单人房间永远不来都不影响判定，房间始终在线。
-  /// - 实例被替换/disconnect 时 `currentInstanceId` 会清空或切换，effect 自然退出。
+  void _armGuestPresenceWatch() {
+    _disarmGuestPresenceWatch();
+    _hostMissingSince = null;
+    _guestPresenceDispose = effect(() {
+      final session = _roomState.session.value;
+      final connected = _roomState.isConnected.value;
+      final nodes = _nodeManagement.userNodes.value;
+      if (session == null || session.isHost || !connected) {
+        _hostMissingSince = null;
+        return;
+      }
+      // 共享密码模式无法按凭据识别房主：有任意远端成员即视为房间仍有人。
+      final hasOther = nodes.any(
+        (n) => !_nodeManagement.isLocalPeer(n.peerId),
+      );
+      if (hasOther) {
+        _hostMissingSince = null;
+        if (!_roomState.hostOnline.value) {
+          _roomState.setHostOnline(true);
+        }
+        return;
+      }
+      _hostMissingSince ??= DateTime.now();
+      if (DateTime.now().difference(_hostMissingSince!) <
+          const Duration(seconds: 10)) {
+        return;
+      }
+      if (_roomState.hostOnline.value) {
+        _roomState.setHostOnline(false);
+        appLogger.w('[ConnectionService] 房间内无其他成员');
+      }
+    });
+  }
+
+  void _disarmGuestPresenceWatch() {
+    _guestPresenceDispose?.call();
+    _guestPresenceDispose = null;
+    _hostMissingSince = null;
+  }
+
   Future<void> _startAndroidVpnWhenIpReady(String instanceId) async {
     final completer = Completer<String?>();
     late final EffectCleanup dispose;
     dispose = effect(() {
-      // 任意一个 signal 变化都会重跑：换实例/断开 → 退出；IP 到 → 派发。
       final currentInstance = _nodeManagement.currentInstanceId.value;
       if (currentInstance != instanceId) {
         if (!completer.isCompleted) completer.complete(null);
@@ -160,16 +536,13 @@ class ConnectionService {
     });
     try {
       final vpnIp = await completer.future;
-      if (vpnIp == null) {
-        appLogger.d('[ConnectionService] 已断开或切换实例，跳过 Android VPN: $instanceId');
-        return;
-      }
+      if (vpnIp == null) return;
       final vpnStarted = await _vpnManager.start(
         instanceId: instanceId,
         ipv4Addr: vpnIp,
       );
       if (!vpnStarted) {
-        appLogger.w('[ConnectionService] Android VPN 启动失败，但房间继续保留');
+        appLogger.w('[ConnectionService] Android VPN 启动失败，房间继续');
       }
     } finally {
       dispose();
@@ -180,14 +553,9 @@ class ConnectionService {
     GetIt.I<PeerRpcClient>().bindInstance(instanceId);
     try {
       await GetIt.I<PeerRpcRouter>().start(instanceId);
-    } catch (e, stackTrace) {
-      appLogger.e(
-        '[ConnectionService] PeerRpcRouter 启动失败: $e',
-        error: e,
-        stackTrace: stackTrace,
-      );
-      // 启动失败不阻断连接，业务侧可以重试拉资料；但路由器没起来意味着对端无法
-      // 调本端的 user.getInfo 等，需要在日志里清晰提示。
+    } catch (e, st) {
+      appLogger.e('[ConnectionService] PeerRpcRouter 启动失败: $e',
+          error: e, stackTrace: st);
     }
   }
 
@@ -200,110 +568,10 @@ class ConnectionService {
     }
   }
 
-  /// 创建新房间
-  ///
-  /// 要求传入房间名，并生成 token 作为 EasyTier `network_secret`（房间密码）。
-  /// 返回创建的房间信息。
-  Future<RoomMod> createRoom({required String roomName}) async {
-    final token = _p2pConfig.generateRoomCode();
-    final shareCode = _p2pConfig.buildRoomShareCode(
-      roomName: roomName,
-      token: token,
-    );
-    return await _createAndPersistRoom(
-      shareCode: shareCode,
-      displayName: roomName.trim(),
-      roomName: roomName.trim(),
-      token: token,
-    );
-  }
-
-  /// 加入已有房间
-  ///
-  /// [shareCode] 房间分享码：`随机码_房间名`
-  /// 返回房间信息
-  Future<RoomMod> joinRoom(String shareCode) async {
-    final trimmed = shareCode.trim();
-    if (trimmed.isEmpty) {
-      throw const FormatException('请输入房间分享码');
-    }
-
-    final parts = _p2pConfig.parseRoomShareCode(trimmed);
-    if (parts == null) {
-      throw const FormatException('分享码格式不正确，应为：随机码_房间名');
-    }
-
-    return await _createAndPersistRoom(
-      shareCode: trimmed,
-      displayName: parts.roomName,
-      roomName: parts.roomName,
-      token: parts.token,
-    );
-  }
-
-  /// 创建并持久化房间
-  Future<RoomMod> _createAndPersistRoom({
-    required String shareCode,
-    required String displayName,
-    required String roomName,
-    required String token,
-  }) async {
-    final safeDisplayName = displayName.trim();
-    final safeRoomName = roomName.trim();
-    final safeToken = token.trim();
-    final safePrefix = safeToken.isEmpty
-        ? 'unknown'
-        : safeToken.substring(0, safeToken.length < 6 ? safeToken.length : 6);
-
-    final finalNetworkName = safeRoomName.isEmpty
-        ? 'Room_$safePrefix'
-        : safeRoomName;
-    final finalDisplayName = safeDisplayName.isEmpty
-        ? finalNetworkName
-        : safeDisplayName;
-    final roomPassword = safeToken;
-
-    final room = RoomMod(
-      id: DateTime.now().millisecondsSinceEpoch,
-      name: finalDisplayName,
-      roomName: finalNetworkName,
-      host: 'localhost',
-      port: 11010,
-      password: roomPassword,
-      shareCode: shareCode,
-      createdAt: DateTime.now(),
-    );
-
-    try {
-      final updated = RoomPersistenceService.upsertJoinHistory(
-        _roomState.rooms,
-        room,
-      );
-      await _roomPersistence.saveRooms(updated);
-      await _roomState.loadFromPersistence();
-      final saved = _roomState.rooms
-          .where((r) => r.shareCode == shareCode)
-          .toList();
-      _roomState.setSelectedRoom(saved.isNotEmpty ? saved.first : room);
-      appLogger.d(
-        '[ConnectionService] 已创建/加入房间: $finalDisplayName, shareCode: $shareCode',
-      );
-    } catch (e, stackTrace) {
-      appLogger.e(
-        '[ConnectionService] 保存房间失败: $e',
-        error: e,
-        stackTrace: stackTrace,
-      );
-    }
-
-    return room;
-  }
-
-  /// 移除房间
-  ///
-  /// [roomId] 房间 ID
-  void removeRoom(int roomId) {
-    _roomState.removeRoom(roomId);
-    appLogger.d('[ConnectionService] 已移除房间: $roomId');
+  String _randomId(int len) {
+    const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    final r = Random.secure();
+    return List.generate(len, (_) => alphabet[r.nextInt(alphabet.length)])
+        .join();
   }
 }

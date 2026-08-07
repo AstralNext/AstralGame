@@ -1,51 +1,66 @@
 import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/config/constants.dart';
 import 'package:astral_game/data/models/enhanced_node_info.dart';
-import 'package:astral_game/data/models/room_mod.dart';
-import 'package:astral_game/data/services/connection_service.dart';
+import 'package:astral_game/data/models/game_catalog.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
 import 'package:astral_game/data/state/room_state.dart';
-import 'package:astral_game/ui/pages/dashboard_history_item.dart';
 import 'package:astral_game/ui/pages/dashboard_user_item.dart';
+import 'package:astral_game/ui/widgets/dashboard_home_panel.dart';
 import 'package:astral_game/ui/widgets/dashboard_list_section.dart';
-import 'package:astral_game/ui/widgets/dashboard_main_card_narrow.dart';
+import 'package:astral_game/ui/widgets/room_open_games_panel.dart';
 import 'package:flutter/material.dart';
 import 'package:signals/signals_flutter.dart';
 
-/// 仪表盘窄屏：主卡片 + 下方列表分区（无吸顶标题、无额外色块底）。
 class DashboardNarrowLayout extends StatelessWidget {
   const DashboardNarrowLayout({
     super.key,
     required this.nodeManagement,
-    required this.connectionService,
     required this.roomState,
-    required this.onSettings,
     required this.onCreateRoom,
     required this.onJoinRoom,
     required this.onShareRoom,
     required this.onDisconnect,
-    required this.onRemoveRoom,
-    required this.onJoinHistory,
+    this.onResumeHost,
   });
 
   final NodeManagementService nodeManagement;
-  final ConnectionService connectionService;
   final RoomState roomState;
-  final VoidCallback onSettings;
   final VoidCallback onCreateRoom;
   final VoidCallback onJoinRoom;
   final VoidCallback onShareRoom;
   final VoidCallback onDisconnect;
-  final void Function(RoomMod) onRemoveRoom;
-  final void Function(String) onJoinHistory;
+  final VoidCallback? onResumeHost;
 
   @override
   Widget build(BuildContext context) {
     return Watch((context) {
       final isConnected = nodeManagement.isRunning;
       final nodes = nodeManagement.userNodes.value;
-      final history = roomState.rooms;
-      final roomLabel = roomState.activeRoomDisplayLabel;
+      final myIp = nodeManagement.myVirtualIpv4.value;
+      final session = roomState.session.value;
+      final paused = roomState.pausedHost.value;
+      final hostOnline = roomState.hostOnline.value;
+
+      if (!isConnected) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppDimensions.pagePaddingH,
+            AppDimensions.pagePaddingV,
+            AppDimensions.pagePaddingH,
+            8,
+          ),
+          child: DashboardHomePanel(
+            isConnected: false,
+            username: nodeManagement.currentUsername.value,
+            pausedRoomName: paused?.displayName,
+            onCreateRoom: onCreateRoom,
+            onJoinRoom: onJoinRoom,
+            onShareRoom: onShareRoom,
+            onDisconnect: onDisconnect,
+            onResumeHost: onResumeHost,
+          ),
+        );
+      }
 
       return CustomScrollView(
         key: const PageStorageKey<String>('dashboard_narrow_scroll'),
@@ -56,13 +71,20 @@ class DashboardNarrowLayout extends StatelessWidget {
               AppDimensions.pagePaddingH,
               AppDimensions.pagePaddingV,
               AppDimensions.pagePaddingH,
-              12,
+              8,
             ),
             sliver: SliverToBoxAdapter(
-              child: _MainCardBlock(
-                nodeManagement: nodeManagement,
-                roomState: roomState,
-                onSettings: onSettings,
+              child: DashboardHomePanel(
+                isConnected: true,
+                username: nodeManagement.currentUsername.value,
+                roomDisplayName: roomState.activeRoomDisplayLabel,
+                roomRoleLabel: session?.roleLabel,
+                roomGameId: session?.gameId,
+                roomShortCode: roomState.activeShareCode,
+                isRoomHost: session?.isHost == true,
+                hostOnline: hostOnline,
+                virtualIp:
+                    myIp.isNotEmpty ? myIp : AppConstants.defaultVirtualIp,
                 onCreateRoom: onCreateRoom,
                 onJoinRoom: onJoinRoom,
                 onShareRoom: onShareRoom,
@@ -73,38 +95,74 @@ class DashboardNarrowLayout extends StatelessWidget {
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(
               AppDimensions.pagePaddingH,
-              4,
+              8,
               AppDimensions.pagePaddingH,
-              24,
+              8,
             ),
             sliver: SliverToBoxAdapter(
-              child: isConnected
-                  ? _buildUsersSection(nodes, roomLabel)
-                  : _buildHistorySection(history),
+              child: SizedBox(
+                height: 220,
+                child: RoomOpenGamesPanel(
+                  compact: true,
+                  gameId: session?.gameId,
+                ),
+              ),
+            ),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(
+              AppDimensions.pagePaddingH,
+              8,
+              AppDimensions.pagePaddingH,
+              28,
+            ),
+            sliver: SliverToBoxAdapter(
+              child: _MembersBlock(
+                nodes: nodes,
+                roomState: roomState,
+                nodeManagement: nodeManagement,
+              ),
             ),
           ),
         ],
       );
     });
   }
+}
 
-  Widget _buildUsersSection(List<EnhancedNodeInfo> nodes, String? roomLabel) {
-    final sectionTitle = roomLabel != null && roomLabel.isNotEmpty
-        ? '$roomLabel · 在线用户'
-        : '在线用户';
+class _MembersBlock extends StatelessWidget {
+  const _MembersBlock({
+    required this.nodes,
+    required this.roomState,
+    required this.nodeManagement,
+  });
+
+  final List<EnhancedNodeInfo> nodes;
+  final RoomState roomState;
+  final NodeManagementService nodeManagement;
+
+  @override
+  Widget build(BuildContext context) {
+    final session = roomState.session.value;
+    final game = session == null ? null : GameCatalog.byId(session.gameId);
+    final title = [
+      if (game != null) game.name,
+      '成员',
+    ].join(' · ');
+
     if (nodes.isEmpty) {
       return DashboardListSection(
-        title: sectionTitle,
+        title: title,
         useCard: false,
-        child: DashboardListEmptyHint(
+        child: const DashboardListEmptyHint(
           icon: Icons.people_outline,
-          message: '暂无在线用户',
+          message: '等待好友加入…',
         ),
       );
     }
 
     return DashboardListSection(
-      title: sectionTitle,
+      title: title,
       count: nodes.length,
       child: Column(
         children: [
@@ -114,90 +172,19 @@ class DashboardNarrowLayout extends StatelessWidget {
               key: ValueKey<int>(nodes[i].peerId),
               node: nodes[i],
               grouped: true,
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHistorySection(List<RoomMod> history) {
-    if (history.isEmpty) {
-      return const DashboardListSection(
-        title: '加入历史',
-        subtitle: '创建或加入房间后会出现在这里',
-        useCard: false,
-        child: DashboardListEmptyHint(
-          icon: Icons.history_outlined,
-          message: '暂无记录',
-        ),
-      );
-    }
-
-    return DashboardListSection(
-      title: '加入历史',
-      count: history.length,
-      child: Column(
-        children: [
-          for (var i = 0; i < history.length; i++) ...[
-            if (i > 0) const Divider(height: 1, indent: 56),
-            DashboardDismissibleHistoryItem(
-              key: ValueKey<String>(history[i].shareCode),
-              room: history[i],
-              grouped: true,
               index: i,
-              count: history.length,
-              onJoin: () => onJoinHistory(history[i].shareCode),
-              onRemove: onRemoveRoom,
+              count: nodes.length,
+              isRoomHost: session != null &&
+                  nodeManagement.isRoomHostPeer(
+                    nodes[i].peerId,
+                    sessionIsHost: session.isHost,
+                    isCredentialPeer: nodes[i].isCredentialPeer,
+                  ),
+              onKick: null,
             ),
           ],
         ],
       ),
     );
-  }
-}
-
-class _MainCardBlock extends StatelessWidget {
-  const _MainCardBlock({
-    required this.nodeManagement,
-    required this.roomState,
-    required this.onSettings,
-    required this.onCreateRoom,
-    required this.onJoinRoom,
-    required this.onShareRoom,
-    required this.onDisconnect,
-  });
-
-  final NodeManagementService nodeManagement;
-  final RoomState roomState;
-  final VoidCallback onSettings;
-  final VoidCallback onCreateRoom;
-  final VoidCallback onJoinRoom;
-  final VoidCallback onShareRoom;
-  final VoidCallback onDisconnect;
-
-  @override
-  Widget build(BuildContext context) {
-    return Watch((context) {
-      final isConnected = nodeManagement.isRunning;
-      final myIp = nodeManagement.myVirtualIpv4.value;
-      final virtualIp =
-          myIp.isNotEmpty ? myIp : AppConstants.defaultVirtualIp;
-      final username = nodeManagement.currentUsername.value;
-      final avatar = nodeManagement.currentUserAvatar.value;
-
-      return DashboardMainCardNarrow(
-        isConnected: isConnected,
-        username: username,
-        userAvatar: avatar,
-        virtualIp: virtualIp,
-        roomDisplayName: roomState.activeRoomDisplayLabel,
-        onSettingsTap: onSettings,
-        onCreateRoomTap: onCreateRoom,
-        onJoinRoomTap: onJoinRoom,
-        onShareRoomTap: onShareRoom,
-        onDisconnectTap: onDisconnect,
-      );
-    });
   }
 }

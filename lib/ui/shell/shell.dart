@@ -1,14 +1,18 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/config/theme.dart';
+import 'package:astral_game/data/services/node_management_service.dart';
 import 'package:astral_game/data/services/screen_state_service.dart';
 import 'package:astral_game/data/services/shell_navigation_service.dart';
 import 'package:astral_game/data/services/update_service.dart';
 import 'package:astral_game/data/state/settings_state.dart';
 import 'package:astral_game/data/state/update_state.dart';
 import 'package:astral_game/di.dart';
+import 'package:astral_game/ui/widgets/avatar_widget.dart';
+import 'package:astral_game/ui/widgets/edit_profile_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:signals/signals_flutter.dart';
 import 'package:flutter/services.dart' show rootBundle;
@@ -55,9 +59,9 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
 
     _navigationItems = [
       NavigationItem(
-        icon: Icons.home_outlined,
-        activeIcon: Icons.home,
-        label: '主页',
+        icon: Icons.sports_esports_outlined,
+        activeIcon: Icons.sports_esports,
+        label: '联机',
         page: const DashboardPage(key: PageStorageKey('dashboard')),
       ),
       NavigationItem(
@@ -257,6 +261,7 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
     final screenWidth = MediaQuery.sizeOf(context).width;
     final isCompact = screenWidth < 600;
     _screenStateService.updateScreenWidth(screenWidth);
+    final nodes = getIt<NodeManagementService>();
 
     const contentRadius = BorderRadius.only(
       topLeft: Radius.circular(AppDimensions.radiusMd),
@@ -272,11 +277,16 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
             if (!isCompact)
               ColoredBox(
                 color: palette.canvas,
-                child: LeftNav(
-                  items: _navigationItems,
-                  selectedIndex: _selectedIndex,
-                  onSelected: _handleDestinationSelected,
-                ),
+                child: Watch((context) {
+                  return LeftNav(
+                    items: _navigationItems,
+                    selectedIndex: _selectedIndex,
+                    onSelected: _handleDestinationSelected,
+                    avatar: nodes.currentUserAvatar.value,
+                    username: nodes.currentUsername.value,
+                    onAvatarTap: () => showEditProfileDialog(context),
+                  );
+                }),
               ),
             Expanded(
               child: ColoredBox(
@@ -287,6 +297,13 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
                       _DesktopTitleBar(
                         onClose: () => unawaited(_handleCloseRequested()),
                       ),
+                    if (isCompact)
+                      Watch((context) {
+                        return _CompactTopBar(
+                          avatar: nodes.currentUserAvatar.value,
+                          onAvatarTap: () => showEditProfileDialog(context),
+                        );
+                      }),
                     Expanded(
                       child: ClipRRect(
                         borderRadius:
@@ -325,6 +342,45 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
                 ),
               )
             : null,
+      ),
+    );
+  }
+}
+
+/// 手机全局顶栏：右侧头像。
+class _CompactTopBar extends StatelessWidget {
+  const _CompactTopBar({
+    required this.avatar,
+    required this.onAvatarTap,
+  });
+
+  final Uint8List? avatar;
+  final VoidCallback onAvatarTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.astralPalette;
+    return Material(
+      color: palette.canvas,
+      child: SafeArea(
+        bottom: false,
+        child: SizedBox(
+          height: 52,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              children: [
+                const Spacer(),
+                AvatarWidget(
+                  avatar: avatar,
+                  size: 36,
+                  shape: AvatarShape.circle,
+                  onTap: onAvatarTap,
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

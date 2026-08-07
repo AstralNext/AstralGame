@@ -2,7 +2,7 @@ name: astral_game
 description: "Astral Game Client"
 publish_to: 'none'
 
-version: 1.0.2
+version: 1.0.3
 
 environment:
   sdk: ^3.8.0
@@ -12,9 +12,7 @@ dependencies:
   flutter:
     sdk: flutter
   astral_rust_core:
-    git:
-      url: https://github.com/AstralNext/astral_rust_core.git
-      ref: v0.1.0
+    path: ../astral_rust_core
   vpn_service_plugin:
     git:
       url: https://github.com/AstralNext/vpn_service_plugin.git
@@ -27,8 +25,6 @@ dependencies:
   url_launcher: ^6.3.0
   shared_preferences: ^2.3.3
   path_provider: ^2.1.4
-  webdav_client: ^1.2.2
-  archive: ^4.0.2
   path: ^1.9.0
   package_info_plus: ^8.3.0
   image_picker: ^1.1.1
@@ -72,3 +68,15 @@ flutter:
     - assets/logo.png
     # Windows 托盘图标优先用 .ico
     - assets/icon.ico
+    # 游戏封面（本地可引用；线上规则也可指向网络图）
+    - assets/games/minecraft/icon.png
+    - assets/games/minecraft/grid.png
+    - assets/games/terraria/icon.png
+    - assets/games/terraria/grid.png
+    - assets/games/valheim/icon.png
+    - assets/games/valheim/grid.png
+    - assets/games/palworld/icon.png
+    - assets/games/palworld/grid.png
+    # 离线通用回退；具体游戏规则见 https://astral.fan/gamerules.json
+    - assets/games/rules.json
+    - assets/scenery/daily.jpg

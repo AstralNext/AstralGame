@@ -8,6 +8,7 @@ import 'package:astral_game/di.dart';
 import 'package:astral_game/data/services/firewall_service.dart';
 import 'package:astral_game/data/state/settings_state.dart';
 import 'package:astral_game/config/theme.dart';
+import 'package:astral_game/data/models/game_catalog.dart';
 import 'package:astral_game/ui/widgets/astral_card.dart';
 import 'package:astral_game/ui/widgets/avatar_widget.dart';
 import 'package:astral_game/utils/runtime_platform.dart';
@@ -21,6 +22,10 @@ abstract class DashboardMainCardBase extends StatefulWidget {
     this.userAvatar,
     this.virtualIp = AppConstants.defaultVirtualIp,
     this.roomDisplayName,
+    this.roomRoleLabel,
+    this.roomGameId,
+    this.roomShortCode,
+    this.isRoomHost = false,
     this.onSettingsTap,
     this.onCreateRoomTap,
     this.onJoinRoomTap,
@@ -36,6 +41,11 @@ abstract class DashboardMainCardBase extends StatefulWidget {
   final String virtualIp;
   /// 已连接时展示的房间名；未连接可为 null。
   final String? roomDisplayName;
+  /// 「房主」或「成员」。
+  final String? roomRoleLabel;
+  final String? roomGameId;
+  final String? roomShortCode;
+  final bool isRoomHost;
   final VoidCallback? onSettingsTap;
   final VoidCallback? onCreateRoomTap;
   final VoidCallback? onJoinRoomTap;
@@ -134,12 +144,20 @@ abstract class DashboardMainCardBaseState<W extends DashboardMainCardBase>
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    Icon(
-                      Icons.meeting_room_outlined,
-                      size: 14,
-                      color: colorScheme.primary,
-                    ),
-                    const SizedBox(width: 4),
+                    if (GameCatalog.byId(widget.roomGameId) != null) ...[
+                      GameLogo(
+                        game: GameCatalog.byId(widget.roomGameId)!,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 6),
+                    ] else ...[
+                      Icon(
+                        Icons.meeting_room_outlined,
+                        size: 14,
+                        color: colorScheme.primary,
+                      ),
+                      const SizedBox(width: 4),
+                    ],
                     Flexible(
                       child: Text(
                         widget.roomDisplayName!,
@@ -151,8 +169,40 @@ abstract class DashboardMainCardBaseState<W extends DashboardMainCardBase>
                         maxLines: 1,
                       ),
                     ),
+                    if (widget.roomRoleLabel != null &&
+                        widget.roomRoleLabel!.isNotEmpty) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 1,
+                        ),
+                        decoration: BoxDecoration(
+                          color: colorScheme.primaryContainer,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          widget.roomRoleLabel!,
+                          style: textTheme.labelSmall?.copyWith(
+                            color: colorScheme.onPrimaryContainer,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
+                if (widget.roomShortCode != null &&
+                    widget.roomShortCode!.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    '短码 ${widget.roomShortCode}',
+                    style: textTheme.labelSmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                      letterSpacing: 0.6,
+                    ),
+                  ),
+                ],
               ],
               const SizedBox(height: 4),
               Row(
@@ -303,14 +353,14 @@ abstract class DashboardMainCardBaseState<W extends DashboardMainCardBase>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'UDP 广播转发',
+                          '强制 UDP 广播转发',
                           style: textTheme.bodyLarge?.copyWith(
                             fontWeight: FontWeight.w500,
                             color: colorScheme.onSurface,
                           ),
                         ),
                         Text(
-                          '广播转发到虚拟网',
+                          '覆盖 JSON 规则；重连生效',
                           style: textTheme.bodySmall?.copyWith(
                             color: colorScheme.onSurface.withValues(alpha: 0.6),
                           ),

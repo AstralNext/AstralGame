@@ -19,9 +19,8 @@ import 'package:flutter/material.dart';
 import 'package:signals/signals_flutter.dart';
 
 import 'about_page.dart';
-import 'cloud_backup_settings_page.dart';
 
-/// 设置主页面；云备份与关于为独立子页。
+/// 设置主页面。
 class SettingsMainPage extends StatefulWidget {
   const SettingsMainPage({super.key});
 
@@ -173,23 +172,6 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
         FadeInSection(
           order: 3,
           child: AstralSettingsSection(
-            title: '数据',
-            items: [
-              AstralSettingItem(
-                icon: Icons.cloud_upload_outlined,
-                label: '云备份',
-                subtitle: 'WebDAV 备份与恢复',
-                onTap: () => Navigator.of(context).push<void>(
-                  astralPageRoute(const CloudBackupSettingsPage()),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: AppDimensions.sectionGap),
-        FadeInSection(
-          order: 4,
-          child: AstralSettingsSection(
             title: '其他',
             items: [
               AstralSettingItem(
@@ -235,7 +217,7 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
               onPressed: () => Navigator.pop(ctx, false),
               child: const Text('取消'),
             ),
-            TextButton(
+            FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
               child: const Text('去设置'),
             ),
@@ -245,10 +227,12 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
       if (goSettings == true) {
         await overlay.openOverlayPermissionSettings();
       }
+      settingsState.floatingOverlayEnabled.value = false;
+      await settingsState.saveToPersistence();
       return;
     }
 
-    await overlay.applyFromAppState();
+    await overlay.show();
   }
 
   Widget _sectionTitle(BuildContext context, String title) {
@@ -256,8 +240,8 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
       padding: const EdgeInsets.only(left: 4, bottom: 8),
       child: Text(
         title,
-        style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              color: context.astralPalette.accent,
+        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              color: context.astralPalette.textSecondary,
               fontWeight: FontWeight.w600,
               letterSpacing: 0.2,
             ),
@@ -327,7 +311,7 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Text(
-                    'IP 将由服务器自动分配',
+                    'IP 将由网络自动分配（DHCP）',
                     style: textTheme.bodySmall,
                   ),
                 ),
@@ -348,8 +332,10 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
                 Watch((context) {
                   return SwitchListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: const Text('UDP 广播转发'),
-                    subtitle: const Text('局域网发现；重连后生效'),
+                    title: const Text('强制 UDP 广播转发'),
+                    subtitle: const Text(
+                      '覆盖游戏规则；多数游戏由线上规则自动开启，重连后生效',
+                    ),
                     value: settingsState.enableUdpBroadcastRelay.value,
                     onChanged: (v) {
                       settingsState.enableUdpBroadcastRelay.value = v;

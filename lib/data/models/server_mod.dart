@@ -1,15 +1,8 @@
-enum ServerSource {
-  manual,
-  public,
-}
-
 class ServerMod {
   final int id;
   final String name;
   final String url;
   final bool enable;
-  final bool encrypted;
-  final ServerSource source;
 
   /// 排序顺序
   final int sortOrder;
@@ -28,10 +21,8 @@ class ServerMod {
   ServerMod({
     int? id,
     this.enable = false,
-    this.encrypted = false,
     required this.name,
     required this.url,
-    this.source = ServerSource.manual,
     this.sortOrder = 0,
   }) : id = id ?? generateNextId();
 
@@ -39,8 +30,6 @@ class ServerMod {
     String? name,
     String? url,
     bool? enable,
-    bool? encrypted,
-    ServerSource? source,
     int? sortOrder,
   }) {
     return ServerMod(
@@ -48,8 +37,6 @@ class ServerMod {
       name: name ?? this.name,
       url: url ?? this.url,
       enable: enable ?? this.enable,
-      encrypted: encrypted ?? this.encrypted,
-      source: source ?? this.source,
       sortOrder: sortOrder ?? this.sortOrder,
     );
   }
@@ -59,8 +46,6 @@ class ServerMod {
         'name': name,
         'url': url,
         'enable': enable,
-        'encrypted': encrypted,
-        'source': source.name,
         'sortOrder': sortOrder,
       };
 
@@ -69,10 +54,28 @@ class ServerMod {
         name: json['name'] as String? ?? '',
         url: json['url'] as String? ?? '',
         enable: json['enable'] as bool? ?? false,
-        encrypted: json['encrypted'] as bool? ?? false,
-        source: ServerSource.values.byName(
-          (json['source'] as String?) ?? ServerSource.manual.name,
-        ),
         sortOrder: (json['sortOrder'] as num?)?.toInt() ?? 0,
       );
+}
+
+/// 进网 peer 条目（TOML `[[peer]]` / 短码载荷）。仅 URI，不使用 peer_public_key。
+class PeerEndpoint {
+  const PeerEndpoint({required this.uri});
+
+  final String uri;
+
+  Map<String, dynamic> toJson() => {'uri': uri};
+
+  factory PeerEndpoint.fromJson(dynamic raw) {
+    if (raw is String) {
+      return PeerEndpoint(uri: raw.trim());
+    }
+    if (raw is Map) {
+      final map = raw.map((k, v) => MapEntry('$k', v));
+      return PeerEndpoint(
+        uri: '${map['uri'] ?? map['url'] ?? ''}'.trim(),
+      );
+    }
+    return const PeerEndpoint(uri: '');
+  }
 }

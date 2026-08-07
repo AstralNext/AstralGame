@@ -11,6 +11,10 @@ class DashboardMainCardNarrow extends DashboardMainCardBase {
     super.userAvatar,
     super.virtualIp = AppConstants.defaultVirtualIp,
     super.roomDisplayName,
+    super.roomRoleLabel,
+    super.roomGameId,
+    super.roomShortCode,
+    super.isRoomHost = false,
     super.onSettingsTap,
     super.onCreateRoomTap,
     super.onJoinRoomTap,
@@ -38,18 +42,20 @@ class _DashboardMainCardNarrowState
       padding: const EdgeInsets.only(top: 12),
       child: Row(
         children: [
-          Expanded(
-            child: FilledButton.tonalIcon(
-              onPressed: widget.onShareRoomTap,
-              icon: const Icon(Icons.share_outlined, size: 18),
-              label: const Text('分享房间'),
-              style: FilledButton.styleFrom(
-                minimumSize: const Size.fromHeight(40),
-                shape: const StadiumBorder(),
+          if (widget.isRoomHost) ...[
+            Expanded(
+              child: FilledButton.tonalIcon(
+                onPressed: widget.onShareRoomTap,
+                icon: const Icon(Icons.share_outlined, size: 18),
+                label: const Text('分享房间'),
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(40),
+                  shape: const StadiumBorder(),
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: 8),
+            const SizedBox(width: 8),
+          ],
           TextButton.icon(
             onPressed: widget.onDisconnectTap,
             icon: const Icon(Icons.link_off_outlined, size: 18),

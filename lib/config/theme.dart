@@ -19,46 +19,66 @@ abstract final class AppThemeAnimation {
 
 /// Material 3 主题构建。
 abstract final class AstralGameTheme {
-  static final Map<AppThemeId, ThemeData> _cache = {};
-
-  static ThemeData build(AppThemeId id) =>
-      _cache.putIfAbsent(id, () => _createThemeData(id));
+  static ThemeData build(AppThemeId id) => _createThemeData(id);
 
   static ThemeData get defaultTheme => build(AppThemeId.insCream);
 
   static ThemeData _createThemeData(AppThemeId id) {
     final palette = AppThemePalette.of(id);
-    final colorScheme = ColorScheme.light(
+    // 与通用版一致：按页底亮度决定 Brightness，避免深色主题仍走 light 默认紫容器色。
+    final isDarkSurface = palette.background.computeLuminance() < 0.45;
+    final brightness =
+        isDarkSurface ? Brightness.dark : Brightness.light;
+
+    final page = palette.background;
+    final raised = palette.card;
+    final inset = palette.canvas;
+    final insetDeep = Color.lerp(inset, palette.textPrimary, 0.06)!;
+    final mid = Color.lerp(page, inset, 0.55)!;
+    // ColorScheme 的 *Container 必须是不透明色。accentMuted* 带 alpha，只适合
+    // splash/hover；若直接塞进 primaryContainer，FAB 会半透明并透出阴影。
+    final primaryContainer = Color.lerp(raised, palette.accent, 0.22)!;
+    final secondaryContainer = Color.lerp(raised, palette.accent, 0.12)!;
+
+    final colorScheme = ColorScheme(
+      brightness: brightness,
       primary: palette.accent,
       onPrimary: palette.onAccent,
       secondary: palette.accent,
       onSecondary: palette.onAccent,
       error: palette.error,
       onError: palette.onError,
-      surface: palette.card,
+      surface: raised,
       onSurface: palette.textPrimary,
       onSurfaceVariant: palette.textSecondary,
       outline: palette.divider,
-      outlineVariant: palette.divider,
-      surfaceContainerHighest: palette.canvas,
-      surfaceContainerHigh: palette.canvas,
-      surfaceContainer: palette.canvas,
-      surfaceContainerLow: palette.background,
-      surfaceContainerLowest: palette.background,
+      outlineVariant: Color.lerp(palette.divider, page, 0.35)!,
+      primaryContainer: primaryContainer,
+      onPrimaryContainer: palette.textPrimary,
+      // Game 成员 chip / 选中态还会用到 secondary / tertiary container。
+      secondaryContainer: secondaryContainer,
+      onSecondaryContainer: palette.textPrimary,
+      tertiaryContainer: Color.lerp(inset, palette.accent, 0.14)!,
+      onTertiaryContainer: palette.textSecondary,
+      surfaceContainerLowest: page,
+      surfaceContainerLow: raised,
+      surfaceContainer: mid,
+      surfaceContainerHigh: inset,
+      surfaceContainerHighest: insetDeep,
     );
 
     final splash = palette.accentMuted;
     final highlight = palette.accent.withValues(alpha: 0.06);
-    final isDarkSurface = palette.background.computeLuminance() < 0.45;
     final overlayStyle = isDarkSurface
         ? SystemUiOverlayStyle.light
         : SystemUiOverlayStyle.dark;
 
     return ThemeData(
       useMaterial3: true,
-      brightness: Brightness.light,
+      brightness: brightness,
       colorScheme: colorScheme,
-      scaffoldBackgroundColor: palette.background,
+      scaffoldBackgroundColor: page,
+      canvasColor: page,
       dividerColor: palette.divider,
       splashColor: splash,
       highlightColor: highlight,
@@ -78,7 +98,7 @@ abstract final class AstralGameTheme {
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: true,
-        backgroundColor: palette.background,
+        backgroundColor: page,
         foregroundColor: palette.textPrimary,
         systemOverlayStyle: overlayStyle,
         titleTextStyle: TextStyle(
@@ -89,7 +109,7 @@ abstract final class AstralGameTheme {
         ),
       ),
       cardTheme: CardThemeData(
-        color: palette.card,
+        color: raised,
         elevation: 0,
         margin: EdgeInsets.zero,
         surfaceTintColor: Colors.transparent,
@@ -101,7 +121,7 @@ abstract final class AstralGameTheme {
         height: 72,
         elevation: 0,
         surfaceTintColor: Colors.transparent,
-        backgroundColor: palette.card,
+        backgroundColor: raised,
         indicatorColor: palette.accent.withValues(alpha: 0.14),
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           final selected = states.contains(WidgetState.selected);

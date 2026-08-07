@@ -34,11 +34,17 @@ class AstralCard extends StatelessWidget {
       inner = Padding(padding: padding!, child: inner);
     }
 
+    // 必须用 Material 承载色，不能用 DecoratedBox 填色：否则内部 ListTile
+    // 的 ink 画在更上层 Material 上会被挡住，debug 下狂抛异常导致卡顿。
+    Widget card;
     if (onTap != null || onLongPress != null) {
-      inner = Material(
-        color: Colors.transparent,
+      card = Material(
+        color: bg,
         borderRadius: borderRadius,
         clipBehavior: Clip.antiAlias,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
         child: InkWell(
           onTap: onTap,
           onLongPress: onLongPress,
@@ -48,26 +54,33 @@ class AstralCard extends StatelessWidget {
           child: inner,
         ),
       );
-    }
-
-    return DecoratedBox(
-      decoration: BoxDecoration(
+    } else {
+      card = Material(
         color: bg,
         borderRadius: borderRadius,
-        boxShadow: shadow
-            ? [
-                BoxShadow(
-                  color: palette.shadowSoft,
-                  blurRadius: 20,
-                  offset: const Offset(0, 6),
-                ),
-              ]
-            : null,
-      ),
-      child: ClipRRect(
-        borderRadius: borderRadius,
+        clipBehavior: Clip.antiAlias,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
         child: inner,
+      );
+    }
+
+    if (!shadow) return card;
+
+    // 阴影单独放外层，不要带 color，避免再次挡住 ink。
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: borderRadius,
+        boxShadow: [
+          BoxShadow(
+            color: palette.shadowSoft,
+            blurRadius: 20,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
+      child: card,
     );
   }
 }

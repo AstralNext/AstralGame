@@ -9,7 +9,7 @@ Future<void> showAddServerDialog(BuildContext context) async {
   return showDialog(
     context: context,
     builder: (context) =>
-        ServerDialog(title: '添加服务器', confirmText: '添加'),
+        const ServerDialog(title: '添加服务器', confirmText: '添加'),
   );
 }
 
@@ -48,9 +48,10 @@ class _ServerDialogState extends State<ServerDialog> {
   @override
   void initState() {
     super.initState();
-    if (widget.server != null) {
-      _nameController.text = widget.server!.name;
-      _urlController.text = widget.server!.url;
+    final existing = widget.server;
+    if (existing != null) {
+      _nameController.text = existing.name;
+      _urlController.text = existing.url;
     }
   }
 
@@ -62,92 +63,90 @@ class _ServerDialogState extends State<ServerDialog> {
   }
 
   void _saveServer() {
-    if (_formKey.currentState!.validate()) {
-      final server = ServerMod(
-        id: widget.server?.id,
-        enable: widget.server?.enable ?? false,
-        name: _nameController.text,
-        url: _urlController.text,
-        source: widget.server?.source ?? ServerSource.manual,
-      );
+    if (!_formKey.currentState!.validate()) return;
+    final server = ServerMod(
+      id: widget.server?.id,
+      enable: widget.server?.enable ?? false,
+      name: _nameController.text.trim(),
+      url: _urlController.text.trim(),
+      sortOrder: widget.server?.sortOrder ?? 0,
+    );
 
-      if (widget.server == null) {
-        getIt<ServerState>().addServer(server);
-      } else {
-        getIt<ServerState>().updateServer(server);
-      }
-      Navigator.of(context).pop();
+    if (widget.server == null) {
+      getIt<ServerState>().addServer(server);
+    } else {
+      getIt<ServerState>().updateServer(server);
     }
+    Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final urlLocked = widget.server != null &&
+        BlockedServers.isBlocked(widget.server!.url);
 
     return AlertDialog(
       title: Text(widget.title),
-      content: Form(
-        key: _formKey,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TextFormField(
-                controller: _nameController,
-                decoration: InputDecoration(
-                  labelText: '服务器名称',
-                  hintText: '输入服务器名称',
-                  border: const OutlineInputBorder(),
-                  prefixIcon:
-                      Icon(Icons.dns, color: colorScheme.primary),
-                  floatingLabelBehavior: FloatingLabelBehavior.always,
-                  contentPadding: const EdgeInsets.symmetric(
-                    vertical: 12,
-                    horizontal: 12,
+      content: SizedBox(
+        width: 420,
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  '填写名称与地址即可。启用后会写入 EasyTier [[peer]]。',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
                   ),
                 ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return '请输入服务器名称';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 14),
-              TextFormField(
-                controller: _urlController,
-                enabled: widget.server == null ||
-                    !BlockedServers.isBlocked(widget.server!.url),
-                decoration: InputDecoration(
-                  labelText: '服务器地址',
-                  hintText: '输入完整服务器地址，例如 tcp://example.com:11010',
-                  border: const OutlineInputBorder(),
-                  prefixIcon:
-                      Icon(Icons.language, color: colorScheme.primary),
-                  floatingLabelBehavior: FloatingLabelBehavior.always,
-                  contentPadding: const EdgeInsets.symmetric(
-                    vertical: 12,
-                    horizontal: 12,
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _nameController,
+                  textInputAction: TextInputAction.next,
+                  decoration: const InputDecoration(
+                    labelText: '名称',
+                    hintText: '例如：家里节点',
                   ),
-                  helperText: widget.server != null &&
-                          BlockedServers.isBlocked(widget.server!.url)
-                      ? '此服务器地址不可修改'
-                      : null,
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return '请输入名称';
+                    }
+                    return null;
+                  },
                 ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return '请输入服务器地址';
-                  }
-                  final trimmed = value.trim();
-                  final hasScheme = RegExp(r'^[a-zA-Z][a-zA-Z0-9+.-]*://').hasMatch(trimmed);
-                  if (!hasScheme) {
-                    return '请输入完整地址（必须包含协议头），例如 tcp://example.com:11010';
-                  }
-                  return null;
-                },
-              ),
-            ],
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _urlController,
+                  enabled: !urlLocked,
+                  textInputAction: TextInputAction.done,
+                  onFieldSubmitted: (_) => _saveServer(),
+                  decoration: InputDecoration(
+                    labelText: '地址',
+                    hintText: 'tcp://192.168.1.10:11010',
+                    helperText: urlLocked
+                        ? '此地址不可修改'
+                        : '须含协议，如 tcp:// 或 udp://',
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return '请输入地址';
+                    }
+                    final trimmed = value.trim();
+                    final hasScheme = RegExp(r'^[a-zA-Z][a-zA-Z0-9+.-]*://')
+                        .hasMatch(trimmed);
+                    if (!hasScheme) {
+                      return '请输入完整地址，例如 tcp://example.com:11010';
+                    }
+                    return null;
+                  },
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -156,12 +155,8 @@ class _ServerDialogState extends State<ServerDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('取消'),
         ),
-        ElevatedButton(
+        FilledButton(
           onPressed: _saveServer,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: colorScheme.primary,
-            foregroundColor: colorScheme.onPrimary,
-          ),
           child: Text(widget.confirmText),
         ),
       ],
