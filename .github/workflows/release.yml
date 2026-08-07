@@ -176,7 +176,6 @@ jobs:
           f=$(pick '*.zip'); [ -n "$f" ] && cp -f "$f" "release/astral-game-${PKG_VER}-windows-x64.zip"
           f=$(pick '*.tar.gz'); [ -n "$f" ] && cp -f "$f" "release/astral-game-${PKG_VER}-linux-x64.tar.gz"
           f=$(find _dl/android-arm64 -name '*.apk' 2>/dev/null | head -1); [ -n "$f" ] && cp -f "$f" "release/astral-game-${PKG_VER}-android-arm64.apk"
-          f=$(find _dl/android-universal -name '*.apk' 2>/dev/null | head -1); [ -n "$f" ] && cp -f "$f" "release/astral-game-${PKG_VER}-android-universal.apk"
           f=$(find _dl/installer -name '*.exe' 2>/dev/null | head -1); [ -n "$f" ] && cp -f "$f" "release/astral-game-${PKG_VER}-windows-x64-setup.exe"
           ls -la release/ || true
 
