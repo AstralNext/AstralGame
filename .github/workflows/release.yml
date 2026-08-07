@@ -153,18 +153,6 @@ jobs:
           search_artifacts: ${{ steps.cfg.outputs.search == 'true' }}
           if_no_artifact_found: warn
 
-      - name: 拉取 Android universal
-        if: steps.cfg.outputs.skip != 'true'
-        uses: dawidd6/action-download-artifact@v6
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          run_id: ${{ steps.cfg.outputs.run_id }}
-          workflow: build.yml
-          name: astral-game-android-universal
-          path: _dl/android-universal
-          search_artifacts: ${{ steps.cfg.outputs.search == 'true' }}
-          if_no_artifact_found: warn
-
       - name: 拉取 Windows 安装包
         if: steps.cfg.outputs.skip != 'true'
         uses: dawidd6/action-download-artifact@v6

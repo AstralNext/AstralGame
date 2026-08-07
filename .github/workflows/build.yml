@@ -10,7 +10,6 @@ on:
         options:
           - all
           - android-arm64
-          - android-universal
           - linux-x64
           - windows-x64
         default: 'all'
@@ -65,7 +64,6 @@ jobs:
           ALL=$(jq -nc '
             [
               {"platform":"android-arm64","os":"ubuntu-22.04","flutter_platform":"android","rust_target":"aarch64-linux-android","build_cmd":"flutter build apk --release --target-platform android-arm64","artifact_path":"build/app/outputs/flutter-apk/app-release.apk","artifact_name":"astral-game-android-arm64","package":false},
-              {"platform":"android-universal","os":"ubuntu-22.04","flutter_platform":"android","rust_target":"aarch64-linux-android","build_cmd":"flutter build apk --release","artifact_path":"build/app/outputs/flutter-apk/app-release.apk","artifact_name":"astral-game-android-universal","package":false},
               {"platform":"linux-x64","os":"ubuntu-22.04","flutter_platform":"linux","rust_target":"x86_64-unknown-linux-gnu","build_cmd":"flutter build linux --release","artifact_path":"build/linux/x64/release/bundle","artifact_name":"astral-game-linux-x64","package":true},
               {"platform":"windows-x64","os":"windows-2022","flutter_platform":"windows","rust_target":"x86_64-pc-windows-msvc","build_cmd":"flutter build windows --release","artifact_path":"build/windows/x64/runner/Release","artifact_name":"astral-game-windows-x64","package":false}
             ]
