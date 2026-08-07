@@ -14,11 +14,11 @@ dependencies:
   astral_rust_core:
     git:
       url: https://github.com/AstralNext/astral_rust_core.git
-      ref: v0.2.0
+      ref: main
   vpn_service_plugin:
     git:
       url: https://github.com/AstralNext/vpn_service_plugin.git
-      ref: v0.2.0
+      ref: main
   pointycastle: ^3.9.1
   window_manager: ^0.4.3
   get_it: ^9.2.0

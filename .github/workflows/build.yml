@@ -186,7 +186,11 @@ jobs:
           Get-Command nasm -ErrorAction SilentlyContinue | Out-String | Write-Host
 
       - name: 📚 Get dependencies
-        run: flutter pub get
+        run: |
+          flutter pub get
+          # git 依赖始终跟 main tip，不沿用 lock 里旧 resolved-ref
+          flutter pub upgrade astral_rust_core vpn_service_plugin
+        shell: bash
 
       # astral_rust_core 通过 git 依赖拉取到 pub-cache；构建前清理避免脏 target 缓存。
       - name: 🧹 Clean Rust cache (astral_rust_core)
