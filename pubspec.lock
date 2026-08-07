@@ -20,9 +20,11 @@ packages:
   astral_rust_core:
     dependency: "direct main"
     description:
-      path: "../astral_rust_core"
-      relative: true
-    source: path
+      path: "."
+      ref: "v0.2.0"
+      resolved-ref: a1f2d003812556cc3154669fa7d6faa7846f3802
+      url: "https://github.com/AstralNext/astral_rust_core.git"
+    source: git
     version: "0.1.0"
   async:
     dependency: transitive
@@ -977,7 +979,7 @@ packages:
     description:
       path: "."
       ref: "v0.2.0"
-      resolved-ref: a2ab8bc7bd9c736320e9af66eddc096cce5ea216
+      resolved-ref: "529771eb5b58704f5b03b88fc6c39e6307b05837"
       url: "https://github.com/AstralNext/vpn_service_plugin.git"
     source: git
     version: "0.2.0"
