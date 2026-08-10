@@ -180,7 +180,6 @@ class _MembersBlock extends StatelessWidget {
                     sessionIsHost: session.isHost,
                     isCredentialPeer: nodes[i].isCredentialPeer,
                   ),
-              onKick: null,
             ),
           ],
         ],

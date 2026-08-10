@@ -13,7 +13,7 @@ class RoomState {
   /// 房主「暂时退出」后的可恢复快照。
   final pausedHost = signal<HostResumeSnapshot?>(null);
 
-  /// 强制结束提示（被踢 / 房主离线等），UI 消费后应 [clearForceEndNotice]。
+  /// 强制结束提示（VPN 失败 / 房主离线等），UI 消费后应 [clearForceEndNotice]。
   final forceEndNotice = signal<String?>(null);
 
   /// 客人侧：房主当前是否在线（基于成员列表推断）。
@@ -83,7 +83,6 @@ class RoomState {
       roomName: session.networkName,
       host: '',
       port: 0,
-      password: session.networkSecret,
       shareCode: session.shortCode ?? '',
       createdAt: now,
     );

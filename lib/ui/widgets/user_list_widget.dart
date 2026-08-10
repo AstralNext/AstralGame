@@ -9,14 +9,12 @@ class UserListWidget extends StatelessWidget {
     required this.users,
     this.shrinkWrap = false,
     this.physics,
-    this.onKick,
     this.isRoomHostOf,
   });
 
   final List<EnhancedNodeInfo> users;
   final bool shrinkWrap;
   final ScrollPhysics? physics;
-  final Future<void> Function(EnhancedNodeInfo node)? onKick;
   final bool Function(EnhancedNodeInfo node)? isRoomHostOf;
 
   @override
@@ -38,7 +36,6 @@ class UserListWidget extends StatelessWidget {
           key: ValueKey<int>(node.peerId),
           node: node,
           isRoomHost: isRoomHostOf?.call(node) ?? false,
-          onKick: onKick,
         );
       },
     );

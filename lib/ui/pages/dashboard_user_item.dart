@@ -17,7 +17,6 @@ class DashboardUserItem extends StatefulWidget {
     this.count = 1,
     this.compact = false,
     this.isRoomHost = false,
-    this.onKick,
   });
 
   final EnhancedNodeInfo node;
@@ -27,8 +26,6 @@ class DashboardUserItem extends StatefulWidget {
   final bool compact;
   /// 是否为当前房间房主。
   final bool isRoomHost;
-  /// 房主踢人；非空时显示踢出按钮。
-  final Future<void> Function(EnhancedNodeInfo node)? onKick;
 
   @override
   State<DashboardUserItem> createState() => _DashboardUserItemState();
@@ -36,46 +33,6 @@ class DashboardUserItem extends StatefulWidget {
 
 class _DashboardUserItemState extends State<DashboardUserItem> {
   bool _isHovered = false;
-  bool _kicking = false;
-
-  Future<void> _confirmKick(BuildContext context) async {
-    final onKick = widget.onKick;
-    if (onKick == null) return;
-    final name = widget.node.displayName;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('踢出成员'),
-        content: Text('确定踢出「$name」？其进网凭据将被撤销。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('踢出'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-    setState(() => _kicking = true);
-    try {
-      await onKick(widget.node);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已踢出 $name')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('踢出失败：$e')),
-      );
-    } finally {
-      if (mounted) setState(() => _kicking = false);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -312,23 +269,6 @@ class _DashboardUserItemState extends State<DashboardUserItem> {
                 ],
               ),
             ),
-            if (widget.onKick != null && !widget.isRoomHost)
-              IconButton(
-                tooltip: '踢出',
-                iconSize: 20,
-                visualDensity: VisualDensity.compact,
-                onPressed: _kicking ? null : () => _confirmKick(context),
-                icon: _kicking
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Icon(
-                        Icons.person_remove_outlined,
-                        color: colorScheme.error,
-                      ),
-              ),
             Container(
               width: 8,
               height: 8,

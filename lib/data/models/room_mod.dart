@@ -1,4 +1,6 @@
 /// [name] 为展示名；[roomName] 为 EasyTier `network_name`（分享码里 `_` 后一段）。
+///
+/// [password] 仅保留兼容字段，加入历史不落盘密钥（读写恒为空）。
 class RoomMod {
   final int id;
   final String name;
@@ -15,7 +17,7 @@ class RoomMod {
     required this.roomName,
     required this.host,
     required this.port,
-    required this.password,
+    this.password = '',
     required this.shareCode,
     required this.createdAt,
   });
@@ -26,8 +28,8 @@ class RoomMod {
         'room_name': roomName,
         'host': host,
         'port': port,
-        'password': password,
-        // 新字段名
+        // 故意不写密钥：历史 JSON 里的 password 一律清空。
+        'password': '',
         'share_code': shareCode,
         'created_at': createdAt.toIso8601String(),
       };
@@ -38,7 +40,6 @@ class RoomMod {
         roomName: json['room_name'] as String? ?? '',
         host: json['host'] as String? ?? '',
         port: (json['port'] as num?)?.toInt() ?? 0,
-        password: json['password'] as String? ?? '',
         shareCode: json['share_code'] as String? ?? '',
         createdAt: DateTime.tryParse(json['created_at'] as String? ?? '') ?? DateTime.now(),
       );

@@ -659,7 +659,6 @@ class _MembersGlass extends StatelessWidget {
                               sessionIsHost: session.isHost,
                               isCredentialPeer: node.isCredentialPeer,
                             ),
-                        onKick: null,
                       );
                     },
                   ),

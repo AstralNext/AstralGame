@@ -361,6 +361,7 @@ class ConnectionService {
       return false;
     }
     _isConnecting = true;
+    String? createdInstanceId;
     try {
       if (_nodeManagement.isRunning) {
         await disconnect(revokeShare: false, pauseHost: false);
@@ -393,28 +394,54 @@ class ConnectionService {
         '$configToml'
         '----- TOML end -----',
       );
-      final instanceId = await _p2pService.createInstance(
+      createdInstanceId = await _p2pService.createInstance(
         configToml: configToml,
         watchEvent: true,
       );
-      appLogger.i('[ConnectionService] 实例已创建 id=$instanceId');
-      final isRunning = await _p2pService.isEasytierRunning(instanceId);
+      appLogger.i('[ConnectionService] 实例已创建 id=$createdInstanceId');
+      final isRunning = await _p2pService.isEasytierRunning(createdInstanceId);
       if (!isRunning) {
-        appLogger.e('[ConnectionService] 实例启动异常 id=$instanceId');
+        appLogger.e('[ConnectionService] 实例启动异常 id=$createdInstanceId');
+        await _p2pService.closeInstance(createdInstanceId);
+        createdInstanceId = null;
         return false;
       }
 
-      await _bindPeerRpc(instanceId);
-      _nodeManagement.setRunning(instanceId);
+      await _bindPeerRpc(createdInstanceId);
+      _nodeManagement.setRunning(createdInstanceId);
       _roomState.setConnected(true);
       _armGuestPresenceWatch();
       if (Platform.isAndroid) {
-        unawaited(_startAndroidVpnWhenIpReady(instanceId));
+        final vpnOk = await _startAndroidVpnWhenIpReady(createdInstanceId);
+        if (!vpnOk) {
+          appLogger.e('[ConnectionService] Android VPN 启动失败，回滚连接');
+          await disconnect(
+            revokeShare: false,
+            pauseHost: false,
+            forceEndNotice: '虚拟网络（VPN）启动失败，请检查权限后重试',
+          );
+          createdInstanceId = null;
+          return false;
+        }
       }
       return true;
     } catch (e, st) {
       appLogger.e('[ConnectionService] 连接失败: $e', error: e, stackTrace: st);
       await _unbindPeerRpc();
+      _disarmGuestPresenceWatch();
+      if (createdInstanceId != null) {
+        try {
+          await _p2pService.closeInstance(createdInstanceId);
+        } catch (closeError, closeSt) {
+          appLogger.e(
+            '[ConnectionService] 回滚实例失败: $closeError',
+            error: closeError,
+            stackTrace: closeSt,
+          );
+        }
+      }
+      _nodeManagement.setStopped();
+      _roomState.setConnected(false);
       final msg = e.toString().toLowerCase();
       if (Platform.isWindows &&
           (msg.contains('tun') ||
@@ -520,7 +547,7 @@ class ConnectionService {
     _hostMissingSince = null;
   }
 
-  Future<void> _startAndroidVpnWhenIpReady(String instanceId) async {
+  Future<bool> _startAndroidVpnWhenIpReady(String instanceId) async {
     final completer = Completer<String?>();
     late final EffectCleanup dispose;
     dispose = effect(() {
@@ -535,15 +562,22 @@ class ConnectionService {
       }
     });
     try {
-      final vpnIp = await completer.future;
-      if (vpnIp == null) return;
+      final vpnIp = await completer.future.timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          appLogger.w('[ConnectionService] 等待虚拟 IP 超时');
+          return null;
+        },
+      );
+      if (vpnIp == null || vpnIp.isEmpty) return false;
       final vpnStarted = await _vpnManager.start(
         instanceId: instanceId,
         ipv4Addr: vpnIp,
       );
       if (!vpnStarted) {
-        appLogger.w('[ConnectionService] Android VPN 启动失败，房间继续');
+        appLogger.w('[ConnectionService] Android VPN 启动失败');
       }
+      return vpnStarted;
     } finally {
       dispose();
     }
@@ -551,12 +585,7 @@ class ConnectionService {
 
   Future<void> _bindPeerRpc(String instanceId) async {
     GetIt.I<PeerRpcClient>().bindInstance(instanceId);
-    try {
-      await GetIt.I<PeerRpcRouter>().start(instanceId);
-    } catch (e, st) {
-      appLogger.e('[ConnectionService] PeerRpcRouter 启动失败: $e',
-          error: e, stackTrace: st);
-    }
+    await GetIt.I<PeerRpcRouter>().start(instanceId);
   }
 
   Future<void> _unbindPeerRpc() async {

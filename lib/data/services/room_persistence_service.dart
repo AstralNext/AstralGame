@@ -29,10 +29,20 @@ class RoomPersistenceService {
       final content = await file.readAsString();
       if (content.trim().isEmpty) return [];
       final list = jsonDecode(content) as List;
+      final hadLegacySecrets = list.any((e) {
+        if (e is! Map) return false;
+        final password = e['password']?.toString() ?? '';
+        return password.isNotEmpty;
+      });
       final rooms = list
           .map((e) => RoomMod.fromJson(e as Map<String, dynamic>))
           .toList();
-      return normalizeJoinHistory(rooms);
+      final normalized = normalizeJoinHistory(rooms);
+      // 迁移：擦除历史文件里曾写入的明文密钥。
+      if (hadLegacySecrets) {
+        await saveRooms(normalized);
+      }
+      return normalized;
     } catch (e) {
       return [];
     }
@@ -78,7 +88,6 @@ class RoomPersistenceService {
           roomName: incoming.roomName,
           host: incoming.host,
           port: incoming.port,
-          password: incoming.password,
           shareCode: incoming.shareCode,
           createdAt: DateTime.now(),
         );

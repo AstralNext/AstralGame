@@ -105,7 +105,6 @@ class DashboardWideLayout extends StatelessWidget {
                     isCredentialPeer: node.isCredentialPeer,
                   );
                 },
-                onKick: null,
               ),
             ),
           ],
