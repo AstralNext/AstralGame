@@ -17,6 +17,7 @@
     <string name="widget_members_label">Astral · 在线成员</string>
     <string name="widget_members_description">当前房间在线成员预览，点击进入联机页</string>
     <string name="widget_members_title">在线成员</string>
+    <string name="widget_members_default_room">—</string>
     <string name="widget_members_count_fmt">%1$d 人</string>
     <string name="widget_members_empty_hint">连接房间后显示在线成员</string>
 </resources>

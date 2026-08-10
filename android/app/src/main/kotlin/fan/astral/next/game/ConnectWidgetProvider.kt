@@ -15,11 +15,15 @@ class ConnectWidgetProvider : HomeWidgetProvider() {
         widgetData: SharedPreferences,
     ) {
         appWidgetIds.forEach { widgetId ->
+            val statusCode = widgetData.widgetString(
+                "connect_status_code",
+                "disconnected",
+            )
+            val connected = statusCode == "connected"
             val status = widgetData.widgetString(
                 "connect_status",
                 context.getString(R.string.widget_connect_default_status),
             )
-            val connected = status == "???"
             val views = RemoteViews(context.packageName, R.layout.widget_connect).apply {
                 setTextViewText(
                     R.id.connect_title,

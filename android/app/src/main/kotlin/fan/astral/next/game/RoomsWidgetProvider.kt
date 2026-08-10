@@ -98,7 +98,7 @@ class RoomsWidgetProvider : HomeWidgetProvider() {
                     val obj = array.getJSONObject(i)
                     add(
                         RoomLine(
-                            label = obj.optString("label", "—"),
+                            label = obj.optString("label", "-"),
                             code = obj.optString("code", ""),
                             networkName = obj.optString("network", ""),
                             id = obj.optInt("id", -1).takeIf { it > 0 },

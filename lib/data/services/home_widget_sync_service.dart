@@ -51,6 +51,10 @@ class HomeWidgetSyncService {
         '未连接',
       );
       await HomeWidget.saveWidgetData<String>(
+        HomeWidgetKeys.connectStatusCode,
+        'disconnected',
+      );
+      await HomeWidget.saveWidgetData<String>(
         HomeWidgetKeys.connectHint,
         selected == null
             ? '点击打开应用加入或创建房间'
@@ -72,6 +76,10 @@ class HomeWidgetSyncService {
       await HomeWidget.saveWidgetData<String>(
         HomeWidgetKeys.connectStatus,
         '已连接',
+      );
+      await HomeWidget.saveWidgetData<String>(
+        HomeWidgetKeys.connectStatusCode,
+        'connected',
       );
       await HomeWidget.saveWidgetData<String>(
         HomeWidgetKeys.connectHint,

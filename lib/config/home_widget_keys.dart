@@ -4,6 +4,8 @@ abstract final class HomeWidgetKeys {
   static const connectRoomLabel = 'connect_room_label';
   static const connectRoomCode = 'connect_room_code';
   static const connectStatus = 'connect_status';
+  /// Machine-readable: `connected` / `disconnected` (avoid comparing Chinese in Kotlin).
+  static const connectStatusCode = 'connect_status_code';
   static const connectHint = 'connect_hint';
 
   // 房间列表（JSON 数组，最多 4 条）
