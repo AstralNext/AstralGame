@@ -6,10 +6,7 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.RectF
 
-/**
- * 小组�?RemoteViews 无法可靠地对根布局 setBackgroundColor�?
- * 用圆角位图作�?ImageView 背景是通用做法�?
- */
+/** Rounded bitmaps for widget backgrounds (RemoteViews cannot set background color reliably). */
 object WidgetBitmapFactory {
     private const val CARD_WIDTH_DP = 360
     private const val CARD_HEIGHT_DP = 240

@@ -4,9 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.widget.RemoteViews
 
-/**
- * �?home_widget 写入的主题色动态着色（�?Flutter AppThemePalette 一致）�?
- */
+/** Apply theme colors written by home_widget (matches Flutter AppThemePalette). */
 object WidgetThemeHelper {
     private const val KEY_CARD = "theme_card"
     private const val KEY_CANVAS = "theme_canvas"

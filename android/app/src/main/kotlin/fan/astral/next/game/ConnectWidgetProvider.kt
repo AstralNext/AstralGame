@@ -19,7 +19,7 @@ class ConnectWidgetProvider : HomeWidgetProvider() {
                 "connect_status",
                 context.getString(R.string.widget_connect_default_status),
             )
-            val connected = status == "已连�?
+            val connected = status == "???"
             val views = RemoteViews(context.packageName, R.layout.widget_connect).apply {
                 setTextViewText(
                     R.id.connect_title,

@@ -20,7 +20,7 @@ class MembersWidgetProvider : HomeWidgetProvider() {
             val views = RemoteViews(context.packageName, R.layout.widget_members).apply {
                 setTextViewText(
                     R.id.members_room,
-                    widgetData.widgetString("members_room_label", "â€?),
+                    widgetData.widgetString("members_room_label", "—"),
                 )
                 setTextViewText(
                     R.id.members_count,

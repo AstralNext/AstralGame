@@ -127,7 +127,7 @@ object FloatingOverlayController {
         for (i in 0 until users.length()) {
             val user = users.optJSONObject(i) ?: continue
             val row = inflater.inflate(R.layout.overlay_user_row, list, false)
-            val ip = user.optString("ip", "â€?)
+            val ip = user.optString("ip", "—")
             val latencyMs = user.optDouble("latencyMs", 0.0).roundToInt()
 
             row.findViewById<TextView>(R.id.overlay_user_ip).text = ip
