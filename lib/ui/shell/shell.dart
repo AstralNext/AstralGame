@@ -249,7 +249,9 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
 
     if (!isCompact) return stack;
 
+    // 顶栏已处理 status bar，内容区不再叠一层顶部 SafeArea。
     return SafeArea(
+      top: false,
       bottom: false,
       child: stack,
     );
@@ -296,10 +298,10 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
                     if (_isDesktopPlatform)
                       _DesktopTitleBar(
                         onClose: () => unawaited(_handleCloseRequested()),
-                      ),
-                    if (isCompact)
+                      )
+                    else if (isCompact)
                       Watch((context) {
-                        return _CompactTopBar(
+                        return _MobileChromeBar(
                           avatar: nodes.currentUserAvatar.value,
                           onAvatarTap: () => showEditProfileDialog(context),
                         );
@@ -347,9 +349,9 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
   }
 }
 
-/// 手机全局顶栏：右侧头像。
-class _CompactTopBar extends StatelessWidget {
-  const _CompactTopBar({
+/// 手机顶栏：模拟桌面标题栏，头像落在窗口按钮区域。
+class _MobileChromeBar extends StatelessWidget {
+  const _MobileChromeBar({
     required this.avatar,
     required this.onAvatarTap,
   });
@@ -365,15 +367,25 @@ class _CompactTopBar extends StatelessWidget {
       child: SafeArea(
         bottom: false,
         child: SizedBox(
-          height: 52,
+          height: 44,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Row(
               children: [
-                const Spacer(),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Astral Game',
+                    style: TextStyle(
+                      color: palette.textPrimary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
                 AvatarWidget(
                   avatar: avatar,
-                  size: 36,
+                  size: 28,
                   shape: AvatarShape.circle,
                   onTap: onAvatarTap,
                 ),

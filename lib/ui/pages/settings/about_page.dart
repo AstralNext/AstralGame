@@ -1,6 +1,7 @@
 import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/config/constants.dart';
 import 'package:astral_game/di.dart';
+import 'package:astral_game/utils/app_version.dart';
 import 'package:astral_game/utils/client_runtime_info.dart';
 import 'package:astral_game/data/state/update_state.dart';
 import 'package:astral_game/data/services/update_service.dart';
@@ -70,7 +71,7 @@ class _AboutPageState extends State<AboutPage> {
                 final latestVersion = updateState.latestVersion.value;
                 final hasNew = latestVersion != null &&
                     latestVersion.isNotEmpty &&
-                    latestVersion != _currentVersion;
+                    AppVersion.isNewer(latestVersion, _currentVersion);
                 return Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -131,10 +132,10 @@ class _AboutPageState extends State<AboutPage> {
             const Divider(height: 1),
             ListTile(
               leading: const Icon(Icons.download_outlined),
-              title: const Text('下载 / Releases'),
-              subtitle: const Text('GitHub 发布页'),
+              title: const Text('前往下载'),
+              subtitle: const Text('next.astral.fan/game'),
               trailing: const Icon(Icons.open_in_new, size: 18),
-              onTap: () => updateService.openReleasesPage(),
+              onTap: () => updateService.openDownloadPage(),
             ),
             const Divider(height: 1),
             ListTile(

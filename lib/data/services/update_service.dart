@@ -5,6 +5,7 @@ import 'package:astral_game/data/state/update_state.dart';
 import 'package:astral_game/utils/app_version.dart';
 import 'package:astral_game/utils/client_runtime_info.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
@@ -65,12 +66,7 @@ class UpdateService {
       final releaseNotes = _extractString(
         releaseInfo,
         'body',
-        fallback: '新版本已发布，请前往 GitHub Releases 下载安装包。',
-      );
-      final releaseUrl = _extractString(
-        releaseInfo,
-        'html_url',
-        fallback: AppConstants.githubReleasesPage,
+        fallback: '新版本已发布，请前往官网下载安装包。',
       );
 
       if (_shouldUpdate(currentVersion, latestVersion)) {
@@ -79,7 +75,6 @@ class UpdateService {
           currentVersion: currentVersion,
           latestVersion: latestVersion,
           releaseNotes: releaseNotes,
-          releaseUrl: releaseUrl,
         );
       } else if (showNoUpdateMessage) {
         _showMessageDialog(context, '当前已是最新版本', '当前版本: $currentVersion');
@@ -160,29 +155,49 @@ class UpdateService {
     required String currentVersion,
     required String latestVersion,
     required String releaseNotes,
-    required String releaseUrl,
   }) {
+    final theme = Theme.of(context);
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: Text('发现新版本: $latestVersion'),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('当前版本: $currentVersion'),
-              const SizedBox(height: 12),
-              const Text('更新说明:'),
-              const SizedBox(height: 8),
-              Text(releaseNotes, style: const TextStyle(fontSize: 14)),
-              const SizedBox(height: 12),
-              Text(
-                '请前往 GitHub Releases 下载对应平台的安装包。',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ],
+        content: SizedBox(
+          width: 420,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('当前版本: $currentVersion'),
+                const SizedBox(height: 12),
+                const Text('更新说明:'),
+                const SizedBox(height: 8),
+                MarkdownBody(
+                  data: releaseNotes,
+                  selectable: true,
+                  styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
+                    p: theme.textTheme.bodyMedium,
+                    h1: theme.textTheme.titleLarge,
+                    h2: theme.textTheme.titleMedium,
+                    h3: theme.textTheme.titleSmall,
+                    listBullet: theme.textTheme.bodyMedium,
+                    code: theme.textTheme.bodySmall?.copyWith(
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                  onTapLink: (text, href, title) {
+                    if (href == null || href.isEmpty) return;
+                    _launchUrl(href);
+                  },
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  '请前往官网下载对应平台的安装包。',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ],
+            ),
           ),
         ),
         actions: [
@@ -193,7 +208,7 @@ class UpdateService {
           ElevatedButton(
             onPressed: () {
               Navigator.of(context).pop();
-              _launchUrl(releaseUrl);
+              openDownloadPage();
             },
             child: const Text('前往下载'),
           ),
@@ -201,6 +216,9 @@ class UpdateService {
       ),
     );
   }
+
+  /// 打开官网下载页。
+  Future<void> openDownloadPage() => _launchUrl(AppConstants.downloadPageUrl);
 
   /// 打开 Releases 列表页（关于页等可复用）。
   Future<void> openReleasesPage() => _launchUrl(AppConstants.githubReleasesPage);

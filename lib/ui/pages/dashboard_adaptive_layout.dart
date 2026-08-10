@@ -89,6 +89,7 @@ class _SteamLibraryIdle extends StatelessWidget {
     final games = GameCatalog.pickerItems.where((g) => g.id != 'other').toList();
 
     return SafeArea(
+      top: false,
       child: LayoutBuilder(
         builder: (context, constraints) {
           final w = constraints.maxWidth;
@@ -375,6 +376,7 @@ class _ConnectedLibrary extends StatelessWidget {
             ),
           ),
         SafeArea(
+          top: false,
           child: LayoutBuilder(
             builder: (context, constraints) {
               final wide = constraints.maxWidth >= 720;
