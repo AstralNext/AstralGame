@@ -1,4 +1,4 @@
-package com.example.astral_game
+package fan.astral.next.game
 
 import android.appwidget.AppWidgetManager
 import android.content.Context
@@ -24,11 +24,14 @@ class RoomsWidgetProvider : HomeWidgetProvider() {
                 )
                 setTextViewText(
                     R.id.rooms_summary,
-                    widgetData.widgetString("rooms_summary"),
+                    widgetData.widgetString(
+                        "rooms_summary",
+                        context.getString(R.string.widget_rooms_empty),
+                    ),
                 )
-                bindLine(this, 1, rooms.getOrNull(0))
-                bindLine(this, 2, rooms.getOrNull(1))
-                bindLine(this, 3, rooms.getOrNull(2))
+                bindLine(context, this, 1, rooms.getOrNull(0))
+                bindLine(context, this, 2, rooms.getOrNull(1))
+                bindLine(context, this, 3, rooms.getOrNull(2))
                 val hasRooms = rooms.isNotEmpty()
                 setViewVisibility(R.id.rooms_empty, if (hasRooms) View.GONE else View.VISIBLE)
                 setTextViewText(
@@ -37,12 +40,23 @@ class RoomsWidgetProvider : HomeWidgetProvider() {
                 )
             }
             WidgetThemeHelper.applyRooms(context, views, widgetData)
-            WidgetClickHelper.attachLaunchIntent(context, views, R.id.widget_root)
+            WidgetClickHelper.attachLaunchIntent(
+                context,
+                views,
+                R.id.widget_root,
+                WidgetClickHelper.roomsUri(),
+            )
+            WidgetClickHelper.attachRefreshIntent(context, views, R.id.widget_refresh)
             appWidgetManager.updateAppWidget(widgetId, views)
         }
     }
 
-    private fun bindLine(views: RemoteViews, index: Int, room: RoomLine?) {
+    private fun bindLine(
+        context: Context,
+        views: RemoteViews,
+        index: Int,
+        room: RoomLine?,
+    ) {
         val labelId = when (index) {
             1 -> R.id.rooms_line1
             2 -> R.id.rooms_line2
@@ -64,7 +78,16 @@ class RoomsWidgetProvider : HomeWidgetProvider() {
         }
         views.setViewVisibility(rowId, View.VISIBLE)
         views.setTextViewText(labelId, room.label)
-        views.setTextViewText(codeId, room.code)
+        views.setTextViewText(
+            codeId,
+            room.code.ifEmpty { context.getString(R.string.widget_rooms_no_code) },
+        )
+        WidgetClickHelper.attachLaunchIntent(
+            context,
+            views,
+            rowId,
+            WidgetClickHelper.roomUri(room.code.ifEmpty { room.networkName }, room.id),
+        )
     }
 
     private fun parseRooms(json: String): List<RoomLine> {
@@ -75,8 +98,10 @@ class RoomsWidgetProvider : HomeWidgetProvider() {
                     val obj = array.getJSONObject(i)
                     add(
                         RoomLine(
-                            label = obj.optString("label", "â€”"),
+                            label = obj.optString("label", "â€?),
                             code = obj.optString("code", ""),
+                            networkName = obj.optString("network", ""),
+                            id = obj.optInt("id", -1).takeIf { it > 0 },
                         ),
                     )
                 }
@@ -86,5 +111,10 @@ class RoomsWidgetProvider : HomeWidgetProvider() {
         }
     }
 
-    private data class RoomLine(val label: String, val code: String)
+    private data class RoomLine(
+        val label: String,
+        val code: String,
+        val networkName: String,
+        val id: Int?,
+    )
 }

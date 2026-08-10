@@ -33,6 +33,7 @@ class HomeWidgetSyncService {
     final inRoom = nodeManagement.isRunning;
     final selected = roomState.selectedRoom.value;
     final roomLabel = _resolveRoomLabel(roomState, selected, inRoom);
+    final memberCount = nodeManagement.onlinePeersForDisplay.length;
 
     if (!inRoom) {
       await HomeWidget.saveWidgetData<String>(
@@ -41,7 +42,9 @@ class HomeWidgetSyncService {
       );
       await HomeWidget.saveWidgetData<String>(
         HomeWidgetKeys.connectRoomCode,
-        selected?.roomName ?? '',
+        selected?.shareCode.isNotEmpty == true
+            ? selected!.shareCode
+            : (selected?.roomName ?? ''),
       );
       await HomeWidget.saveWidgetData<String>(
         HomeWidgetKeys.connectStatus,
@@ -49,16 +52,22 @@ class HomeWidgetSyncService {
       );
       await HomeWidget.saveWidgetData<String>(
         HomeWidgetKeys.connectHint,
-        selected == null ? '打开应用选择或加入房间' : '${selected.host}:${selected.port}',
+        selected == null
+            ? '点击打开应用加入或创建房间'
+            : '已选中 · 打开应用连接',
       );
     } else {
+      final code = roomState.activeShareCode ??
+          roomState.connectedRoomName.value ??
+          selected?.shareCode ??
+          '';
       await HomeWidget.saveWidgetData<String>(
         HomeWidgetKeys.connectRoomLabel,
         roomLabel,
       );
       await HomeWidget.saveWidgetData<String>(
         HomeWidgetKeys.connectRoomCode,
-        roomState.connectedRoomName.value ?? selected?.roomName ?? '',
+        code,
       );
       await HomeWidget.saveWidgetData<String>(
         HomeWidgetKeys.connectStatus,
@@ -66,9 +75,7 @@ class HomeWidgetSyncService {
       );
       await HomeWidget.saveWidgetData<String>(
         HomeWidgetKeys.connectHint,
-        selected != null
-            ? '${selected.host}:${selected.port}'
-            : (roomState.connectedRoomName.value ?? ''),
+        memberCount > 0 ? '在线 $memberCount 人 · 点击查看' : '已在房间中 · 点击查看',
       );
     }
 
@@ -79,7 +86,10 @@ class HomeWidgetSyncService {
 
   Future<void> syncRooms() async {
     if (!Platform.isAndroid) return;
-    final rooms = getIt<RoomState>().rooms;
+    var rooms = getIt<RoomState>().rooms;
+    if (rooms.isEmpty && getIt.isRegistered<RoomPersistenceService>()) {
+      rooms = await getIt<RoomPersistenceService>().loadRooms();
+    }
     final preview = rooms.take(4).map(_roomToWidgetJson).toList();
 
     await HomeWidget.saveWidgetData<String>(
@@ -89,8 +99,8 @@ class HomeWidgetSyncService {
     await HomeWidget.saveWidgetData<String>(
       HomeWidgetKeys.roomsSummary,
       rooms.isEmpty
-          ? '暂无保存的房间'
-          : '共 ${rooms.length} 个房间 · 点击打开',
+          ? '加入或创建房间后会出现在这里'
+          : '共 ${rooms.length} 个 · 点击一行选中',
     );
 
     await HomeWidget.updateWidget(
@@ -152,9 +162,11 @@ class HomeWidgetSyncService {
     return roomDisplayLabel(selected);
   }
 
-  static Map<String, String> _roomToWidgetJson(RoomMod room) => {
+  static Map<String, dynamic> _roomToWidgetJson(RoomMod room) => {
         'label': roomDisplayLabel(room),
-        'code': room.roomName,
+        'code': room.shareCode.isNotEmpty ? room.shareCode : room.roomName,
+        'network': room.roomName,
+        'id': room.id,
       };
 
   static String _formatMemberPreview(List<String> names, int total) {

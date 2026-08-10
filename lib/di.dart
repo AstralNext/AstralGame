@@ -130,6 +130,13 @@ Future<void> setupDI() async {
     () => RoomPersistenceService(prefs),
   );
 
+  final roomState = getIt<RoomState>();
+  roomState.initPersistence(getIt<RoomPersistenceService>());
+  await roomState.loadFromPersistence();
+  roomState.restoreSelectedRoom(
+    getIt<RoomPersistenceService>().loadSelectedRoomId(),
+  );
+
   getIt.registerLazySingleton<ConnectionService>(
     () => ConnectionService(
       getIt<P2PService>(),

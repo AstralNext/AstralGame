@@ -1,5 +1,6 @@
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/di.dart';
+import 'package:astral_game/data/services/home_widget_launch_handler.dart';
 import 'package:astral_game/data/state/settings_state.dart';
 import 'package:astral_game/ui/shell/shell.dart';
 import 'package:astral_game/ui/widgets/floating_overlay_binder.dart';
@@ -17,16 +18,21 @@ class AstralGameApp extends StatefulWidget {
 
 class _AstralGameAppState extends State<AstralGameApp> with WidgetsBindingObserver {
   bool _disposed = false;
+  final _widgetLaunchHandler = HomeWidgetLaunchHandler();
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _widgetLaunchHandler.start();
+    });
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _widgetLaunchHandler.dispose();
     _safeDisposeDI();
     super.dispose();
   }

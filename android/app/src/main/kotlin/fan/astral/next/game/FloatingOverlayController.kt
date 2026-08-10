@@ -1,4 +1,4 @@
-package com.example.astral_game
+package fan.astral.next.game
 
 import android.content.Context
 import android.content.Intent
@@ -21,7 +21,7 @@ import org.json.JSONObject
 import kotlin.math.roundToInt
 
 object FloatingOverlayController {
-    private const val CHANNEL = "com.example.astral_game/floating_overlay"
+    private const val CHANNEL = "fan.astral.next.game/floating_overlay"
 
     private var windowManager: WindowManager? = null
     private var overlayView: View? = null
@@ -127,7 +127,7 @@ object FloatingOverlayController {
         for (i in 0 until users.length()) {
             val user = users.optJSONObject(i) ?: continue
             val row = inflater.inflate(R.layout.overlay_user_row, list, false)
-            val ip = user.optString("ip", "â€”")
+            val ip = user.optString("ip", "â€?)
             val latencyMs = user.optDouble("latencyMs", 0.0).roundToInt()
 
             row.findViewById<TextView>(R.id.overlay_user_ip).text = ip

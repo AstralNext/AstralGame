@@ -190,6 +190,38 @@ jobs:
           flutter pub upgrade astral_rust_core vpn_service_plugin
         shell: bash
 
+      - name: 🔐 Setup Android release signing
+        if: matrix.flutter_platform == 'android'
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          # PR 可能无 secrets：回退 debug 签名，仅提示。
+          if [ -z "${ANDROID_KEYSTORE_BASE64:-}" ]; then
+            if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
+              echo "::warning::No ANDROID_KEYSTORE_BASE64 on PR; using debug signing"
+              exit 0
+            fi
+            echo "::error::Missing secret ANDROID_KEYSTORE_BASE64"
+            exit 1
+          fi
+          if [ -z "${ANDROID_KEYSTORE_PASSWORD:-}" ] || [ -z "${ANDROID_KEY_PASSWORD:-}" ] || [ -z "${ANDROID_KEY_ALIAS:-}" ]; then
+            echo "::error::Missing Android signing secrets (PASSWORD / ALIAS)"
+            exit 1
+          fi
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/upload-keystore.jks
+          {
+            echo "storePassword=$ANDROID_KEYSTORE_PASSWORD"
+            echo "keyPassword=$ANDROID_KEY_PASSWORD"
+            echo "keyAlias=$ANDROID_KEY_ALIAS"
+            echo "storeFile=upload-keystore.jks"
+          } > android/key.properties
+          echo "✅ Android release keystore ready"
+        shell: bash
+
       # astral_rust_core 通过 git 依赖拉取到 pub-cache；构建前清理避免脏 target 缓存。
       - name: 🧹 Clean Rust cache (astral_rust_core)
         shell: bash

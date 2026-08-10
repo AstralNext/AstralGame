@@ -1,4 +1,4 @@
-package com.example.astral_game
+package fan.astral.next.game
 
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine

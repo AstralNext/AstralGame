@@ -1,11 +1,11 @@
-package com.example.astral_game
+package fan.astral.next.game
 
 import android.content.Context
 import android.content.SharedPreferences
 import android.widget.RemoteViews
 
 /**
- * 从 home_widget 写入的主题色动态着色（与 Flutter AppThemePalette 一致）。
+ * �?home_widget 写入的主题色动态着色（�?Flutter AppThemePalette 一致）�?
  */
 object WidgetThemeHelper {
     private const val KEY_CARD = "theme_card"
@@ -55,6 +55,8 @@ object WidgetThemeHelper {
         tintSecondary(views, colors, R.id.connect_code)
         paintChip(context, views, R.id.connect_hint_bg, colors.canvas)
         tintPrimary(views, colors, R.id.connect_hint)
+        tintAccent(views, colors, R.id.connect_action)
+        views.setInt(R.id.widget_refresh, "setColorFilter", colors.textSecondary)
     }
 
     fun applyRooms(context: Context, views: RemoteViews, prefs: SharedPreferences) {
@@ -70,6 +72,7 @@ object WidgetThemeHelper {
         tintPrimary(views, colors, R.id.rooms_line3)
         tintSecondary(views, colors, R.id.rooms_line3_code)
         tintSecondary(views, colors, R.id.rooms_empty)
+        views.setInt(R.id.widget_refresh, "setColorFilter", colors.textSecondary)
     }
 
     fun applyMembers(context: Context, views: RemoteViews, prefs: SharedPreferences) {
@@ -81,6 +84,7 @@ object WidgetThemeHelper {
         tintAccent(views, colors, R.id.members_count)
         paintChip(context, views, R.id.members_preview_bg, colors.canvas)
         tintPrimary(views, colors, R.id.members_preview)
+        views.setInt(R.id.widget_refresh, "setColorFilter", colors.textSecondary)
     }
 
     private fun paintCard(context: Context, views: RemoteViews, colors: Colors) {

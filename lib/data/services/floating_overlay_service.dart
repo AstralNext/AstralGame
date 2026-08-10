@@ -11,7 +11,7 @@ import 'package:flutter/services.dart';
 /// Android 悬浮窗：在线用户头像 / IP / 延迟。
 class FloatingOverlayService {
   static const _channel = MethodChannel(
-    'com.example.astral_game/floating_overlay',
+    'fan.astral.next.game/floating_overlay',
   );
 
   bool get isSupported => Platform.isAndroid;

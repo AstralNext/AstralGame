@@ -1,4 +1,4 @@
-package com.example.astral_game
+package fan.astral.next.game
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -7,8 +7,8 @@ import android.graphics.Paint
 import android.graphics.RectF
 
 /**
- * 小组件 RemoteViews 无法可靠地对根布局 setBackgroundColor，
- * 用圆角位图作为 ImageView 背景是通用做法。
+ * 小组�?RemoteViews 无法可靠地对根布局 setBackgroundColor�?
+ * 用圆角位图作�?ImageView 背景是通用做法�?
  */
 object WidgetBitmapFactory {
     private const val CARD_WIDTH_DP = 360

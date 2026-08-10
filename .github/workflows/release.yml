@@ -1,9 +1,12 @@
 # 发布 Astral Game
 #
-# 自动：推送 v* 标签 → Build 成功后创建正式 Release
+# 自动：推送 v* 标签 → Build 成功后创建正式 Release（非 draft / 非 prerelease）
 # 手动：Actions 里 Run workflow，先跑完 Build（platform: all）
 #
-# Secret：GOOGLE 或 GOOGLE_API_KEY（Gemini，可选；无则回退为提交列表）
+# Secret：
+# - GOOGLE 或 GOOGLE_API_KEY（Gemini，可选；无则回退为提交列表）
+# - ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_PASSWORD / ANDROID_KEY_ALIAS
+#   （Build 工作流正式签名 Android APK；PR 无密钥时回退 debug）
 # 附件命名：astral-game-<semver>-<platform>-<arch>.<ext>
 
 name: 发布

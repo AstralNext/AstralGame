@@ -45,28 +45,26 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyAqwyNk9KnREtjeaCFLtwZ4rhBd4uKKeKY',
-    appId: '1:774291421347:android:75aa4f77a30c7371c56716',
+    appId: '1:774291421347:android:a4207dcd0577e07ec56716',
     messagingSenderId: '774291421347',
     projectId: 'astral-game-6213b',
     storageBucket: 'astral-game-6213b.firebasestorage.app',
   );
-
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyDZ2lekQFOm1KNUhk0qxCk0SGCRmV8wyrc',
-    appId: '1:774291421347:ios:6a0bbd0d4996b1f1c56716',
+    appId: '1:774291421347:ios:4cae45c9b4894984c56716',
     messagingSenderId: '774291421347',
     projectId: 'astral-game-6213b',
     storageBucket: 'astral-game-6213b.firebasestorage.app',
-    iosBundleId: 'com.example.astralGame',
+    iosBundleId: 'fan.astral.next.game',
   );
-
   static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyDZ2lekQFOm1KNUhk0qxCk0SGCRmV8wyrc',
-    appId: '1:774291421347:ios:6a0bbd0d4996b1f1c56716',
+    appId: '1:774291421347:ios:4cae45c9b4894984c56716',
     messagingSenderId: '774291421347',
     projectId: 'astral-game-6213b',
     storageBucket: 'astral-game-6213b.firebasestorage.app',
-    iosBundleId: 'com.example.astralGame',
+    iosBundleId: 'fan.astral.next.game',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(

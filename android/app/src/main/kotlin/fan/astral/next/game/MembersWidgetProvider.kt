@@ -1,4 +1,4 @@
-package com.example.astral_game
+package fan.astral.next.game
 
 import android.appwidget.AppWidgetManager
 import android.content.Context
@@ -20,7 +20,7 @@ class MembersWidgetProvider : HomeWidgetProvider() {
             val views = RemoteViews(context.packageName, R.layout.widget_members).apply {
                 setTextViewText(
                     R.id.members_room,
-                    widgetData.widgetString("members_room_label", "â€”"),
+                    widgetData.widgetString("members_room_label", "â€?),
                 )
                 setTextViewText(
                     R.id.members_count,
@@ -28,11 +28,20 @@ class MembersWidgetProvider : HomeWidgetProvider() {
                 )
                 setTextViewText(
                     R.id.members_preview,
-                    widgetData.widgetString("members_preview"),
+                    widgetData.widgetString(
+                        "members_preview",
+                        context.getString(R.string.widget_members_empty_hint),
+                    ),
                 )
             }
             WidgetThemeHelper.applyMembers(context, views, widgetData)
-            WidgetClickHelper.attachLaunchIntent(context, views, R.id.widget_root)
+            WidgetClickHelper.attachLaunchIntent(
+                context,
+                views,
+                R.id.widget_root,
+                WidgetClickHelper.membersUri(),
+            )
+            WidgetClickHelper.attachRefreshIntent(context, views, R.id.widget_refresh)
             appWidgetManager.updateAppWidget(widgetId, views)
         }
     }
