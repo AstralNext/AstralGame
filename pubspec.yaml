@@ -2,7 +2,7 @@ name: astral_game
 description: "Astral Game Client"
 publish_to: 'none'
 
-version: 1.0.4
+version: 1.0.5
 
 environment:
   sdk: ^3.8.0
@@ -49,7 +49,7 @@ flutter_launcher_icons:
   ios: true
   remove_alpha_ios: true
   image_path: assets/logo.png
-  adaptive_icon_background: "#FAFAFA"
+  adaptive_icon_background: "#C27803"
   adaptive_icon_foreground: assets/logo.png
   windows:
     generate: true
@@ -61,8 +61,8 @@ flutter_launcher_icons:
   web:
     generate: true
     image_path: assets/logo.png
-    background_color: "#FAFAFA"
-    theme_color: "#BFA89E"
+    background_color: "#C27803"
+    theme_color: "#C27803"
 
 flutter:
   uses-material-design: true

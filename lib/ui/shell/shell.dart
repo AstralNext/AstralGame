@@ -367,7 +367,7 @@ class _MobileChromeBar extends StatelessWidget {
       child: SafeArea(
         bottom: false,
         child: SizedBox(
-          height: 44,
+          height: 48,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Row(
@@ -385,7 +385,7 @@ class _MobileChromeBar extends StatelessWidget {
                 ),
                 AvatarWidget(
                   avatar: avatar,
-                  size: 28,
+                  size: 36,
                   shape: AvatarShape.circle,
                   onTap: onAvatarTap,
                 ),
