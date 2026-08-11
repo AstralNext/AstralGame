@@ -274,6 +274,8 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
         ),
       );
+    } on ConnectionAbortedException {
+      return;
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -513,6 +515,9 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
         );
       }
+    } on ConnectionAbortedException {
+      nameController.dispose();
+      return;
     } catch (e) {
       nameController.dispose();
       if (mounted) {
@@ -560,6 +565,8 @@ class _DashboardPageState extends State<DashboardPage> {
     if (result == null || result.isEmpty) return;
     try {
       await _connectionService.joinWithInviteInput(result);
+    } on ConnectionAbortedException {
+      return;
     } on ShareCodeException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));

@@ -2,10 +2,13 @@ import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/config/constants.dart';
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/models/game_catalog.dart';
+import 'package:astral_game/data/services/connection_service.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
 import 'package:astral_game/data/services/screen_state_service.dart';
 import 'package:astral_game/data/state/room_state.dart';
+import 'package:astral_game/di.dart';
 import 'package:astral_game/ui/widgets/dashboard_home_panel.dart';
+import 'package:astral_game/ui/widgets/dashboard_members_skeleton.dart';
 import 'package:astral_game/ui/widgets/room_open_games_panel.dart';
 import 'package:astral_game/ui/widgets/user_list_widget.dart';
 import 'package:flutter/material.dart';
@@ -36,9 +39,14 @@ class DashboardWideLayout extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Watch((context) {
-      final connected = nodeManagement.isRunning;
+      final isRunning = nodeManagement.isRunning;
+      final session = roomState.session.value;
       final paused = roomState.pausedHost.value;
-      if (!connected) {
+      final linkingFlag = getIt<ConnectionService>().isLinking.value;
+      final showRoom = session != null;
+      final isLinking = showRoom && (linkingFlag || !isRunning);
+
+      if (!showRoom) {
         return Padding(
           padding: const EdgeInsets.fromLTRB(4, 0, 4, 0),
           child: DashboardHomePanel(
@@ -57,20 +65,39 @@ class DashboardWideLayout extends StatelessWidget {
       return Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(flex: 6, child: _buildMembersPane(context)),
+          Expanded(
+            flex: 6,
+            child: _buildMembersPane(
+              context,
+              isRunning: isRunning,
+              isLinking: isLinking,
+            ),
+          ),
           const SizedBox(width: AppDimensions.sectionGap),
-          Expanded(flex: 3, child: _buildRoomPane(context)),
+          Expanded(
+            flex: 3,
+            child: _buildRoomPane(
+              context,
+              isRunning: isRunning,
+              isLinking: isLinking,
+            ),
+          ),
         ],
       );
     });
   }
 
-  Widget _buildMembersPane(BuildContext context) {
+  Widget _buildMembersPane(
+    BuildContext context, {
+    required bool isRunning,
+    required bool isLinking,
+  }) {
     final palette = context.astralPalette;
     final textTheme = Theme.of(context).textTheme;
     final session = roomState.session.value;
     final game = session == null ? null : GameCatalog.byId(session.gameId);
     final title = [if (game != null) game.name, '成员'].join(' · ');
+    final nodes = isRunning ? nodeManagement.userNodes.value : const [];
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -93,19 +120,21 @@ class DashboardWideLayout extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Expanded(
-              child: UserListWidget(
-                users: nodeManagement.userNodes.value,
-                physics: const AlwaysScrollableScrollPhysics(),
-                isRoomHostOf: (node) {
-                  final s = roomState.session.value;
-                  if (s == null) return false;
-                  return nodeManagement.isRoomHostPeer(
-                    node.peerId,
-                    sessionIsHost: s.isHost,
-                    isCredentialPeer: node.isCredentialPeer,
-                  );
-                },
-              ),
+              child: isLinking || nodes.isEmpty
+                  ? const DashboardMembersSkeleton()
+                  : UserListWidget(
+                      users: nodeManagement.userNodes.value,
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      isRoomHostOf: (node) {
+                        final s = roomState.session.value;
+                        if (s == null) return false;
+                        return nodeManagement.isRoomHostPeer(
+                          node.peerId,
+                          sessionIsHost: s.isHost,
+                          isCredentialPeer: node.isCredentialPeer,
+                        );
+                      },
+                    ),
             ),
           ],
         ),
@@ -113,7 +142,11 @@ class DashboardWideLayout extends StatelessWidget {
     );
   }
 
-  Widget _buildRoomPane(BuildContext context) {
+  Widget _buildRoomPane(
+    BuildContext context, {
+    required bool isRunning,
+    required bool isLinking,
+  }) {
     return Watch((context) {
       final myIp = nodeManagement.myVirtualIpv4.value;
       final session = roomState.session.value;
@@ -122,13 +155,16 @@ class DashboardWideLayout extends StatelessWidget {
         children: [
           DashboardHomePanel(
             isConnected: true,
+            isLinking: isLinking,
             roomDisplayName: roomState.activeRoomDisplayLabel,
             roomRoleLabel: session?.roleLabel,
             roomGameId: session?.gameId,
             roomShortCode: roomState.activeShareCode,
             isRoomHost: session?.isHost == true,
             hostOnline: roomState.hostOnline.value,
-            virtualIp: myIp.isNotEmpty ? myIp : AppConstants.defaultVirtualIp,
+            virtualIp: isRunning
+                ? (myIp.isNotEmpty ? myIp : AppConstants.defaultVirtualIp)
+                : null,
             onCreateRoom: onCreateRoom,
             onJoinRoom: onJoinRoom,
             onShareRoom: onShareRoom,
@@ -136,9 +172,11 @@ class DashboardWideLayout extends StatelessWidget {
           ),
           const SizedBox(height: AppDimensions.sectionGap),
           Expanded(
-            child: RoomOpenGamesPanel(
-              gameId: session?.gameId,
-            ),
+            child: isRunning
+                ? RoomOpenGamesPanel(
+                    gameId: session?.gameId,
+                  )
+                : const SizedBox.shrink(),
           ),
         ],
       );

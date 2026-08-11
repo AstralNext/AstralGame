@@ -52,6 +52,12 @@ class ConnectionService {
   bool _isConnecting = false;
   bool get isConnecting => _isConnecting;
 
+  /// 已有短码/会话，EasyTier 仍在连接中（供房间卡「连接中」提示）。
+  final isLinking = signal(false);
+
+  /// 递增以作废进行中的乐观连接（例如用户在连接中点了离开）。
+  int _linkEpoch = 0;
+
   EffectCleanup? _guestPresenceDispose;
   DateTime? _hostMissingSince;
 
@@ -61,7 +67,7 @@ class ConnectionService {
   /// 最近一次离线邀请串（短码服务失败时的回退）。
   String? lastOfflineInvite;
 
-  /// 创建房间：选游戏 → 开网（随机名+密码）→ 尽量上传短码。
+  /// 创建房间：先发短码并写入会话（UI 立刻可见），再开 EasyTier。
   Future<ActiveRoomSession> createAndConnect({
     required String gameId,
     required String gameName,
@@ -79,16 +85,6 @@ class ConnectionService {
     final label = (displayName == null || displayName.trim().isEmpty)
         ? gameName
         : displayName.trim();
-
-    final ok = await _connect(
-      networkName: networkName,
-      secret: secret,
-      purpose: 'create',
-      gameId: gameId,
-    );
-    if (!ok) {
-      throw StateError('连接失败，请重试');
-    }
 
     final payload = RoomInvitePayload(
       gameId: gameId,
@@ -121,10 +117,42 @@ class ConnectionService {
       adminToken: adminToken,
     );
     _roomState.setSession(session);
-    await _roomAssist.startForRoom(isHost: true, gameId: gameId);
-    await _openGames.startForRoom(isHost: true, gameId: gameId);
-    return session;
+    final epoch = ++_linkEpoch;
+    isLinking.value = true;
+
+    var linked = false;
+    try {
+      final ok = await _connect(
+        networkName: networkName,
+        secret: secret,
+        purpose: 'create',
+        gameId: gameId,
+        epoch: epoch,
+      );
+      if (epoch != _linkEpoch) {
+        throw const ConnectionAbortedException();
+      }
+      if (!ok) {
+        throw StateError('连接失败，请重试');
+      }
+      await _roomAssist.startForRoom(isHost: true, gameId: gameId);
+      await _openGames.startForRoom(isHost: true, gameId: gameId);
+      linked = true;
+      return session;
+    } on ConnectionAbortedException {
+      rethrow;
+    } catch (e) {
+      if (!linked && epoch == _linkEpoch) {
+        await disconnect(revokeShare: true, clearSession: true);
+      }
+      rethrow;
+    } finally {
+      if (epoch == _linkEpoch) {
+        isLinking.value = false;
+      }
+    }
   }
+
   Future<ActiveRoomSession> joinWithInviteInput(String raw) async {
     final text = raw.trim();
     if (text.isEmpty) {
@@ -160,16 +188,7 @@ class ConnectionService {
     if (invitePeers.isEmpty) {
       throw StateError('邀请未包含服务器，无法加入（请让房主启用服务器后重新分享）');
     }
-    final ok = await _connect(
-      networkName: payload.networkName,
-      secret: payload.networkSecret,
-      peersOverride: invitePeers,
-      purpose: 'join',
-      gameId: payload.gameId,
-    );
-    if (!ok) {
-      throw StateError('连接失败，请重试');
-    }
+
     final session = ActiveRoomSession(
       isHost: false,
       gameId: payload.gameId,
@@ -182,9 +201,41 @@ class ConnectionService {
       shortCode: shortCode,
     );
     _roomState.setSession(session);
-    await _roomAssist.startForRoom(isHost: false, gameId: session.gameId);
-    await _openGames.startForRoom(isHost: false, gameId: session.gameId);
-    return session;
+    final epoch = ++_linkEpoch;
+    isLinking.value = true;
+
+    var linked = false;
+    try {
+      final ok = await _connect(
+        networkName: payload.networkName,
+        secret: payload.networkSecret,
+        peersOverride: invitePeers,
+        purpose: 'join',
+        gameId: payload.gameId,
+        epoch: epoch,
+      );
+      if (epoch != _linkEpoch) {
+        throw const ConnectionAbortedException();
+      }
+      if (!ok) {
+        throw StateError('连接失败，请重试');
+      }
+      await _roomAssist.startForRoom(isHost: false, gameId: session.gameId);
+      await _openGames.startForRoom(isHost: false, gameId: session.gameId);
+      linked = true;
+      return session;
+    } on ConnectionAbortedException {
+      rethrow;
+    } catch (e) {
+      if (!linked && epoch == _linkEpoch) {
+        await disconnect(revokeShare: false, clearSession: true);
+      }
+      rethrow;
+    } finally {
+      if (epoch == _linkEpoch) {
+        isLinking.value = false;
+      }
+    }
   }
 
   /// 导出当前离线邀请（优先缓存；否则用会话重建）。
@@ -301,15 +352,6 @@ class ConnectionService {
 
     lastConfigToml = null;
     lastOfflineInvite = null;
-    final ok = await _connect(
-      networkName: snap.networkName,
-      secret: snap.networkSecret,
-      purpose: 'resume-host',
-      gameId: snap.gameId,
-    );
-    if (!ok) {
-      throw StateError('恢复连接失败，请重试');
-    }
 
     final payload = RoomInvitePayload(
       gameId: snap.gameId,
@@ -343,10 +385,41 @@ class ConnectionService {
     );
     _roomState.setPausedHost(null);
     _roomState.setSession(session);
-    _armGuestPresenceWatch();
-    await _roomAssist.startForRoom(isHost: true, gameId: session.gameId);
-    await _openGames.startForRoom(isHost: true, gameId: session.gameId);
-    return session;
+    final epoch = ++_linkEpoch;
+    isLinking.value = true;
+
+    var linked = false;
+    try {
+      final ok = await _connect(
+        networkName: snap.networkName,
+        secret: snap.networkSecret,
+        purpose: 'resume-host',
+        gameId: snap.gameId,
+        epoch: epoch,
+      );
+      if (epoch != _linkEpoch) {
+        throw const ConnectionAbortedException();
+      }
+      if (!ok) {
+        throw StateError('恢复连接失败，请重试');
+      }
+      _armGuestPresenceWatch();
+      await _roomAssist.startForRoom(isHost: true, gameId: session.gameId);
+      await _openGames.startForRoom(isHost: true, gameId: session.gameId);
+      linked = true;
+      return session;
+    } on ConnectionAbortedException {
+      rethrow;
+    } catch (e) {
+      if (!linked && epoch == _linkEpoch) {
+        await disconnect(revokeShare: true, clearSession: true);
+      }
+      rethrow;
+    } finally {
+      if (epoch == _linkEpoch) {
+        isLinking.value = false;
+      }
+    }
   }
 
   Future<bool> _connect({
@@ -355,6 +428,7 @@ class ConnectionService {
     List<PeerEndpoint>? peersOverride,
     String purpose = 'connect',
     String? gameId,
+    required int epoch,
   }) async {
     if (_isConnecting) {
       appLogger.w('[ConnectionService] 已有连接正在进行中，跳过');
@@ -364,7 +438,12 @@ class ConnectionService {
     String? createdInstanceId;
     try {
       if (_nodeManagement.isRunning) {
-        await disconnect(revokeShare: false, pauseHost: false);
+        await disconnect(
+          revokeShare: false,
+          pauseHost: false,
+          clearSession: false,
+          abortLink: false,
+        );
       }
       if (Platform.isAndroid) {
         _vpnManager.startListening();
@@ -372,11 +451,13 @@ class ConnectionService {
           appLogger.w('[ConnectionService] Android VPN 权限未授予');
           return false;
         }
+        if (epoch != _linkEpoch) return false;
       }
 
       final fromGame = gameId != null && gameId.isNotEmpty
           ? await _gameRules.wantsUdpBroadcastRelay(gameId)
           : false;
+      if (epoch != _linkEpoch) return false;
       final fromUser = _appSettings.isEnableUdpBroadcastRelay();
       final udpRelay = fromGame || fromUser;
 
@@ -398,8 +479,18 @@ class ConnectionService {
         configToml: configToml,
         watchEvent: true,
       );
+      if (epoch != _linkEpoch) {
+        await _p2pService.closeInstance(createdInstanceId);
+        createdInstanceId = null;
+        return false;
+      }
       appLogger.i('[ConnectionService] 实例已创建 id=$createdInstanceId');
       final isRunning = await _p2pService.isEasytierRunning(createdInstanceId);
+      if (epoch != _linkEpoch) {
+        await _p2pService.closeInstance(createdInstanceId);
+        createdInstanceId = null;
+        return false;
+      }
       if (!isRunning) {
         appLogger.e('[ConnectionService] 实例启动异常 id=$createdInstanceId');
         await _p2pService.closeInstance(createdInstanceId);
@@ -408,17 +499,34 @@ class ConnectionService {
       }
 
       await _bindPeerRpc(createdInstanceId);
+      if (epoch != _linkEpoch) {
+        await _unbindPeerRpc();
+        await _p2pService.closeInstance(createdInstanceId);
+        createdInstanceId = null;
+        return false;
+      }
       _nodeManagement.setRunning(createdInstanceId);
       _roomState.setConnected(true);
       _armGuestPresenceWatch();
       if (Platform.isAndroid) {
         final vpnOk = await _startAndroidVpnWhenIpReady(createdInstanceId);
+        if (epoch != _linkEpoch) {
+          await disconnect(
+            revokeShare: false,
+            pauseHost: false,
+            clearSession: false,
+            abortLink: false,
+          );
+          createdInstanceId = null;
+          return false;
+        }
         if (!vpnOk) {
           appLogger.e('[ConnectionService] Android VPN 启动失败，回滚连接');
           await disconnect(
             revokeShare: false,
             pauseHost: false,
             forceEndNotice: '虚拟网络（VPN）启动失败，请检查权限后重试',
+            clearSession: true,
           );
           createdInstanceId = null;
           return false;
@@ -441,7 +549,7 @@ class ConnectionService {
         }
       }
       _nodeManagement.setStopped();
-      _roomState.setConnected(false);
+      _roomState.setConnected(false, clearSession: false);
       final msg = e.toString().toLowerCase();
       if (Platform.isWindows &&
           (msg.contains('tun') ||
@@ -457,13 +565,23 @@ class ConnectionService {
   }
 
   /// [revokeShare] 作废当前短码；[pauseHost] 房主保留可恢复快照。
+  /// [clearSession] 是否清空房间会话（乐观 UI 拆旧实例时可为 false）。
+  /// [abortLink] 是否作废进行中的乐观连接（内部拆旧实例时应为 false）。
   Future<void> disconnect({
     bool revokeShare = false,
     bool pauseHost = false,
     String? forceEndNotice,
+    bool clearSession = true,
+    bool abortLink = true,
   }) async {
+    if (abortLink) {
+      _linkEpoch++;
+    }
     await _roomAssist.stopAll();
     await _openGames.stop();
+    if (abortLink) {
+      isLinking.value = false;
+    }
 
     final session = _roomState.session.value;
     if (pauseHost && session != null && session.isHost) {
@@ -500,7 +618,7 @@ class ConnectionService {
       }
     }
     _nodeManagement.setStopped();
-    _roomState.setConnected(false);
+    _roomState.setConnected(false, clearSession: clearSession);
     if (forceEndNotice != null && forceEndNotice.isNotEmpty) {
       _roomState.setForceEndNotice(forceEndNotice);
     }
@@ -603,4 +721,12 @@ class ConnectionService {
     return List.generate(len, (_) => alphabet[r.nextInt(alphabet.length)])
         .join();
   }
+}
+
+/// 用户在乐观连接完成前离开/取消。
+class ConnectionAbortedException implements Exception {
+  const ConnectionAbortedException();
+
+  @override
+  String toString() => 'ConnectionAbortedException';
 }

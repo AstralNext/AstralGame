@@ -2,6 +2,7 @@ import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/config/constants.dart';
 import 'package:astral_game/data/models/enhanced_node_info.dart';
 import 'package:astral_game/data/models/game_catalog.dart';
+import 'package:astral_game/data/services/connection_service.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
 import 'package:astral_game/data/services/open_games_service.dart';
 import 'package:astral_game/data/state/room_state.dart';
@@ -37,17 +38,20 @@ class DashboardNarrowLayout extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Watch((context) {
-      final isConnected = nodeManagement.isRunning;
+      final isRunning = nodeManagement.isRunning;
       final nodes = nodeManagement.userNodes.value;
       final myIp = nodeManagement.myVirtualIpv4.value;
       final session = roomState.session.value;
       final paused = roomState.pausedHost.value;
       final hostOnline = roomState.hostOnline.value;
+      final linkingFlag = getIt<ConnectionService>().isLinking.value;
+      final showRoom = session != null;
+      final isLinking = showRoom && (linkingFlag || !isRunning);
       final openGames = getIt<OpenGamesService>();
       final openListings = openGames.listings.value;
       final openActive = openGames.isActive;
 
-      if (!isConnected) {
+      if (!showRoom) {
         return Padding(
           padding: const EdgeInsets.fromLTRB(
             AppDimensions.pagePaddingH,
@@ -68,7 +72,9 @@ class DashboardNarrowLayout extends StatelessWidget {
         );
       }
 
-      final showOpenGames = openActive || openListings.isNotEmpty;
+      final active = session;
+      final showOpenGames =
+          isRunning && (openActive || openListings.isNotEmpty);
       final openGamesHeight = openListings.isEmpty ? 72.0 : 220.0;
 
       return CustomScrollView(
@@ -85,15 +91,19 @@ class DashboardNarrowLayout extends StatelessWidget {
             sliver: SliverToBoxAdapter(
               child: DashboardHomePanel(
                 isConnected: true,
+                isLinking: isLinking,
                 username: nodeManagement.currentUsername.value,
                 roomDisplayName: roomState.activeRoomDisplayLabel,
-                roomRoleLabel: session?.roleLabel,
-                roomGameId: session?.gameId,
+                roomRoleLabel: active.roleLabel,
+                roomGameId: active.gameId,
                 roomShortCode: roomState.activeShareCode,
-                isRoomHost: session?.isHost == true,
+                isRoomHost: active.isHost,
                 hostOnline: hostOnline,
-                virtualIp:
-                    myIp.isNotEmpty ? myIp : AppConstants.defaultVirtualIp,
+                virtualIp: isRunning
+                    ? (myIp.isNotEmpty
+                        ? myIp
+                        : AppConstants.defaultVirtualIp)
+                    : null,
                 onCreateRoom: onCreateRoom,
                 onJoinRoom: onJoinRoom,
                 onShareRoom: onShareRoom,
@@ -119,7 +129,7 @@ class DashboardNarrowLayout extends StatelessWidget {
                     width: double.infinity,
                     child: RoomOpenGamesPanel(
                       compact: true,
-                      gameId: session?.gameId,
+                      gameId: active.gameId,
                     ),
                   ),
                 ),
@@ -134,9 +144,10 @@ class DashboardNarrowLayout extends StatelessWidget {
             ),
             sliver: SliverToBoxAdapter(
               child: _MembersBlock(
-                nodes: nodes,
+                nodes: isRunning ? nodes : const [],
                 roomState: roomState,
                 nodeManagement: nodeManagement,
+                forceSkeleton: isLinking,
               ),
             ),
           ),
@@ -151,11 +162,13 @@ class _MembersBlock extends StatelessWidget {
     required this.nodes,
     required this.roomState,
     required this.nodeManagement,
+    this.forceSkeleton = false,
   });
 
   final List<EnhancedNodeInfo> nodes;
   final RoomState roomState;
   final NodeManagementService nodeManagement;
+  final bool forceSkeleton;
 
   @override
   Widget build(BuildContext context) {
@@ -166,7 +179,7 @@ class _MembersBlock extends StatelessWidget {
       '成员',
     ].join(' · ');
 
-    if (nodes.isEmpty) {
+    if (forceSkeleton || nodes.isEmpty) {
       return DashboardListSection(
         title: title,
         useCard: false,

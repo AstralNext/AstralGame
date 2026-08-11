@@ -53,7 +53,7 @@ class GameAssistRulesService {
     if (_catalog != null) return _catalog!;
 
     appLogger.e('[GameAssistRules] 本地与远程均不可用');
-    final empty = const GameAssistRulesCatalog(version: 0, games: []);
+    const empty = GameAssistRulesCatalog(version: 0, games: []);
     _applyCatalog(empty);
     return empty;
   }

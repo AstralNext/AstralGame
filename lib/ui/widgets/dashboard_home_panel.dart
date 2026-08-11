@@ -13,6 +13,7 @@ class DashboardHomePanel extends StatelessWidget {
   const DashboardHomePanel({
     super.key,
     required this.isConnected,
+    this.isLinking = false,
     this.username,
     this.roomDisplayName,
     this.roomRoleLabel,
@@ -30,6 +31,8 @@ class DashboardHomePanel extends StatelessWidget {
   });
 
   final bool isConnected;
+  /// 已有短码/会话，组网仍在进行中。
+  final bool isLinking;
   final String? username;
   final String? roomDisplayName;
   final String? roomRoleLabel;
@@ -60,6 +63,7 @@ class DashboardHomePanel extends StatelessWidget {
               roomShortCode: roomShortCode,
               isRoomHost: isRoomHost,
               hostOnline: hostOnline,
+              isLinking: isLinking,
               virtualIp: virtualIp,
               onShare: onShareRoom,
               onDisconnect: onDisconnect,
@@ -483,6 +487,7 @@ class _ConnectedRoomCard extends StatelessWidget {
     this.roomShortCode,
     required this.isRoomHost,
     this.hostOnline = true,
+    this.isLinking = false,
     this.virtualIp,
     required this.onShare,
     required this.onDisconnect,
@@ -494,6 +499,7 @@ class _ConnectedRoomCard extends StatelessWidget {
   final String? roomShortCode;
   final bool isRoomHost;
   final bool hostOnline;
+  final bool isLinking;
   final String? virtualIp;
   final VoidCallback onShare;
   final VoidCallback onDisconnect;
@@ -505,7 +511,7 @@ class _ConnectedRoomCard extends StatelessWidget {
     final game = GameCatalog.byId(roomGameId);
     final code = roomShortCode?.trim() ?? '';
     final ip = virtualIp?.trim() ?? '';
-    final showHostOffline = !isRoomHost && !hostOnline;
+    final showHostOffline = !isRoomHost && !hostOnline && !isLinking;
 
     return AstralCard(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
@@ -513,7 +519,38 @@ class _ConnectedRoomCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (showHostOffline) ...[
+          if (isLinking) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: palette.accentMuted,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: palette.accent,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      '正在连接组网…短码可先分享给好友',
+                      style: textTheme.bodySmall?.copyWith(
+                        color: palette.accent,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+          ] else if (showHostOffline) ...[
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
