@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 /// 本地游戏规则目录（UI 元数据 / 网络标志 / 魔法墙 / TCP 转发 / 局域网发现）。
 /// 数据源：`https://astral.fan/gamerules.json`（失败回退本地 asset）。
 class GameAssistRulesCatalog {
@@ -166,22 +168,42 @@ class GameAssistLanGameDiscoverEntry {
     this.multicast,
     this.multicastPort,
     this.parser,
+    this.probeHex,
     this.params = const {},
   });
 
   final String id;
   final String label;
-  /// 发现器类型：`static_port` | `udp_multicast`（可扩展）。
+  /// 发现器类型：`static_port` | `udp_multicast` | `udp_probe`。
   final String type;
-  /// `static_port` 用：固定游戏端口。
+  /// `static_port` 端口；`udp_probe` 的游戏端口 / parser 回退端口。
   final int port;
-  /// `udp_multicast` 用：组播组 / 端口 / 载荷解析器。
+  /// `udp_multicast` / `udp_probe`：组播组 / 端口。
   final String? multicast;
   final int? multicastPort;
-  /// 如 `minecraft_motd`；由内核 `parse_lan_payload` 注册表解释。
+  /// 载荷解析器名：`minecraft_motd`（内核）/ `mindustry_server`（Dart）等。
   final String? parser;
-  /// 预留扩展字段（未来 discoverer 私有参数）。
+  /// `udp_probe`：探测包十六进制（如 Mindustry DiscoverHost `fe01`）。
+  final String? probeHex;
+  /// 预留扩展字段（超时、是否广播等）。
   final Map<String, dynamic> params;
+
+  /// 解析 [probeHex]；非法则 null。
+  Uint8List? get probeBytes {
+    final raw = (probeHex ?? '').trim();
+    if (raw.isEmpty) return null;
+    final hex = raw.replaceAll(RegExp(r'[\s:_-]'), '');
+    if (hex.length.isOdd) return null;
+    try {
+      final out = Uint8List(hex.length ~/ 2);
+      for (var i = 0; i < out.length; i++) {
+        out[i] = int.parse(hex.substring(i * 2, i * 2 + 2), radix: 16);
+      }
+      return out;
+    } catch (_) {
+      return null;
+    }
+  }
 
   factory GameAssistLanGameDiscoverEntry.fromJson(Map<String, dynamic> json) {
     final id = '${json['id'] ?? 'default'}'.trim();
@@ -192,6 +214,9 @@ class GameAssistLanGameDiscoverEntry {
     if (paramsRaw is Map) {
       params.addAll(Map<String, dynamic>.from(paramsRaw));
     }
+    // 也允许把 probe 写在 params 里
+    final probe = _optionalString(json['probe_hex']) ??
+        _optionalString(params['probe_hex']);
     return GameAssistLanGameDiscoverEntry(
       id: id.isEmpty ? 'default' : id,
       label: '${json['label'] ?? '开放游戏'}'.trim().isEmpty
@@ -202,6 +227,7 @@ class GameAssistLanGameDiscoverEntry {
       multicast: _optionalString(json['multicast']),
       multicastPort: (json['multicast_port'] as num?)?.toInt(),
       parser: _optionalString(json['parser']),
+      probeHex: probe,
       params: params,
     );
   }

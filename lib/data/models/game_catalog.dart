@@ -107,6 +107,8 @@ IconData resolveGameIcon(String name) {
       return Icons.ac_unit;
     case 'pets':
       return Icons.pets;
+    case 'precision_manufacturing':
+      return Icons.precision_manufacturing;
     case 'sports_esports':
       return Icons.sports_esports;
     case 'sports_esports_outlined':

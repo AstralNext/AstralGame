@@ -79,6 +79,8 @@ flutter:
     - assets/games/valheim/grid.png
     - assets/games/palworld/icon.png
     - assets/games/palworld/grid.png
+    - assets/games/mindustry/icon.png
+    - assets/games/mindustry/grid.png
     # Offline generic fallback; full rules at https://astral.fan/gamerules.json
     - assets/games/rules.json
     - assets/scenery/daily.jpg
