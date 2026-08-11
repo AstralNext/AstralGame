@@ -35,7 +35,7 @@
 
 | type | 含义 | 典型字段 |
 |------|------|----------|
-| `static_port` | 固定端口宣告 | `port` |
+| `static_port` | 固定端口宣告（默认真听端口才显示） | `port`；`params.require_listening`（默认 true） |
 | `udp_multicast` | 听 UDP 组播再解析 | `multicast` / `multicast_port` / `parser` |
 | `udp_probe` | 主动发探测包再解析回复 | `probe_hex` / `parser` / `multicast`? / `port`? |
 
@@ -64,7 +64,8 @@
 ### Stardew Valley（无原生局域网扫描）
 
 原版需在 Co-op → Join LAN Game **手动输入 IP**；默认游戏端口 **UDP 24642**。  
-Astral 用 `static_port` 把虚拟 IP:24642 宣告到房间，同伴复制后填入游戏即可（与泰拉同类）。
+Astral 用 `static_port` 把虚拟 IP:24642 宣告到房间，同伴复制后填入游戏即可（与泰拉同类）。  
+默认会检测本机 **UDP 24642 是否在听**：关主机后几秒内列表会消失。
 
 ```json
 {

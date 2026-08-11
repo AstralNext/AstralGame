@@ -150,32 +150,31 @@ class OpenGamesService {
         : const <LocalOpenGameAd>[];
     _lastLocalAds = ads;
 
-    if (ads.isNotEmpty) {
-      final myName = _settings.getUsername().trim().isEmpty
-          ? '我'
-          : _settings.getUsername().trim();
-      _upsertMany([
-        for (final ad in ads)
-          OpenGameListing(
-            key: 'self:${ad.entry.id}:${ad.port}',
-            fromPeerId: 0,
-            ownerName: myName,
-            roomGameId: gameId,
-            adId: '${ad.entry.id}:${ad.port}',
-            label: ad.label,
-            ipv4: ad.ipv4,
-            port: ad.port,
-            motd: ad.motd,
-            expiresAt: DateTime.now().add(
-              Duration(milliseconds: cfg.ttlMs.clamp(3000, 120000)),
-            ),
-            isSelf: true,
-            isRoomHost: _isHost,
+    final myName = _settings.getUsername().trim().isEmpty
+        ? '我'
+        : _settings.getUsername().trim();
+    final selfListings = [
+      for (final ad in ads)
+        OpenGameListing(
+          key: 'self:${ad.entry.id}:${ad.port}',
+          fromPeerId: 0,
+          ownerName: myName,
+          roomGameId: gameId,
+          adId: '${ad.entry.id}:${ad.port}',
+          label: ad.label,
+          ipv4: ad.ipv4,
+          port: ad.port,
+          motd: ad.motd,
+          expiresAt: DateTime.now().add(
+            Duration(milliseconds: cfg.ttlMs.clamp(3000, 120000)),
           ),
-      ]);
-    }
+          isSelf: true,
+          isRoomHost: _isHost,
+        ),
+    ];
+    _replaceSelfListings(selfListings);
 
-    if (!_rpc.isBound || ads.isEmpty) return;
+    if (!_rpc.isBound) return;
     final payload = {
       'gameId': gameId,
       'ads': ads.map((e) => e.toWire()).toList(),
@@ -226,7 +225,10 @@ class OpenGamesService {
     } else if (map.containsKey('adId') || map.containsKey('port')) {
       list.add(map);
     }
-    if (list.isEmpty) return;
+    if (list.isEmpty) {
+      _clearPeerListings(fromPeerId);
+      return;
+    }
 
     const isHostPeer = false;
 
@@ -261,7 +263,28 @@ class OpenGamesService {
             : item,
       );
     }
-    _upsertMany(parsed);
+    _replacePeerListings(fromPeerId, parsed);
+  }
+
+  /// 用本机最新探测结果整表替换 self 条目（空则立即消失）。
+  void _replaceSelfListings(List<OpenGameListing> selfAds) {
+    final others = listings.value.where((e) => !e.isSelf);
+    listings.value = _sorted([...others, ...selfAds]);
+  }
+
+  void _clearPeerListings(int peerId) {
+    final next = listings.value.where((e) => e.fromPeerId != peerId).toList();
+    if (next.length != listings.value.length) {
+      listings.value = _sorted(next);
+    }
+  }
+
+  void _replacePeerListings(int peerId, List<OpenGameListing> incoming) {
+    final others = listings.value.where((e) => e.fromPeerId != peerId);
+    listings.value = _sorted([
+      ...others,
+      ...incoming.where((e) => !e.isExpired),
+    ]);
   }
 
   void _upsertMany(List<OpenGameListing> incoming) {

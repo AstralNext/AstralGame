@@ -37,7 +37,10 @@ abstract class LanGameDiscoverer {
   Future<List<DiscoveredGameHit>> poll(GameAssistLanGameDiscoverEntry entry);
 }
 
-/// `static_port`：规则里写死端口（泰拉等无标准 LAN 广播时用）。
+/// `static_port`：规则写死端口（泰拉 / 星露谷等无 LAN 扫描时用）。
+///
+/// `params.require_listening`（默认 **true**）：仅当本机该 UDP 端口已被占用时才宣告，
+/// 避免关游戏后仍一直显示。
 class StaticPortDiscoverer extends LanGameDiscoverer {
   @override
   String get type => 'static_port';
@@ -45,9 +48,38 @@ class StaticPortDiscoverer extends LanGameDiscoverer {
   @override
   Future<List<DiscoveredGameHit>> poll(GameAssistLanGameDiscoverEntry entry) async {
     if (entry.port <= 0) return const [];
+    final requireListening = _paramBool(entry, 'require_listening', true);
+    if (requireListening && !await _isUdpPortInUse(entry.port)) {
+      return const [];
+    }
     return [
       DiscoveredGameHit(port: entry.port, label: entry.label),
     ];
+  }
+
+  /// 尝试绑定端口：能绑上说明当前无人占用；绑失败则视为游戏等进程在听。
+  Future<bool> _isUdpPortInUse(int port) async {
+    try {
+      final socket = await RawDatagramSocket.bind(
+        InternetAddress.anyIPv4,
+        port,
+      );
+      socket.close();
+      return false;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  static bool _paramBool(GameAssistLanGameDiscoverEntry e, String key, bool def) {
+    final v = e.params[key];
+    if (v is bool) return v;
+    if (v is String) {
+      final s = v.trim().toLowerCase();
+      if (s == 'true' || s == '1') return true;
+      if (s == 'false' || s == '0') return false;
+    }
+    return def;
   }
 }
 
