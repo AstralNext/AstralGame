@@ -265,9 +265,11 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
     _screenStateService.updateScreenWidth(screenWidth);
     final nodes = getIt<NodeManagementService>();
 
-    const contentRadius = BorderRadius.only(
-      topLeft: Radius.circular(AppDimensions.radiusMd),
-    );
+    final contentRadius = isCompact
+        ? BorderRadius.circular(AppDimensions.radiusMd)
+        : const BorderRadius.only(
+            topLeft: Radius.circular(AppDimensions.radiusMd),
+          );
 
     return PopScope(
       canPop: false,
@@ -308,8 +310,7 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
                       }),
                     Expanded(
                       child: ClipRRect(
-                        borderRadius:
-                            !isCompact ? contentRadius : BorderRadius.zero,
+                        borderRadius: contentRadius,
                         child: ColoredBox(
                           color: palette.background,
                           child: _buildTabBody(isCompact),
@@ -323,17 +324,8 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
           ],
         ),
         bottomNavigationBar: isCompact
-            ? DecoratedBox(
-                decoration: BoxDecoration(
-                  color: palette.card,
-                  boxShadow: [
-                    BoxShadow(
-                      color: palette.shadowSoft,
-                      blurRadius: 16,
-                      offset: const Offset(0, -4),
-                    ),
-                  ],
-                ),
+            ? ColoredBox(
+                color: palette.canvas,
                 child: SafeArea(
                   top: false,
                   child: BottomNav(

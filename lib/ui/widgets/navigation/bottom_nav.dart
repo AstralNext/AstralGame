@@ -21,6 +21,8 @@ class BottomNav extends StatelessWidget {
     final isSmallWindow = screenWidth < 300 || screenHeight < 400;
 
     return NavigationBar(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
       height: isSmallWindow ? 64 : 72,
       labelBehavior: isSmallWindow
           ? NavigationDestinationLabelBehavior.alwaysHide

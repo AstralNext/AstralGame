@@ -32,7 +32,10 @@ class HitokotoService {
   HitokotoService({http.Client? client}) : _client = client ?? http.Client();
 
   final http.Client _client;
-  static final _uri = Uri.parse('https://v1.hitokoto.cn/?encode=json&charset=utf-8');
+  /// 仅动画 / 漫画 / 网易云（`c` 可多选）。
+  static final _uri = Uri.parse(
+    'https://v1.hitokoto.cn/?c=a&c=b&c=j&encode=json&charset=utf-8',
+  );
 
   Future<HitokotoQuote> fetch() async {
     final res = await _client.get(_uri).timeout(const Duration(seconds: 6));
