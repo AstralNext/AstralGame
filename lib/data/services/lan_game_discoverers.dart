@@ -226,6 +226,18 @@ class UdpProbeDiscoverer extends LanGameDiscoverer {
       );
     }
 
+    void drain() {
+      while (true) {
+        final dg = socket.receive();
+        if (dg == null) break;
+        consider(dg);
+      }
+    }
+
+    final sub = socket.listen((event) {
+      if (event == RawSocketEvent.read) drain();
+    });
+
     try {
       if (multicast.isNotEmpty && multicastPort > 0) {
         try {
@@ -257,17 +269,10 @@ class UdpProbeDiscoverer extends LanGameDiscoverer {
         }
       }
 
-      final until = DateTime.now().add(Duration(milliseconds: timeoutMs));
-      while (DateTime.now().isBefore(until)) {
-        consider(socket.receive());
-        await Future<void>.delayed(const Duration(milliseconds: 20));
-      }
-      for (var i = 0; i < 8; i++) {
-        final dg = socket.receive();
-        if (dg == null) break;
-        consider(dg);
-      }
+      await Future<void>.delayed(Duration(milliseconds: timeoutMs));
+      drain();
     } finally {
+      await sub.cancel();
       socket.close();
     }
 
