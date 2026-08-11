@@ -5,8 +5,10 @@ import 'package:astral_game/config/constants.dart';
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/models/enhanced_node_info.dart';
 import 'package:astral_game/data/models/game_catalog.dart';
+import 'package:astral_game/data/services/game_assist_rules_service.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
 import 'package:astral_game/data/state/room_state.dart';
+import 'package:astral_game/di.dart';
 import 'package:astral_game/ui/pages/dashboard_user_item.dart';
 import 'package:astral_game/ui/widgets/dashboard_list_section.dart';
 import 'package:astral_game/ui/widgets/glass_panel.dart';
@@ -86,84 +88,94 @@ class _SteamLibraryIdle extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.astralPalette;
     final textTheme = Theme.of(context).textTheme;
-    final games = GameCatalog.pickerItems.where((g) => g.id != 'other').toList();
 
-    return SafeArea(
-      top: false,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final w = constraints.maxWidth;
-          final cross = w >= 1100
-              ? 5
-              : w >= 900
-                  ? 4
-                  : w >= 600
-                      ? 3
-                      : 2;
-          final pad = w < 600 ? 16.0 : 24.0;
+    return Watch((context) {
+      getIt<GameAssistRulesService>().catalogRevision.value;
+      final games =
+          GameCatalog.pickerItems.where((g) => g.id != 'other').toList();
 
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: EdgeInsets.fromLTRB(pad, 12, pad, 8),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '游戏库',
-                            style: textTheme.headlineMedium?.copyWith(
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.2,
+      return SafeArea(
+        top: false,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final w = constraints.maxWidth;
+            final cross = w >= 1100
+                ? 5
+                : w >= 900
+                    ? 4
+                    : w >= 600
+                        ? 3
+                        : 2;
+            final pad = w < 600 ? 16.0 : 24.0;
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: EdgeInsets.fromLTRB(pad, 12, pad, 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '游戏库',
+                              style: textTheme.headlineMedium?.copyWith(
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.2,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '点封面开房，或加入好友房间',
-                            style: textTheme.bodyMedium?.copyWith(
-                              color: palette.textSecondary,
+                            const SizedBox(height: 4),
+                            Text(
+                              games.isEmpty
+                                  ? '正在加载游戏目录…'
+                                  : '点封面开房，或加入好友房间',
+                              style: textTheme.bodyMedium?.copyWith(
+                                color: palette.textSecondary,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                    FilledButton.tonal(
-                      onPressed: onJoinRoom,
-                      child: const Text('加入'),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: GridView.builder(
-                  padding: EdgeInsets.fromLTRB(pad, 8, pad, 100),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: cross,
-                    mainAxisSpacing: 14,
-                    crossAxisSpacing: 14,
-                    childAspectRatio: 2 / 3,
+                      FilledButton.tonal(
+                        onPressed: onJoinRoom,
+                        child: const Text('加入'),
+                      ),
+                    ],
                   ),
-                  itemCount: games.length + 1,
-                  itemBuilder: (context, i) {
-                    if (i == games.length) {
-                      return _LibraryOtherTile(onTap: onCreateRoom);
-                    }
-                    final g = games[i];
-                    return _LibraryCoverTile(
-                      game: g,
-                      onTap: () => onCreateWithGame(g),
-                    );
-                  },
                 ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
+                Expanded(
+                  child: games.isEmpty
+                      ? const Center(child: CircularProgressIndicator())
+                      : GridView.builder(
+                          padding: EdgeInsets.fromLTRB(pad, 8, pad, 100),
+                          gridDelegate:
+                              SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: cross,
+                            mainAxisSpacing: 14,
+                            crossAxisSpacing: 14,
+                            childAspectRatio: 2 / 3,
+                          ),
+                          itemCount: games.length + 1,
+                          itemBuilder: (context, i) {
+                            if (i == games.length) {
+                              return _LibraryOtherTile(onTap: onCreateRoom);
+                            }
+                            final g = games[i];
+                            return _LibraryCoverTile(
+                              game: g,
+                              onTap: () => onCreateWithGame(g),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            );
+          },
+        ),
+      );
+    });
   }
 }
 

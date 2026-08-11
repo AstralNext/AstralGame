@@ -1,5 +1,6 @@
 import 'package:astral_game/data/models/game_catalog.dart';
 import 'package:astral_game/data/services/connection_service.dart';
+import 'package:astral_game/data/services/game_assist_rules_service.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
 import 'package:astral_game/data/services/screen_state_service.dart';
 import 'package:astral_game/data/services/share_code_service.dart';
@@ -306,9 +307,10 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Future<void> _handleCreateRoom() async {
     if (_connectionService.isConnecting) return;
+    await getIt<GameAssistRulesService>().ensureLoaded();
+    if (!mounted) return;
     final catalog = GameCatalog.pickerItems;
     if (catalog.isEmpty) {
-      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('游戏目录未加载')),
       );
