@@ -81,6 +81,8 @@ flutter:
     - assets/games/palworld/grid.png
     - assets/games/mindustry/icon.png
     - assets/games/mindustry/grid.png
+    - assets/games/stardew_valley/icon.png
+    - assets/games/stardew_valley/grid.png
     # Offline generic fallback; full rules at https://astral.fan/gamerules.json
     - assets/games/rules.json
     - assets/scenery/daily.jpg

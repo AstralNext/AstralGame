@@ -61,4 +61,18 @@
 
 `probe_hex: "fe01"` = KryoNet/Arc `DiscoverHost`（字节 `[-2, 1]`）。
 
+### Stardew Valley（无原生局域网扫描）
+
+原版需在 Co-op → Join LAN Game **手动输入 IP**；默认游戏端口 **UDP 24642**。  
+Astral 用 `static_port` 把虚拟 IP:24642 宣告到房间，同伴复制后填入游戏即可（与泰拉同类）。
+
+```json
+{
+  "id": "stardew",
+  "label": "Stardew Valley",
+  "type": "static_port",
+  "port": 24642
+}
+```
+
 ET：`game.advertiseOpen` / `game.listOpen`。
