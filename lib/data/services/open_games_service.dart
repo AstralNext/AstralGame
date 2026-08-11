@@ -287,17 +287,6 @@ class OpenGamesService {
     ]);
   }
 
-  void _upsertMany(List<OpenGameListing> incoming) {
-    if (incoming.isEmpty) return;
-    final map = <String, OpenGameListing>{
-      for (final e in listings.value) e.key: e,
-    };
-    for (final e in incoming) {
-      map[e.key] = e;
-    }
-    listings.value = _sorted(map.values.where((e) => !e.isExpired));
-  }
-
   void _pruneExpired() {
     final next = listings.value.where((e) => !e.isExpired).toList();
     if (next.length != listings.value.length) {
