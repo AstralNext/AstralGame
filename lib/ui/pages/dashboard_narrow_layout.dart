@@ -3,10 +3,13 @@ import 'package:astral_game/config/constants.dart';
 import 'package:astral_game/data/models/enhanced_node_info.dart';
 import 'package:astral_game/data/models/game_catalog.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
+import 'package:astral_game/data/services/open_games_service.dart';
 import 'package:astral_game/data/state/room_state.dart';
+import 'package:astral_game/di.dart';
 import 'package:astral_game/ui/pages/dashboard_user_item.dart';
 import 'package:astral_game/ui/widgets/dashboard_home_panel.dart';
 import 'package:astral_game/ui/widgets/dashboard_list_section.dart';
+import 'package:astral_game/ui/widgets/dashboard_members_skeleton.dart';
 import 'package:astral_game/ui/widgets/room_open_games_panel.dart';
 import 'package:flutter/material.dart';
 import 'package:signals/signals_flutter.dart';
@@ -40,6 +43,9 @@ class DashboardNarrowLayout extends StatelessWidget {
       final session = roomState.session.value;
       final paused = roomState.pausedHost.value;
       final hostOnline = roomState.hostOnline.value;
+      final openGames = getIt<OpenGamesService>();
+      final openListings = openGames.listings.value;
+      final openActive = openGames.isActive;
 
       if (!isConnected) {
         return Padding(
@@ -61,6 +67,9 @@ class DashboardNarrowLayout extends StatelessWidget {
           ),
         );
       }
+
+      final showOpenGames = openActive || openListings.isNotEmpty;
+      final openGamesHeight = openListings.isEmpty ? 72.0 : 220.0;
 
       return CustomScrollView(
         key: const PageStorageKey<String>('dashboard_narrow_scroll'),
@@ -92,23 +101,30 @@ class DashboardNarrowLayout extends StatelessWidget {
               ),
             ),
           ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(
-              AppDimensions.pagePaddingH,
-              8,
-              AppDimensions.pagePaddingH,
-              8,
-            ),
-            sliver: SliverToBoxAdapter(
-              child: SizedBox(
-                height: 220,
-                child: RoomOpenGamesPanel(
-                  compact: true,
-                  gameId: session?.gameId,
+          if (showOpenGames)
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(
+                AppDimensions.pagePaddingH,
+                8,
+                AppDimensions.pagePaddingH,
+                8,
+              ),
+              sliver: SliverToBoxAdapter(
+                child: AnimatedSize(
+                  duration: const Duration(milliseconds: 240),
+                  curve: Curves.easeOutCubic,
+                  alignment: Alignment.topCenter,
+                  child: SizedBox(
+                    height: openGamesHeight,
+                    width: double.infinity,
+                    child: RoomOpenGamesPanel(
+                      compact: true,
+                      gameId: session?.gameId,
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(
               AppDimensions.pagePaddingH,
@@ -154,10 +170,7 @@ class _MembersBlock extends StatelessWidget {
       return DashboardListSection(
         title: title,
         useCard: false,
-        child: const DashboardListEmptyHint(
-          icon: Icons.people_outline,
-          message: '等待好友加入…',
-        ),
+        child: const DashboardMembersSkeleton(),
       );
     }
 

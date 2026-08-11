@@ -2,11 +2,12 @@ import 'package:astral_game/config/constants.dart';
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/models/enhanced_node_info.dart';
 import 'package:astral_game/ui/widgets/grouped_tile_shape.dart';
-import 'package:flutter/material.dart';
 import 'package:astral_game/utils/firewall_presentation.dart';
 import 'package:astral_game/utils/network_presentation.dart';
 import 'package:astral_game/utils/os_presentation.dart';
 import 'package:astral_game/utils/platform_version_parser.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class DashboardUserItem extends StatefulWidget {
   const DashboardUserItem({
@@ -86,217 +87,209 @@ class _DashboardUserItemState extends State<DashboardUserItem> {
         ? groupedTileBorderRadius(index: widget.index, count: widget.count)
         : AppRadius.brMedium;
 
+    final chips = <Widget>[
+      if (widget.isRoomHost)
+        _MiniChip(
+          icon: Icons.star_rounded,
+          label: '房主',
+          background: colorScheme.primaryContainer,
+          foreground: colorScheme.onPrimaryContainer,
+        ),
+      if (platformName.isNotEmpty)
+        _MiniChip(
+          icon: platformIcon,
+          label: platformName,
+          background: colorScheme.secondaryContainer,
+          foreground: colorScheme.onSecondaryContainer,
+        ),
+      if (network.hasLabel)
+        _MiniChip(
+          icon: network.icon,
+          label: network.shortLabel,
+          background: colorScheme.tertiaryContainer,
+          foreground: colorScheme.onTertiaryContainer,
+        ),
+      if (firewall.hasLabel)
+        _MiniChip(
+          icon: firewall.icon,
+          label: firewall.shortLabel,
+          background: firewall.isEnabled == true
+              ? colorScheme.primaryContainer
+              : colorScheme.surfaceContainerHighest,
+          foreground: firewall.isEnabled == true
+              ? colorScheme.onPrimaryContainer
+              : colorScheme.onSurfaceVariant,
+        ),
+      Text(
+        '${node.baseInfo.latencyMs.round()}ms',
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w500,
+          color: node.baseInfo.latencyMs < 100
+              ? AppColors.online
+              : node.baseInfo.latencyMs < 300
+                  ? AppColors.warning
+                  : AppColors.error,
+        ),
+      ),
+    ];
+
     final row = Row(
-          children: [
-            _buildAvatar(colorScheme),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildAvatar(colorScheme),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                node.customName ?? '...',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: node.customName != null
+                      ? colorScheme.onSurface
+                      : colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                ),
+              ),
+              if (chips.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: chips,
+                ),
+              ],
+              const SizedBox(height: 4),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  Row(
-                    children: [
-                      node.customName != null
-                          ? Text(
-                              node.customName!,
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                                color: colorScheme.onSurface,
-                              ),
-                            )
-                          : Text(
-                              '...',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
-                              ),
-                            ),
-                      if (widget.isRoomHost)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 6),
-                          child: _MiniChip(
-                            icon: Icons.star_rounded,
-                            label: '房主',
-                            background: colorScheme.primaryContainer,
-                            foreground: colorScheme.onPrimaryContainer,
-                          ),
-                        ),
-                      if (platformName.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 6),
-                          child: _MiniChip(
-                            icon: platformIcon,
-                            label: platformName,
-                            background: colorScheme.secondaryContainer,
-                            foreground: colorScheme.onSecondaryContainer,
-                          ),
-                        ),
-                      if (network.hasLabel)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 6),
-                          child: _MiniChip(
-                            icon: network.icon,
-                            label: network.shortLabel,
-                            background: colorScheme.tertiaryContainer,
-                            foreground: colorScheme.onTertiaryContainer,
-                          ),
-                        ),
-                      if (firewall.hasLabel)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 6),
-                          child: _MiniChip(
-                            icon: firewall.icon,
-                            label: firewall.shortLabel,
-                            background: firewall.isEnabled == true
-                                ? colorScheme.primaryContainer
-                                : colorScheme.surfaceContainerHighest,
-                            foreground: firewall.isEnabled == true
-                                ? colorScheme.onPrimaryContainer
-                                : colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      Padding(
-                        padding: EdgeInsets.only(
-                          left: (network.hasLabel || firewall.hasLabel) ? 4 : 6,
-                        ),
-                        child: Text(
-                          '${node.baseInfo.latencyMs.round()}ms',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            color: node.baseInfo.latencyMs < 100
-                                ? AppColors.online
-                                : node.baseInfo.latencyMs < 300
-                                    ? AppColors.warning
-                                    : AppColors.error,
-                          ),
-                        ),
-                      ),
-                    ],
+                  Text(
+                    ipDisplayText,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: hasIpv4
+                          ? colorScheme.onSurfaceVariant
+                          : colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                    ),
                   ),
-                  const SizedBox(height: 4),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            ipDisplayText,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: hasIpv4
-                                  ? colorScheme.onSurfaceVariant
-                                  : colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
-                            ),
-                          ),
-                          if (isDirect)
-                            Padding(
-                              padding: const EdgeInsets.only(left: 8),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: AppColors.online,
-                                  borderRadius: AppRadius.brSmall,
-                                ),
-                                child: Text(
-                                  '直连',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          if (versionNumber.isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(left: 8),
-                              child: Text(
-                                versionNumber,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
-                                ),
-                              ),
-                            ),
-                        ],
+                  if (isDirect)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
                       ),
-                      if (hasIpv6)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: Text(
-                            node.ipv6,
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.9),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  if (peerEnvLine.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Tooltip(
-                      message: _peerClientEnvFull(node),
-                      child: Text(
-                        peerEnvLine,
+                      decoration: BoxDecoration(
+                        color: AppColors.online,
+                        borderRadius: AppRadius.brSmall,
+                      ),
+                      child: const Text(
+                        '直连',
                         style: TextStyle(
-                          fontSize: 11,
-                          color: colorScheme.onSurfaceVariant.withValues(alpha: 0.75),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white,
                         ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                  ],
-                  if (node.baseInfo.lossRate > 0) ...[
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Text(
-                          '丢包: ${node.baseInfo.lossRate.toStringAsFixed(1)}%',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            color: AppColors.error,
-                          ),
+                  if (versionNumber.isNotEmpty)
+                    Text(
+                      versionNumber,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: colorScheme.onSurfaceVariant.withValues(
+                          alpha: 0.5,
                         ),
-                      ],
+                      ),
                     ),
-                  ],
                 ],
               ),
-            ),
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                color: palette.accent,
-                borderRadius: BorderRadius.circular(4),
-              ),
-            ),
-          ],
+              if (hasIpv6)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    node.ipv6,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: colorScheme.onSurfaceVariant.withValues(
+                        alpha: 0.9,
+                      ),
+                    ),
+                  ),
+                ),
+              if (peerEnvLine.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Tooltip(
+                  message: _peerClientEnvFull(node),
+                  child: Text(
+                    peerEnvLine,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: colorScheme.onSurfaceVariant.withValues(
+                        alpha: 0.75,
+                      ),
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+              if (node.baseInfo.lossRate > 0) ...[
+                const SizedBox(height: 4),
+                Text(
+                  '丢包: ${node.baseInfo.lossRate.toStringAsFixed(1)}%',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.error,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            color: palette.accent,
+            borderRadius: BorderRadius.circular(4),
+          ),
+        ),
+      ],
     );
 
     final padded = Padding(
       padding: EdgeInsets.fromLTRB(
         widget.grouped ? 16 : 12,
-        widget.grouped ? 12 : 12,
-        widget.grouped ? 12 : 12,
-        widget.grouped ? 12 : 12,
+        12,
+        12,
+        12,
       ),
       child: row,
     );
 
-    if (widget.grouped) {
-      return Material(
-        color: Colors.transparent,
-        shape: groupedTileShape(index: widget.index, count: widget.count),
-        clipBehavior: Clip.antiAlias,
+    final ink = Material(
+      color: Colors.transparent,
+      shape: widget.grouped
+          ? groupedTileShape(index: widget.index, count: widget.count)
+          : RoundedRectangleBorder(borderRadius: borderRadius),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => _copyIp(context, hasIpv4: hasIpv4, ipv4: node.ipv4),
+        borderRadius: widget.grouped ? null : borderRadius,
+        customBorder: widget.grouped
+            ? groupedTileShape(index: widget.index, count: widget.count)
+            : null,
         child: padded,
-      );
+      ),
+    );
+
+    if (widget.grouped) {
+      return ink;
     }
 
     return MouseRegion(
@@ -313,8 +306,28 @@ class _DashboardUserItemState extends State<DashboardUserItem> {
               : Colors.transparent,
           borderRadius: borderRadius,
         ),
-        child: padded,
+        child: ink,
       ),
+    );
+  }
+
+  Future<void> _copyIp(
+    BuildContext context, {
+    required bool hasIpv4,
+    required String ipv4,
+  }) async {
+    if (!hasIpv4) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('该成员尚未分配 IP')),
+      );
+      return;
+    }
+    await Clipboard.setData(ClipboardData(text: ipv4));
+    HapticFeedback.selectionClick();
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('已复制 IP：$ipv4')),
     );
   }
 
@@ -382,7 +395,7 @@ class _DashboardUserItemState extends State<DashboardUserItem> {
   }
 
   Widget _buildAvatar(ColorScheme colorScheme) {
-    final size = 36.0;
+    const size = 36.0;
 
     return Container(
       width: size,
@@ -390,7 +403,7 @@ class _DashboardUserItemState extends State<DashboardUserItem> {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: colorScheme.primaryContainer,
-        border: Border.all(color: colorScheme.outline, width: 1),
+        border: Border.all(color: colorScheme.outline),
       ),
       child: widget.node.avatar != null
           ? ClipOval(

@@ -74,32 +74,40 @@ class RoomOpenGamesPanel extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 10),
-              Expanded(
-                child: entries.isEmpty
-                    ? Align(
-                        alignment: Alignment.topLeft,
-                        child: Text(
-                          '等待虚拟 IP / 同伴宣告…',
-                          style: textTheme.bodySmall?.copyWith(
-                            color: palette.textTertiary,
+              if (compact && entries.isEmpty)
+                Text(
+                  '等待虚拟 IP / 同伴宣告…',
+                  style: textTheme.bodySmall?.copyWith(
+                    color: palette.textTertiary,
+                  ),
+                )
+              else
+                Expanded(
+                  child: entries.isEmpty
+                      ? Align(
+                          alignment: Alignment.topLeft,
+                          child: Text(
+                            '等待虚拟 IP / 同伴宣告…',
+                            style: textTheme.bodySmall?.copyWith(
+                              color: palette.textTertiary,
+                            ),
                           ),
+                        )
+                      : ListView.separated(
+                          itemCount: entries.length,
+                          separatorBuilder: (_, _) => Divider(
+                            height: 1,
+                            color: palette.divider.withValues(alpha: 0.35),
+                          ),
+                          itemBuilder: (context, i) {
+                            final e = entries[i];
+                            return _OpenGameTile(
+                              listing: e,
+                              onCopy: () => _copy(context, e),
+                            );
+                          },
                         ),
-                      )
-                    : ListView.separated(
-                        itemCount: entries.length,
-                        separatorBuilder: (_, __) => Divider(
-                          height: 1,
-                          color: palette.divider.withValues(alpha: 0.35),
-                        ),
-                        itemBuilder: (context, i) {
-                          final e = entries[i];
-                          return _OpenGameTile(
-                            listing: e,
-                            onCopy: () => _copy(context, e),
-                          );
-                        },
-                      ),
-              ),
+                ),
             ],
           ),
         ),
@@ -131,73 +139,73 @@ class _OpenGameTile extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
     final colorScheme = Theme.of(context).colorScheme;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onCopy,
+        borderRadius: BorderRadius.circular(10),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Flexible(
-                      child: Text(
-                        listing.label,
-                        style: textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                    Text(
+                      listing.label,
+                      style: textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                    if (listing.isSelf) ...[
-                      const SizedBox(width: 6),
-                      _chip(
-                        textTheme,
-                        '我',
-                        colorScheme.secondaryContainer,
-                        colorScheme.onSecondaryContainer,
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        if (listing.isSelf)
+                          _chip(
+                            textTheme,
+                            '我',
+                            colorScheme.secondaryContainer,
+                            colorScheme.onSecondaryContainer,
+                          ),
+                        if (listing.isRoomHost)
+                          _chip(
+                            textTheme,
+                            '房主',
+                            colorScheme.primaryContainer,
+                            colorScheme.onPrimaryContainer,
+                          ),
+                        Text(
+                          listing.ownerName,
+                          style: textTheme.labelSmall?.copyWith(
+                            color: palette.textTertiary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      listing.endpoint,
+                      style: textTheme.labelMedium?.copyWith(
+                        color: palette.textSecondary,
+                        fontFeatures: const [FontFeature.tabularFigures()],
                       ),
-                    ],
-                    if (listing.isRoomHost) ...[
-                      const SizedBox(width: 6),
-                      _chip(
-                        textTheme,
-                        '房主',
-                        colorScheme.primaryContainer,
-                        colorScheme.onPrimaryContainer,
-                      ),
-                    ],
+                    ),
                   ],
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  listing.ownerName,
-                  style: textTheme.labelSmall?.copyWith(
-                    color: palette.textTertiary,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  listing.endpoint,
-                  style: textTheme.labelMedium?.copyWith(
-                    color: palette.textSecondary,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
-                ),
-              ],
-            ),
+              ),
+              Icon(
+                Icons.copy_rounded,
+                size: 18,
+                color: palette.accent,
+              ),
+            ],
           ),
-          IconButton(
-            tooltip: '复制',
-            visualDensity: VisualDensity.compact,
-            onPressed: onCopy,
-            icon: Icon(Icons.copy_rounded, size: 18, color: palette.accent),
-          ),
-        ],
+        ),
       ),
     );
   }
