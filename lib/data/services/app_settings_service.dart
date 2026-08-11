@@ -58,6 +58,15 @@ class AppSettingsService {
   Future<void> setFloatingOverlayEnabled(bool value) async =>
       await _prefs.setBool(_keyFloatingOverlayEnabled, value);
 
+  static const String _keyCustomVpnRoutes = 'custom_vpn_routes';
+
+  /// Android VpnService 额外路由（CIDR 列表）。
+  List<String> getCustomVpnRoutes() =>
+      _prefs.getStringList(_keyCustomVpnRoutes) ?? const [];
+
+  Future<void> setCustomVpnRoutes(List<String> routes) async =>
+      await _prefs.setStringList(_keyCustomVpnRoutes, routes);
+
   // ---- 用户信息 ----
 
   /// 获取用户名，如果为空则返回系统用户名

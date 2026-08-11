@@ -71,6 +71,9 @@ Future<void> setupDI() async {
     () => NodeManagementService(),
   );
   getIt.registerSingleton<VpnState>(VpnState());
+  getIt<VpnState>().setCustomRoutes(
+    getIt<AppSettingsService>().getCustomVpnRoutes(),
+  );
 
   getIt.registerSingleton<PeerRpcRouter>(PeerRpcRouter(getIt<P2PService>()));
   getIt.registerSingleton<PeerRpcClient>(PeerRpcClient(getIt<P2PService>()));
@@ -79,7 +82,6 @@ Future<void> setupDI() async {
     () => P2PConfigService(
       getIt<AppSettingsService>(),
       getIt<ServerState>(),
-      getIt<VpnState>(),
     ),
   );
 

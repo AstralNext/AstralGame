@@ -19,6 +19,7 @@ import 'package:flutter/material.dart';
 import 'package:signals/signals_flutter.dart';
 
 import 'about_page.dart';
+import 'vpn_routes_page.dart';
 
 /// 设置主页面。
 class SettingsMainPage extends StatefulWidget {
@@ -343,6 +344,22 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
                     },
                   );
                 }),
+              if (_isAndroid) ...[
+                const Divider(height: 24),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    Icons.route_outlined,
+                    color: colorScheme.primary,
+                  ),
+                  title: const Text('自定义 VPN 路由'),
+                  subtitle: const Text('额外 CIDR；默认含虚拟网段、组播、广播'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push<void>(
+                    astralPageRoute(const VpnRoutesPage()),
+                  ),
+                ),
+              ],
             ],
           ),
         ),

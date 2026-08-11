@@ -109,6 +109,19 @@ class InputValidator {
     return null;
   }
 
+  /// 验证 CIDR（必须带前缀，如 `192.168.1.0/24`）。
+  static String? validateCidr(String? value) {
+    final v = value?.trim() ?? '';
+    if (v.isEmpty) {
+      return '请输入网段，例如 192.168.1.0/24';
+    }
+    final parts = v.split('/');
+    if (parts.length != 2) {
+      return '格式应为 IP/前缀，例如 192.168.1.0/24';
+    }
+    return validateIPv4(v);
+  }
+
   /// 验证服务器地址
   ///
   /// 检查是否为有效的服务器地址（主机名:端口）

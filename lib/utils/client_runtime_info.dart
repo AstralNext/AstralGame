@@ -12,6 +12,7 @@ class ClientRuntimeInfo {
   static bool _ready = false;
   static String _appVersion = '';
   static String _appName = '';
+  static String _packageName = '';
   static String _operatingSystemVersionDetail = '';
 
   static Future<void> warmUp() async {
@@ -19,6 +20,7 @@ class ClientRuntimeInfo {
     try {
       final p = await PackageInfo.fromPlatform();
       _appName = p.appName;
+      _packageName = p.packageName.trim();
       final ver = p.version.trim();
       final build = p.buildNumber.trim();
       _appVersion =
@@ -26,6 +28,7 @@ class ClientRuntimeInfo {
     } catch (_) {
       _appVersion = '';
       _appName = '';
+      _packageName = '';
     }
 
     try {
@@ -40,6 +43,9 @@ class ClientRuntimeInfo {
 
   /// 应用显示名（来自包配置）。
   static String get appName => _appName.isEmpty ? 'astral_game' : _appName;
+
+  /// Android `applicationId` / 其它平台包名；未就绪时为空。
+  static String get packageName => _packageName;
 
   /// 应用版本，形如 `1.0.0` 或 `1.0.0+1`。
   static String get appVersion =>

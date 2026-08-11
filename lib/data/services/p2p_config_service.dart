@@ -5,7 +5,6 @@ import 'dart:typed_data';
 import 'package:astral_game/data/models/server_mod.dart';
 import 'package:astral_game/data/services/app_settings_service.dart';
 import 'package:astral_game/data/state/server_state.dart';
-import 'package:astral_game/data/state/vpn_state.dart';
 import 'package:astral_game/utils/logger.dart';
 import 'package:astral_game/utils/runtime_platform.dart';
 import 'package:pointycastle/export.dart';
@@ -23,9 +22,8 @@ class RoomShareCodeParts {
 class P2PConfigService {
   final AppSettingsService _appSettings;
   final ServerState _serverState;
-  final VpnState _vpnState;
 
-  P2PConfigService(this._appSettings, this._serverState, this._vpnState);
+  P2PConfigService(this._appSettings, this._serverState);
 
   String generateRoomCode({int length = 10}) {
     const alphabet = '23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz';
@@ -100,12 +98,6 @@ class P2PConfigService {
 
     final peerBlock = peers.map(_peerTomlBlock).join('\n\n');
 
-    final proxyBlock = _vpnState.customRoutes.value
-        .map((route) => route.trim())
-        .where(_isValidCidrLike)
-        .map((route) => '[[proxy_network]]\ncidr = "${_escapeString(route)}"')
-        .join('\n\n');
-
     // 游戏 JSON 规则优先；否则回退用户设置强制开关。
     final udpRelay =
         enableUdpBroadcastRelay ?? _appSettings.isEnableUdpBroadcastRelay();
@@ -136,7 +128,7 @@ listeners = [
 ]
 
 $identityBlock
-${peerBlock.isNotEmpty ? '$peerBlock\n\n' : ''}${proxyBlock.isNotEmpty ? '$proxyBlock\n\n' : ''}[flags]
+${peerBlock.isNotEmpty ? '$peerBlock\n\n' : ''}[flags]
 disable_p2p = $disableP2p
 $udpBroadcastFlag
 ''';
@@ -198,13 +190,5 @@ $udpBroadcastFlag
       buffer.write(hex[b & 0x0F]);
     }
     return buffer.toString();
-  }
-
-  bool _isValidCidrLike(String route) {
-    final parts = route.split('/');
-    if (parts.length != 2) return false;
-    final prefix = int.tryParse(parts[1]);
-    if (prefix == null || prefix < 0 || prefix > 32) return false;
-    return RegExp(r'^\d{1,3}(\.\d{1,3}){3}$').hasMatch(parts[0]);
   }
 }
