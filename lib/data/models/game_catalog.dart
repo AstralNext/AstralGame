@@ -111,6 +111,18 @@ IconData resolveGameIcon(String name) {
       return Icons.precision_manufacturing;
     case 'grass':
       return Icons.grass;
+    case 'factory':
+      return Icons.factory;
+    case 'outdoors':
+      return Icons.outdoor_grill;
+    case 'coronavirus':
+      return Icons.coronavirus;
+    case 'nightlight':
+      return Icons.nightlight;
+    case 'warning':
+      return Icons.warning_amber_rounded;
+    case 'hardware':
+      return Icons.handyman;
     case 'sports_esports':
       return Icons.sports_esports;
     case 'sports_esports_outlined':

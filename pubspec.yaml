@@ -83,6 +83,22 @@ flutter:
     - assets/games/mindustry/grid.png
     - assets/games/stardew_valley/icon.png
     - assets/games/stardew_valley/grid.png
+    - assets/games/factorio/icon.png
+    - assets/games/factorio/grid.png
+    - assets/games/dont_starve_together/icon.png
+    - assets/games/dont_starve_together/grid.png
+    - assets/games/project_zomboid/icon.png
+    - assets/games/project_zomboid/grid.png
+    - assets/games/v_rising/icon.png
+    - assets/games/v_rising/grid.png
+    - assets/games/satisfactory/icon.png
+    - assets/games/satisfactory/grid.png
+    - assets/games/seven_days_to_die/icon.png
+    - assets/games/seven_days_to_die/grid.png
+    - assets/games/ark/icon.png
+    - assets/games/ark/grid.png
+    - assets/games/rust/icon.png
+    - assets/games/rust/grid.png
     # Offline generic fallback; full rules at https://astral.fan/gamerules.json
     - assets/games/rules.json
     - assets/scenery/daily.jpg
