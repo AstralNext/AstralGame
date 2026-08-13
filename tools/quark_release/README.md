@@ -17,5 +17,5 @@
 ```powershell
 $env:OPENCLAW_CLI = "1"
 $env:QUARK_PARENT_FID = "..."
-bash tools/quark_release/upload.sh 1.0.23 release
+bash tools/quark_release/upload.sh 1.0.24 release
 ```
