@@ -112,10 +112,11 @@
   "dll": "AstralRaftNet.dll",
   "namespace": "AstralRaftNet",
   "class": "Loader",
-  "method": "Init"
+  "method": "Init",
+  "delay_seconds": 5
 }
 ```
 
-建议同时开 `network.enable_udp_broadcast_relay`。
+`delay_seconds`：首次发现进程后等待再注入（默认 5），避免游戏刚起来就注入导致启动失败。
 
 ET：`game.advertiseOpen` / `game.listOpen`。

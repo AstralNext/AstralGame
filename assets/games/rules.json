@@ -31,7 +31,8 @@
             "dll": "AstralRaftNet.dll",
             "namespace": "AstralRaftNet",
             "class": "Loader",
-            "method": "Init"
+            "method": "Init",
+            "delay_seconds": 5
           }
         }
       }

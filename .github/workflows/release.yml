@@ -263,7 +263,9 @@ jobs:
           args=(release create "$TAG" --title "Astral Game $TAG" --notes-file /tmp/release-body.md --target "$TARGET")
           if [ "$DRAFT" = "true" ]; then args+=(--draft); fi
           if [ "$PRE" = "true" ]; then args+=(--prerelease); fi
-          gh "${args[@]}" release/*
+          # shellcheck disable=SC2206
+          files=(release/*)
+          gh "${args[@]}" "${files[@]}"
 
       - name: 安装 Node（夸克官方 CLI）
         if: steps.cfg.outputs.skip != 'true'

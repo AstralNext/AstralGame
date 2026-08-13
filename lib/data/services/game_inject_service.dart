@@ -18,6 +18,8 @@ class GameInjectService {
   final Set<int> _injected = {};
   final Set<int> _inflight = {};
   final Map<int, DateTime> _retryAfter = {};
+  /// 首次发现该 pid 的时间；用来做启动后延时注入。
+  final Map<int, DateTime> _firstSeen = {};
 
   Future<void> startForRoom({required String gameId}) async {
     await stop();
@@ -42,7 +44,8 @@ class GameInjectService {
     });
     await _tick();
     appLogger.i(
-      '[GameInject] 已监视 exe=${inject.process.join(",")} dll=${inject.dll}',
+      '[GameInject] 已监视 exe=${inject.process.join(",")} '
+      'dll=${inject.dll} delay=${inject.delaySeconds}s',
     );
   }
 
@@ -53,6 +56,7 @@ class GameInjectService {
     _injected.clear();
     _inflight.clear();
     _retryAfter.clear();
+    _firstSeen.clear();
   }
 
   Future<void> _tick() async {
@@ -84,15 +88,25 @@ class GameInjectService {
       if (waitUntil != null && now.isBefore(waitUntil)) {
         continue;
       }
+      final firstSeen = _firstSeen.putIfAbsent(proc.pid, () {
+        appLogger.i(
+          '[GameInject] 发现 ${proc.exe} pid=${proc.pid}'
+          '${proc.title.isEmpty ? "" : " title=${proc.title}"}'
+          '，等待 ${cfg.delaySeconds}s 后再注入',
+        );
+        return now;
+      });
+      final elapsed = now.difference(firstSeen);
+      final need = Duration(seconds: cfg.delaySeconds);
+      if (elapsed < need) {
+        continue;
+      }
       _inflight.add(proc.pid);
-      appLogger.i(
-        '[GameInject] 发现 ${proc.exe} pid=${proc.pid}'
-        '${proc.title.isEmpty ? "" : " title=${proc.title}"}',
-      );
       unawaited(_injectPid(proc.pid, proc.exe, cfg));
     }
     _injected.removeWhere((pid) => !alive.contains(pid));
     _retryAfter.removeWhere((pid, _) => !alive.contains(pid));
+    _firstSeen.removeWhere((pid, _) => !alive.contains(pid));
   }
 
   Future<void> _injectPid(

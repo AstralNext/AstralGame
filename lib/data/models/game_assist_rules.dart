@@ -311,6 +311,7 @@ class GameAssistInjectConfig {
     this.namespace = '',
     this.className = '',
     this.method = 'Init',
+    this.delaySeconds = 5,
   });
 
   /// 目前仅 `mono`（Unity）。
@@ -322,12 +323,18 @@ class GameAssistInjectConfig {
   final String namespace;
   final String className;
   final String method;
+  /// 首次发现进程后等待多少秒再注入，避免游戏未完全启动就注入导致崩溃。
+  final int delaySeconds;
 
   bool get isMono =>
       type == 'mono' && dll.isNotEmpty && className.isNotEmpty;
 
   factory GameAssistInjectConfig.fromJson(Map<String, dynamic> json) {
     final method = '${json['method'] ?? 'Init'}'.trim();
+    final delayRaw = json['delay_seconds'] ?? json['delaySeconds'];
+    final delay = delayRaw is num
+        ? delayRaw.toInt()
+        : int.tryParse('${delayRaw ?? ''}') ?? 5;
     return GameAssistInjectConfig(
       type: '${json['type'] ?? ''}'.trim().toLowerCase(),
       process: _stringList(json['process']),
@@ -336,6 +343,7 @@ class GameAssistInjectConfig {
       namespace: '${json['namespace'] ?? ''}'.trim(),
       className: '${json['class'] ?? ''}'.trim(),
       method: method.isEmpty ? 'Init' : method,
+      delaySeconds: delay < 0 ? 0 : delay,
     );
   }
 }
