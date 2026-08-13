@@ -48,6 +48,12 @@ Source: "{#BuildOutput}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdir
 Name: "{commonprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{commondesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
+[Registry]
+Root: HKLM; Subkey: "Software\Classes\astralgame"; ValueType: string; ValueName: ""; ValueData: "URL:Astral Game"; Flags: uninsdeletekey
+Root: HKLM; Subkey: "Software\Classes\astralgame"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKLM; Subkey: "Software\Classes\astralgame\DefaultIcon"; ValueType: string; ValueData: "{app}\{#MyAppExeName},0"
+Root: HKLM; Subkey: "Software\Classes\astralgame\shell\open\command"; ValueType: string; ValueData: """{app}\{#MyAppExeName}"" ""%1"""
+
 [Run]
 ; 安装结束勾选「启动」时以管理员运行（与 exe manifest requireAdministrator 一致）。
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent shellexec; Verb: runas

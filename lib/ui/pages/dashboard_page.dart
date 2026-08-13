@@ -9,8 +9,8 @@ import 'package:astral_game/di.dart';
 import 'package:astral_game/ui/pages/dashboard_narrow_layout.dart';
 import 'package:astral_game/ui/pages/dashboard_wide_layout.dart';
 import 'package:astral_game/utils/room_share.dart';
+import 'package:astral_game/utils/room_share_actions.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:get_it/get_it.dart';
 import 'package:signals/signals_flutter.dart';
 
@@ -38,8 +38,7 @@ class _DashboardPageState extends State<DashboardPage> {
       return;
     }
 
-    var code = session.shortCode ?? '';
-    var offlineInvite = _connectionService.currentOfflineInvite() ?? '';
+    var url = _connectionService.currentJoinShareUrl() ?? '';
     var refreshing = false;
 
     if (!mounted) return;
@@ -48,8 +47,9 @@ class _DashboardPageState extends State<DashboardPage> {
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setState) {
-            final hasShort = code.isNotEmpty;
-            final hasOffline = offlineInvite.isNotEmpty;
+            final hasUrl = url.isNotEmpty;
+            final token = hasUrl ? extractJoinToken(url) : null;
+            final viaShort = token != null && looksLikeShortCode(token);
             return AlertDialog(
               title: const Text('分享房间'),
               content: SizedBox(
@@ -59,50 +59,17 @@ class _DashboardPageState extends State<DashboardPage> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text(
-                      hasShort
-                          ? '优先发 9 位短码；短码服务不可用时用下方离线邀请（AG1.）。刷新会作废旧邀请。'
-                          : '短码服务不可用，请复制离线邀请码发给好友（AG1. 开头）。刷新可重试短码。',
+                      viaShort
+                          ? '发给好友这条链接即可加入。短码服务不可用时会自动改用离线链接。'
+                          : '短码服务不可用，已生成离线邀请链接。好友点开即可加入。',
                     ),
                     const SizedBox(height: 16),
-                    Text(
-                      '短码',
-                      style: Theme.of(context).textTheme.labelLarge,
-                    ),
-                    const SizedBox(height: 8),
                     SelectableText(
-                      hasShort ? code : '（未生成）',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: hasShort ? 4 : 0,
+                      hasUrl ? url : '（还没有邀请）',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
                           ),
                     ),
-                    if (hasOffline) ...[
-                      const SizedBox(height: 20),
-                      Text(
-                        '离线邀请',
-                        style: Theme.of(context).textTheme.labelLarge,
-                      ),
-                      const SizedBox(height: 8),
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxHeight: 120),
-                        child: SingleChildScrollView(
-                          child: SelectableText(
-                            offlineInvite,
-                            style: TextStyle(
-                              fontFamily: 'Consolas',
-                              fontFamilyFallback: const [
-                                'Courier New',
-                                'monospace',
-                              ],
-                              fontSize: 11,
-                              height: 1.35,
-                              color: Theme.of(context).colorScheme.onSurface,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
                   ],
                 ),
               ),
@@ -113,10 +80,8 @@ class _DashboardPageState extends State<DashboardPage> {
                       : () async {
                           setState(() => refreshing = true);
                           try {
-                            final r =
-                                await _connectionService.refreshShareInvite();
-                            code = r.shortCode ?? '';
-                            offlineInvite = r.offlineInvite;
+                            await _connectionService.refreshShareInvite();
+                            url = _connectionService.currentJoinShareUrl() ?? '';
                             if (context.mounted) setState(() {});
                           } catch (e) {
                             if (context.mounted) {
@@ -142,49 +107,19 @@ class _DashboardPageState extends State<DashboardPage> {
                   onPressed: () => Navigator.pop(dialogContext),
                   child: const Text('关闭'),
                 ),
-                if (hasShort && hasOffline)
-                  TextButton(
-                    onPressed: () async {
-                      await Clipboard.setData(
-                        ClipboardData(text: offlineInvite),
-                      );
-                      if (this.context.mounted) {
-                        ScaffoldMessenger.of(this.context).showSnackBar(
-                          const SnackBar(content: Text('离线邀请已复制')),
-                        );
-                      }
-                    },
-                    child: const Text('复制离线邀请'),
-                  ),
                 FilledButton(
-                  onPressed: hasShort
-                      ? () async {
-                          await Clipboard.setData(
-                            ClipboardData(
-                              text: roomShareCodeForClipboard(code),
-                            ),
+                  onPressed: !hasUrl
+                      ? null
+                      : () async {
+                          Navigator.pop(dialogContext);
+                          if (!this.context.mounted) return;
+                          await shareJoinInvite(
+                            context: this.context,
+                            url: url,
+                            gameName: session.gameName,
                           );
-                          if (this.context.mounted) {
-                            Navigator.pop(dialogContext);
-                            ScaffoldMessenger.of(this.context).showSnackBar(
-                              SnackBar(content: Text('短码已复制：$code')),
-                            );
-                          }
-                        }
-                      : (hasOffline
-                          ? () async {
-                              await Clipboard.setData(
-                                ClipboardData(text: offlineInvite),
-                              );
-                              if (this.context.mounted) {
-                                Navigator.pop(dialogContext);
-                                ScaffoldMessenger.of(this.context).showSnackBar(
-                                  const SnackBar(content: Text('离线邀请已复制')),
-                                );
-                              }
-                            }
-                          : null),
-                  child: Text(hasShort ? '复制短码' : '复制离线邀请'),
+                        },
+                  child: const Text('分享'),
                 ),
               ],
             );
@@ -503,18 +438,9 @@ class _DashboardPageState extends State<DashboardPage> {
       );
       nameController.dispose();
       if (!mounted) return;
-      final code = session.shortCode;
-      if (code != null && code.isNotEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('已开房，短码：$code（可在分享里复制）')),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('已开房；短码不可用，请在分享里复制离线邀请'),
-          ),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('已开房，去分享发给好友')),
+      );
     } on ConnectionAbortedException {
       nameController.dispose();
       return;
@@ -543,8 +469,8 @@ class _DashboardPageState extends State<DashboardPage> {
             maxLines: 4,
             minLines: 1,
             decoration: const InputDecoration(
-              labelText: '短码或离线邀请',
-              hintText: '9 位数字，或粘贴 AG1. 开头的离线邀请',
+              labelText: '邀请链接 / 短码',
+              hintText: '粘贴 next.astral.fan/j 链接，或短码',
               alignLabelWithHint: true,
             ),
             onSubmitted: (v) => Navigator.pop(context, v.trim()),

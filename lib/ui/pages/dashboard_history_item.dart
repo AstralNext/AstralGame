@@ -1,14 +1,14 @@
 import 'package:astral_game/config/constants.dart';
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/models/room_mod.dart';
-import 'package:astral_game/data/services/connection_service.dart';
+import 'package:astral_game/data/state/room_state.dart';
 import 'package:astral_game/di.dart';
 import 'package:astral_game/ui/widgets/grouped_tile_shape.dart';
 import 'package:astral_game/utils/room_display.dart';
 import 'package:astral_game/utils/room_share.dart';
+import 'package:astral_game/utils/room_share_actions.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'
-    show Clipboard, ClipboardData, HapticFeedback;
+import 'package:flutter/services.dart';
 
 class DashboardDismissibleHistoryItem extends StatefulWidget {
   const DashboardDismissibleHistoryItem({
@@ -36,14 +36,13 @@ class DashboardDismissibleHistoryItem extends StatefulWidget {
 class _DashboardDismissibleHistoryItemState
     extends State<DashboardDismissibleHistoryItem> {
   Future<void> _shareRoom(BuildContext context) async {
-    final code = widget.room.shareCode.trim();
-    if (code.isEmpty) return;
-    final shareText = roomShareCodeForClipboard(code);
-    await Clipboard.setData(ClipboardData(text: shareText));
+    final url = joinShareUrlFromCode(widget.room.shareCode);
+    if (url.isEmpty) return;
     HapticFeedback.mediumImpact();
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('房间分享码已复制')),
+    await shareJoinInvite(
+      context: context,
+      url: url,
+      gameName: widget.room.name,
     );
   }
 
@@ -160,17 +159,16 @@ class DashboardHistoryItem extends StatefulWidget {
 
 class _DashboardHistoryItemState extends State<DashboardHistoryItem> {
   bool isHovered = false;
-  final _connectionService = getIt<ConnectionService>();
+  final _roomState = getIt<RoomState>();
 
   Future<void> _shareRoom(BuildContext context) async {
-    final code = widget.room.shareCode.trim();
-    if (code.isEmpty) return;
-    final shareText = roomShareCodeForClipboard(code);
-    await Clipboard.setData(ClipboardData(text: shareText));
+    final url = joinShareUrlFromCode(widget.room.shareCode);
+    if (url.isEmpty) return;
     HapticFeedback.mediumImpact();
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('房间分享码已复制')),
+    await shareJoinInvite(
+      context: context,
+      url: url,
+      gameName: widget.room.name,
     );
   }
 
@@ -252,19 +250,17 @@ class _DashboardHistoryItemState extends State<DashboardHistoryItem> {
                         ),
                         onPressed: widget.room.shareCode.isNotEmpty
                             ? () async {
+                                final url = joinShareUrlFromCode(
+                                  widget.room.shareCode,
+                                );
+                                if (url.isEmpty) return;
                                 await Clipboard.setData(
-                                  ClipboardData(
-                                    text: roomShareCodeForClipboard(
-                                      widget.room.shareCode,
-                                    ),
-                                  ),
+                                  ClipboardData(text: url),
                                 );
                                 if (context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
-                                      content: Text(
-                                        '房间分享码已复制',
-                                      ),
+                                      content: Text('邀请链接已复制'),
                                     ),
                                   );
                                 }
@@ -279,8 +275,7 @@ class _DashboardHistoryItemState extends State<DashboardHistoryItem> {
                           size: 18,
                           color: palette.error,
                         ),
-                        onPressed: () =>
-                            _connectionService.removeRoom(widget.room.id),
+                        onPressed: () => _roomState.removeRoom(widget.room.id),
                         padding: const EdgeInsets.all(6),
                         constraints: const BoxConstraints(),
                       ),

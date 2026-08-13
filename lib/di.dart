@@ -5,6 +5,7 @@ import 'package:astral_game/data/services/connection_service.dart';
 import 'package:astral_game/data/services/connectivity_status_service.dart';
 import 'package:astral_game/data/services/firewall_service.dart';
 import 'package:astral_game/data/services/hitokoto_service.dart';
+import 'package:astral_game/data/services/join_link_service.dart';
 import 'package:astral_game/data/services/alcy_wallpaper_service.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
 import 'package:astral_game/data/services/peer_rpc/methods/game_methods.dart';
@@ -86,6 +87,7 @@ Future<void> setupDI() async {
   );
 
   getIt.registerLazySingleton<ShareCodeService>(() => ShareCodeService());
+  getIt.registerLazySingleton<JoinLinkService>(() => JoinLinkService());
   getIt.registerLazySingleton<GameAssistRulesService>(
     () => GameAssistRulesService(),
   );
@@ -172,6 +174,9 @@ Future<void> setupDI() async {
 
 /// 释放所有服务资源
 void disposeDI() {
+  if (getIt.isRegistered<JoinLinkService>()) {
+    getIt<JoinLinkService>().dispose();
+  }
   if (getIt.isRegistered<ConnectivityStatusService>()) {
     unawaited(getIt<ConnectivityStatusService>().dispose());
   }

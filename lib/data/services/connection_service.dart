@@ -154,18 +154,29 @@ class ConnectionService {
   }
 
   Future<ActiveRoomSession> joinWithInviteInput(String raw) async {
-    final text = raw.trim();
-    if (text.isEmpty) {
-      throw StateError('请输入短码或离线邀请码');
+    final token = extractJoinToken(raw) ?? raw.trim();
+    if (token.isEmpty) {
+      throw StateError('请粘贴邀请链接、短码或离线邀请');
     }
-    if (looksLikeShortCode(text)) {
-      return joinWithShortCode(text);
+    if (looksLikeShortCode(token)) {
+      return joinWithShortCode(token);
     }
-    if (looksLikeOfflineInvite(text)) {
-      final payload = decodeOfflineInvite(text);
+    if (looksLikeOfflineInvite(token)) {
+      final payload = decodeOfflineInvite(token);
       return _joinWithPayload(payload, shortCode: null);
     }
-    throw StateError('无法识别：请输入 9 位短码，或粘贴 AG1. 开头的离线邀请码');
+    throw StateError('无法识别邀请，请使用 Astral 分享的链接');
+  }
+
+  /// 当前应分享的一条 URL（短码优先，否则离线）。
+  String? currentJoinShareUrl() {
+    final session = _roomState.session.value;
+    if (session == null || !session.isHost) return null;
+    final url = buildJoinShareUrl(
+      shortCode: session.shortCode,
+      offlineInvite: currentOfflineInvite(),
+    );
+    return url.isEmpty ? null : url;
   }
 
   /// 加入房间：9 位短码。

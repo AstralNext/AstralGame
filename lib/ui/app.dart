@@ -5,6 +5,7 @@ import 'package:astral_game/data/state/settings_state.dart';
 import 'package:astral_game/ui/shell/shell.dart';
 import 'package:astral_game/ui/widgets/floating_overlay_binder.dart';
 import 'package:astral_game/ui/widgets/home_widget_refresh_binder.dart';
+import 'package:astral_game/ui/widgets/join_link_binder.dart';
 import 'package:astral_game/ui/widgets/theme_water_drop_overlay.dart';
 import 'package:flutter/material.dart';
 import 'package:signals/signals_flutter.dart';
@@ -64,9 +65,11 @@ class _AstralGameAppState extends State<AstralGameApp> with WidgetsBindingObserv
         theme: theme,
         themeAnimationDuration: AppThemeAnimation.duration,
         themeAnimationCurve: AppThemeAnimation.curve,
-        builder: (context, child) => FloatingOverlayBinder(
-          child: HomeWidgetRefreshBinder(
-            child: ThemeWaterDropHost(child: child ?? const SizedBox.shrink()),
+        builder: (context, child) => JoinLinkBinder(
+          child: FloatingOverlayBinder(
+            child: HomeWidgetRefreshBinder(
+              child: ThemeWaterDropHost(child: child ?? const SizedBox.shrink()),
+            ),
           ),
         ),
         home: const Shell(),
