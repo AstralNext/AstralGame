@@ -20,7 +20,7 @@ namespace AstralRaftNet
 
         public static string Address
         {
-            get { return PlayerPrefs.GetString(PrefAddress, "127.0.0.1:6488"); }
+            get { return PlayerPrefs.GetString(PrefAddress, string.Empty); }
             set
             {
                 PlayerPrefs.SetString(PrefAddress, value ?? string.Empty);

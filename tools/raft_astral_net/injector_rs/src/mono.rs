@@ -77,15 +77,26 @@ pub fn inject(
     if assembly.is_empty() {
         return Err("assembly is empty".into());
     }
+    crate::log::info(&format!(
+        "inject pid={pid} bytes={} invoke={namespace}.{class}.{method}",
+        assembly.len()
+    ));
     unsafe {
-        let handle = OpenProcess(PROCESS_ALL_ACCESS, false, pid)
-            .map_err(|e| format!("OpenProcess: {e}"))?;
+        let handle = OpenProcess(PROCESS_ALL_ACCESS, false, pid).map_err(|e| {
+            let msg = format!("OpenProcess pid={pid}: {e} (try run as admin?)");
+            crate::log::error(&msg);
+            msg
+        })?;
+        crate::log::info(&format!("OpenProcess ok pid={pid}"));
         let result = (|| {
             if !is_64bit(handle) {
                 return Err("32-bit Unity is not supported".into());
             }
+            crate::log::info("wait mono.dll (max 45s)");
             let mono = wait_for_mono(handle)?;
+            crate::log::info(&format!("mono.dll base=0x{mono:x}"));
             let exports = resolve_exports(handle, mono)?;
+            crate::log::info("mono exports ok");
             let mut mem = RemoteMemory::new(handle);
             let root = call(
                 &mut mem,
@@ -97,6 +108,7 @@ pub fn inject(
             if root == 0 {
                 return Err("mono_get_root_domain returned 0".into());
             }
+            crate::log::info(&format!("root domain=0x{root:x}"));
             let status = mem.alloc(4)?;
             let raw = mem.write_bytes(assembly)?;
             let image = call(
@@ -109,6 +121,7 @@ pub fn inject(
             if image == 0 || mem.read_i32(status)? != 0 {
                 return Err("mono_image_open_from_data failed".into());
             }
+            crate::log::info(&format!("image=0x{image:x}"));
             let dummy = mem.write_bytes(&[0u8])?;
             let status2 = mem.alloc(4)?;
             let asm_ptr = call(
@@ -121,6 +134,7 @@ pub fn inject(
             if asm_ptr == 0 || mem.read_i32(status2)? != 0 {
                 return Err("mono_assembly_load_from_full failed".into());
             }
+            crate::log::info(&format!("assembly=0x{asm_ptr:x}"));
             let img = call(
                 &mut mem,
                 &exports,
@@ -154,6 +168,7 @@ pub fn inject(
             if method_ptr == 0 {
                 return Err(format!("method not found: {method}"));
             }
+            crate::log::info(&format!("invoke {namespace}.{class}.{method}"));
             let exc = mem.write_u64(0)?;
             let _ = call(
                 &mut mem,
@@ -162,9 +177,13 @@ pub fn inject(
                 &[method_ptr, 0, 0, exc],
                 Some(root),
             )?;
+            crate::log::info(&format!("invoke returned ok pid={pid}"));
             Ok(())
         })();
         let _ = CloseHandle(handle);
+        if let Err(ref err) = result {
+            crate::log::error(&format!("inject failed pid={pid}: {err}"));
+        }
         result
     }
 }
@@ -389,12 +408,19 @@ fn is_64bit(handle: HANDLE) -> bool {
 
 fn wait_for_mono(handle: HANDLE) -> Result<u64, String> {
     let deadline = Instant::now() + Duration::from_secs(45);
-    let mut last = String::new();
+    let mut last = String::from("mono.dll not found");
+    let mut last_log: Option<Instant> = None;
     loop {
         match find_mono_module(handle) {
             Ok(addr) => return Ok(addr),
             Err(err) => {
                 last = err;
+                let should_log = last_log.map(|t| t.elapsed() >= Duration::from_secs(3)).unwrap_or(true);
+                if should_log {
+                    let left = deadline.saturating_duration_since(Instant::now()).as_secs();
+                    crate::log::info(&format!("waiting mono.dll ({last}) left={left}s"));
+                    last_log = Some(Instant::now());
+                }
                 if Instant::now() >= deadline {
                     return Err(last);
                 }

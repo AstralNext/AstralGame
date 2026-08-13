@@ -1,5 +1,6 @@
 using System;
 using HarmonyLib;
+using Steamworks;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.UI;
@@ -109,29 +110,120 @@ namespace AstralRaftNet
                 if (box.connectingBox != null)
                 {
                     box.connectingBox.gameObject.SetActive(true);
-                    box.connectingBox.StartConnectTimeoutTimer();
+                    box.connectingBox.StartConnectTimeoutTimer(CSteamID.Nil);
                 }
             });
         }
 
+        public static void UnlockNewGameIfLan(NewGameBox box)
+        {
+            EnsureNewGame(box);
+            Transform child = FindChild(box.transform, NewToggleName);
+            if (child != null)
+            {
+                child.gameObject.SetActive(true);
+            }
+
+            bool lan = ReadNewGameLan(box);
+            AstralSettings.EnableLan = lan;
+            if (!lan || box == null)
+            {
+                return;
+            }
+
+            AccessTools.Field(typeof(NewGameBox), "multiplayerAllowed").SetValue(box, true);
+            Text offline = GetPrivate<Text>(box, "offlineText");
+            if (offline != null)
+            {
+                offline.gameObject.SetActive(false);
+            }
+
+            RequestJoinAuthSetting auth = box.CheckAuthSettingFromDropdown();
+            Toggle friendly = GetPrivate<Toggle>(box, "toggle_FriendlyFire");
+            InputField password = GetPrivate<InputField>(box, "inputfield_Password");
+            if (friendly != null)
+            {
+                friendly.gameObject.SetActive(auth != RequestJoinAuthSetting.ALLOW_NONE);
+            }
+
+            if (password != null)
+            {
+                password.gameObject.SetActive(auth != RequestJoinAuthSetting.ALLOW_NONE && auth != RequestJoinAuthSetting.INVITE_ONLY);
+            }
+
+            InputField name = GetPrivate<InputField>(box, "inputfield_GameName");
+            Text feedback = GetPrivate<Text>(box, "text_nameFeedback");
+            Button create = GetPrivate<Button>(box, "createGameButton");
+            GameObject createText = GetPrivate<GameObject>(box, "createGameText");
+            bool nameOk = name != null && !string.IsNullOrEmpty(name.text) && (feedback == null || string.IsNullOrEmpty(feedback.text));
+            if (create != null && nameOk)
+            {
+                create.interactable = true;
+                if (createText != null)
+                {
+                    createText.SetActive(true);
+                }
+            }
+        }
+
+        public static void UnlockLoadGameIfLan(LoadGameBox box)
+        {
+            EnsureLoadGame(box);
+            Transform child = FindChild(box.transform, LoadToggleName);
+            if (child != null)
+            {
+                child.gameObject.SetActive(true);
+            }
+
+            bool lan = ReadLoadGameLan(box);
+            AstralSettings.EnableLan = lan;
+            if (!lan || box == null)
+            {
+                return;
+            }
+
+            AccessTools.Field(typeof(LoadGameBox), "multiplayerAllowed").SetValue(box, true);
+            Text offline = GetPrivate<Text>(box, "offlineText");
+            if (offline != null)
+            {
+                offline.gameObject.SetActive(false);
+            }
+
+            RequestJoinAuthSetting auth = box.CheckAuthSettingFromDropdown();
+            Toggle friendly = GetPrivate<Toggle>(box, "allowFriendlyFireToggle");
+            InputField password = GetPrivate<InputField>(box, "inputfield_Password");
+            if (friendly != null)
+            {
+                friendly.gameObject.SetActive(auth != RequestJoinAuthSetting.ALLOW_NONE);
+            }
+
+            if (password != null)
+            {
+                password.gameObject.SetActive(auth != RequestJoinAuthSetting.ALLOW_NONE && auth != RequestJoinAuthSetting.INVITE_ONLY);
+            }
+
+            LoadGame_Selection selected = GetPrivate<LoadGame_Selection>(box, "selectedGame");
+            Button load = GetPrivate<Button>(box, "loadButton");
+            GameObject loadText = GetPrivate<GameObject>(box, "loadGameText");
+            bool loadable = selected != null && selected.IsSelectionLoadable;
+            if (load != null && loadable)
+            {
+                load.interactable = true;
+                if (loadText != null)
+                {
+                    loadText.SetActive(true);
+                }
+            }
+        }
+
         public static void SyncNewGameVisibility(NewGameBox box)
         {
-            Toggle source = GetPrivate<Toggle>(box, "toggle_FriendlyFire");
-            Transform child = FindChild(box.transform, NewToggleName);
-            if (source != null && child != null)
-            {
-                child.gameObject.SetActive(source.gameObject.activeSelf);
-            }
+            UnlockNewGameIfLan(box);
         }
 
         public static void SyncLoadGameVisibility(LoadGameBox box)
         {
-            Toggle source = GetPrivate<Toggle>(box, "allowFriendlyFireToggle");
-            Transform child = FindChild(box.transform, LoadToggleName);
-            if (source != null && child != null)
-            {
-                child.gameObject.SetActive(source.gameObject.activeSelf);
-            }
+            UnlockLoadGameIfLan(box);
         }
 
         public static bool ReadNewGameLan(NewGameBox box)

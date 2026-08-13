@@ -7,17 +7,16 @@ namespace AstralRaftNet
     {
         private static void Postfix(NewGameBox __instance)
         {
-            AstralMenuUi.EnsureNewGame(__instance);
-            AstralMenuUi.SyncNewGameVisibility(__instance);
+            AstralMenuUi.UnlockNewGameIfLan(__instance);
         }
     }
 
-    [HarmonyPatch(typeof(NewGameBox), nameof(NewGameBox.OnAllowFriendsToggle))]
-    internal static class Patch_NewGameAuth
+    [HarmonyPatch(typeof(NewGameBox), "Update")]
+    internal static class Patch_NewGameUpdate
     {
         private static void Postfix(NewGameBox __instance)
         {
-            AstralMenuUi.SyncNewGameVisibility(__instance);
+            AstralMenuUi.UnlockNewGameIfLan(__instance);
         }
     }
 
@@ -35,17 +34,16 @@ namespace AstralRaftNet
     {
         private static void Postfix(LoadGameBox __instance)
         {
-            AstralMenuUi.EnsureLoadGame(__instance);
-            AstralMenuUi.SyncLoadGameVisibility(__instance);
+            AstralMenuUi.UnlockLoadGameIfLan(__instance);
         }
     }
 
-    [HarmonyPatch(typeof(LoadGameBox), nameof(LoadGameBox.OnAllowFriendsToggle))]
-    internal static class Patch_LoadGameAuth
+    [HarmonyPatch(typeof(LoadGameBox), "Update")]
+    internal static class Patch_LoadGameUpdate
     {
         private static void Postfix(LoadGameBox __instance)
         {
-            AstralMenuUi.SyncLoadGameVisibility(__instance);
+            AstralMenuUi.UnlockLoadGameIfLan(__instance);
         }
     }
 
@@ -57,5 +55,4 @@ namespace AstralRaftNet
             AstralSettings.EnableLan = AstralMenuUi.ReadLoadGameLan(__instance);
         }
     }
-
 }

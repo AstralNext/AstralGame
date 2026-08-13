@@ -6,7 +6,7 @@ namespace AstralRaftNet
     {
         private static AstralOverlay _instance;
         private bool _visible;
-        private string _address = "127.0.0.1:6488";
+        private string _address = string.Empty;
         private string _password = string.Empty;
         private string _portText = "6488";
         private Vector2 _logScroll;
@@ -24,6 +24,10 @@ namespace AstralRaftNet
         private void Awake()
         {
             _instance = this;
+            if (!string.IsNullOrEmpty(AstralSettings.Address))
+            {
+                _address = AstralSettings.Address;
+            }
         }
 
         private void Update()

@@ -6,7 +6,8 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <OutputPath>..\bin\plugin\</OutputPath>
-    <RaftManaged>E:\Raft\Raft_Data\Managed</RaftManaged>
+    <RaftManaged Condition="'$(RaftManaged)' == '' AND Exists('C:\Users\baika\Downloads\cs\Assembly-CSharp.dll')">C:\Users\baika\Downloads\cs</RaftManaged>
+    <RaftManaged Condition="'$(RaftManaged)' == '' AND Exists('E:\Raft\Raft_Data\Managed\Assembly-CSharp.dll')">E:\Raft\Raft_Data\Managed</RaftManaged>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Lib.Harmony" Version="2.2.2" />
@@ -21,8 +22,20 @@
       <HintPath>$(RaftManaged)\Assembly-CSharp.dll</HintPath>
       <Private>false</Private>
     </Reference>
-    <Reference Include="Assembly-CSharp-firstpass">
-      <HintPath>$(RaftManaged)\Assembly-CSharp-firstpass.dll</HintPath>
+    <Reference Include="com.rlabrecque.steamworks.net">
+      <HintPath>$(RaftManaged)\com.rlabrecque.steamworks.net.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="PlayFab">
+      <HintPath>$(RaftManaged)\PlayFab.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Unity.Collections">
+      <HintPath>$(RaftManaged)\Unity.Collections.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Unity.Netcode.Runtime">
+      <HintPath>$(RaftManaged)\Unity.Netcode.Runtime.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="UnityEngine">

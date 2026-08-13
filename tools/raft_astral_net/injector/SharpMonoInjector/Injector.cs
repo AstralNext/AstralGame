@@ -47,26 +47,19 @@ namespace SharpMonoInjector
 
         public bool Is64Bit { get; private set; }
 
-        public Injector(string processName)
+        public static Action<string> Log;
+
+        private static void Trace(string message)
         {
-            Process process = Process.GetProcesses().FirstOrDefault(p => p.ProcessName.Equals(processName, StringComparison.OrdinalIgnoreCase));
-            if (process == null)
+            if (Log != null)
             {
-                throw new InjectorException("Could not find a process with the name " + processName);
+                Log(message);
             }
+        }
 
-            if ((_handle = Native.OpenProcess(ProcessAccessRights.PROCESS_ALL_ACCESS, false, process.Id)) == IntPtr.Zero)
-            {
-                throw new InjectorException("Failed to open process", new Win32Exception(Marshal.GetLastWin32Error()));
-            }
-
-            Is64Bit = ProcessUtils.Is64BitProcess(_handle);
-            if (!ProcessUtils.GetMonoModule(_handle, out _mono))
-            {
-                throw new InjectorException("Failed to find mono.dll in the target process");
-            }
-
-            _memory = new Memory(_handle);
+        public Injector(string processName)
+            : this(RequireProcess(processName).Id)
+        {
         }
 
         public Injector(int processId)
@@ -79,16 +72,41 @@ namespace SharpMonoInjector
 
             if ((_handle = Native.OpenProcess(ProcessAccessRights.PROCESS_ALL_ACCESS, false, process.Id)) == IntPtr.Zero)
             {
-                throw new InjectorException("Failed to open process", new Win32Exception(Marshal.GetLastWin32Error()));
+                throw new InjectorException("Failed to open process " + processId + " (try run as admin?)", new Win32Exception(Marshal.GetLastWin32Error()));
             }
 
-            Is64Bit = ProcessUtils.Is64BitProcess(_handle);
-            if (!ProcessUtils.GetMonoModule(_handle, out _mono))
+            try
             {
-                throw new InjectorException("Failed to find mono.dll in the target process");
+                Is64Bit = ProcessUtils.Is64BitProcess(_handle);
+                if (!Is64Bit)
+                {
+                    throw new InjectorException("32-bit Unity is not supported");
+                }
+
+                if (!ProcessUtils.GetMonoModule(_handle, out _mono))
+                {
+                    throw new InjectorException("Failed to find mono.dll in the target process");
+                }
+
+                Trace("OpenProcess ok pid=" + processId + " mono=0x" + _mono.ToInt64().ToString("X"));
+                _memory = new Memory(_handle);
+            }
+            catch
+            {
+                Native.CloseHandle(_handle);
+                throw;
+            }
+        }
+
+        private static Process RequireProcess(string processName)
+        {
+            Process process = Process.GetProcesses().FirstOrDefault(p => p.ProcessName.Equals(processName, StringComparison.OrdinalIgnoreCase));
+            if (process == null)
+            {
+                throw new InjectorException("Could not find a process with the name " + processName);
             }
 
-            _memory = new Memory(_handle);
+            return process;
         }
 
         public void Dispose()
@@ -128,14 +146,20 @@ namespace SharpMonoInjector
             }
 
             ObtainMonoExports();
+            Trace("mono exports ok");
             _rootDomain = GetRootDomain();
+            Trace("root domain=0x" + _rootDomain.ToInt64().ToString("X"));
             IntPtr rawImage = OpenImageFromData(rawAssembly);
+            Trace("image=0x" + rawImage.ToInt64().ToString("X"));
             _attach = true;
             IntPtr assembly = OpenAssemblyFromImage(rawImage);
+            Trace("assembly=0x" + assembly.ToInt64().ToString("X"));
             IntPtr image = GetImageFromAssembly(assembly);
             IntPtr @class = GetClassFromName(image, @namespace, className);
             IntPtr method = GetMethodFromName(@class, methodName);
+            Trace("invoke " + @namespace + "." + className + "." + methodName);
             RuntimeInvoke(method);
+            Trace("invoke returned ok");
             return assembly;
         }
 
@@ -227,7 +251,7 @@ namespace SharpMonoInjector
             IntPtr exc = Is64Bit ? (IntPtr)_memory.ReadLong(excPtr) : (IntPtr)_memory.ReadInt(excPtr);
             if (exc != IntPtr.Zero)
             {
-                Console.Error.WriteLine("mono_runtime_invoke reported exc=" + exc.ToString("X") + " (Unity mono layout may make this a false positive)");
+                Trace("mono_runtime_invoke reported exc=" + exc.ToString("X") + " (Unity mono layout may make this a false positive)");
             }
         }
 

@@ -96,8 +96,6 @@
 
 ### Raft
 
-进 Astral 房间后自动检测 `Raft.exe`，用 Rust mono 注入器注入 `AstralRaftNet.dll`。游戏首页右上角显示「Astral已注入」。房主勾选「启用Astral局域网」后 UDP `255.255.255.255:6489` 广播房间；加入世界列表改为 LAN 发现。
-
 ```json
 {
   "type": "udp_broadcast",
