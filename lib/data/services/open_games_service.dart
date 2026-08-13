@@ -18,7 +18,7 @@ import 'package:signals/signals_core.dart';
 
 /// 局域网游戏发现 + 经 EasyTier peer-RPC 向房间同步「开放游戏」列表。
 ///
-/// 发现 / 组播注入 / 127 转发 **仅 Windows**。其它平台只收通道、展示列表。
+/// 发现 / 组播注入 / 本机转发 **仅 Windows**。其它平台只收通道、展示列表。
 /// 发现方式由 [LanGameDiscovererRegistry] 按 JSON `type` 分发，与 ET 宣告解耦。
 class OpenGamesService {
   OpenGamesService(
@@ -38,7 +38,7 @@ class OpenGamesService {
   final listings = signal<List<OpenGameListing>>(const []);
   final LanLocalRelay _localRelay = LanLocalRelay();
 
-  /// 通道目标在本机的 127 转发 / 组播注入状态（UI 绿点）。
+  /// 通道目标在本机的转发 / 组播注入状态（UI 绿点）。
   late final relayStatuses = _localRelay.statuses;
 
   String? _roomGameId;

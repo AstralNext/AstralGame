@@ -12,7 +12,9 @@ import 'package:astral_game/utils/logger.dart';
 import 'package:astral_rust_core/astral_rust_core.dart';
 import 'package:signals/signals_core.dart';
 
-/// 只跟「开放游戏」通道走：listing 出现 → 本机组播 + 127 转发；消失立刻关。
+const _forwardListenHost = '0.0.0.0';
+
+/// 只跟「开放游戏」通道走：listing 出现 → 本机组播 + 0.0.0.0 随机端口转发；消失立刻关。
 ///
 /// 仅 Windows。不监听本机组播；发现仍由房主侧 discoverer 负责，本类只消费通道目标。
 class LanLocalRelay {
@@ -48,7 +50,7 @@ class LanLocalRelay {
     for (final spec in wanted.values) {
       final prev = _active[spec.key];
       if (prev != null && prev.spec.sameRuntime(spec)) {
-        prev.spec = spec;
+        prev.spec = _keepListen(prev.spec, spec);
         continue;
       }
       if (prev != null) await _stopOne(_active.remove(spec.key));
@@ -57,9 +59,10 @@ class LanLocalRelay {
         _active[spec.key] = next;
         appLogger.i(
           '[LanRelay] 通道触发 ${spec.key} '
-          'inject=${spec.inject} forward=${spec.forward} '
-          'mcast=${spec.injectMulticast} loop=${spec.injectLoopback} '
-          '${spec.bindHost}:${spec.gamePort} → ${spec.targetHost}:${spec.targetPort}',
+          'inject=${next.spec.inject} forward=${next.spec.forward} '
+          'mcast=${next.spec.injectMulticast} loop=${next.spec.injectLoopback} '
+          '${next.spec.listenHost}:${next.spec.listenPort} → '
+          '${next.spec.targetHost}:${next.spec.targetPort}',
         );
       }
     }
@@ -110,7 +113,7 @@ class LanLocalRelay {
     }
     final parser = (entry.parser ?? '').trim();
     final canBuild = parser.isNotEmpty && lanPayloadBuilderOf(parser) != null;
-    // 有重建器就注入/转发；本机只组播，同伴再 127 单播 + TCP。
+    // 有重建器就注入/转发；本机只组播，同伴再回环单播 + TCP。
     final inject = canBuild;
     final forward = canBuild && !listing.isSelf;
     if (!inject && !forward) return null;
@@ -118,14 +121,13 @@ class LanLocalRelay {
     final title = (listing.motd?.trim().isNotEmpty == true)
         ? listing.motd!.trim()
         : listing.label;
-    Uint8List? payload;
-    if (inject) {
-      payload = lanPayloadBuilderOf(parser)?.call(
-        title: title,
-        port: listing.port,
-      );
-    }
-    final hasPayload = payload != null && payload.isNotEmpty;
+    final probe = inject
+        ? lanPayloadBuilderOf(parser)?.call(
+            title: title,
+            port: listing.port,
+          )
+        : null;
+    final hasPayload = probe != null && probe.isNotEmpty;
     final wantMcast = inject && hasPayload;
     final wantLoop = inject && hasPayload && !listing.isSelf;
     if (!wantMcast && !wantLoop && !forward) return null;
@@ -136,13 +138,15 @@ class LanLocalRelay {
       injectMulticast: wantMcast,
       injectLoopback: wantLoop,
       forward: forward,
-      bindHost: '127.0.0.1',
-      gamePort: listing.port,
+      listenHost: _forwardListenHost,
+      listenPort: 0,
       targetHost: listing.ipv4,
       targetPort: listing.port,
       multicast: (entry.multicast ?? '').trim(),
       multicastPort: entry.multicastPort,
-      payload: payload,
+      title: title,
+      parser: parser,
+      payload: forward ? null : probe,
     );
   }
 
@@ -165,23 +169,23 @@ class LanLocalRelay {
     return entries.first;
   }
 
-  Future<RawDatagramSocket> _uniOn(String bindHost) async {
+  Future<RawDatagramSocket> _uniOn() async {
     final existing = _uniSocket;
-    if (existing != null && existing.address.address == bindHost) {
-      return existing;
-    }
-    existing?.close();
-    final socket = await RawDatagramSocket.bind(InternetAddress(bindHost), 0);
+    if (existing != null) return existing;
+    final socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
     socket.broadcastEnabled = true;
     _uniSocket = socket;
     return socket;
   }
 
+  int _advertisePort(_RelaySpec spec) =>
+      spec.listenPort > 0 ? spec.listenPort : spec.targetPort;
+
   void _refreshInjectGuard() {
     LanInjectGuard.replaceEntries([
       for (final s in _active.values)
         if (s.spec.inject)
-          (s.spec.gamePort, _motdFromPayload(s.spec.payload)),
+          (_advertisePort(s.spec), _motdFromPayload(s.spec.payload)),
     ]);
   }
 
@@ -198,21 +202,69 @@ class LanLocalRelay {
     return s.trim();
   }
 
-  Future<_ActiveRelay?> _startOne(_RelaySpec spec) async {
-    BigInt? forwardIndex;
-    if (spec.forward) {
-      final listen = '${spec.bindHost}:${spec.gamePort}';
-      final target = '${spec.targetHost}:${spec.targetPort}';
+  Future<int> _allocateListenPort() async {
+    final socket = await ServerSocket.bind(InternetAddress.anyIPv4, 0);
+    final port = socket.port;
+    await socket.close();
+    return port;
+  }
+
+  Future<(BigInt index, int port)?> _startTcpForward(String target) async {
+    Object? lastError;
+    for (var i = 0; i < 3; i++) {
+      final port = await _allocateListenPort();
+      final listen = '$_forwardListenHost:$port';
       try {
-        forwardIndex = await createForwardServer(
+        final index = await createForwardServer(
           listenAddr: listen,
           forwardAddr: target,
         );
-        appLogger.i('[LanRelay] TCP $listen → $target (index=$forwardIndex)');
+        return (index, port);
       } catch (e) {
-        appLogger.w('[LanRelay] TCP 转发失败 $listen → $target: $e');
+        lastError = e;
+        appLogger.w('[LanRelay] TCP 绑定 $listen 失败: $e');
       }
     }
+    appLogger.w('[LanRelay] TCP 转发失败 → $target: $lastError');
+    return null;
+  }
+
+  Uint8List? _payloadFor(_RelaySpec spec, int advertisePort) {
+    if (!spec.inject || spec.parser.isEmpty) return spec.payload;
+    return lanPayloadBuilderOf(spec.parser)?.call(
+          title: spec.title,
+          port: advertisePort,
+        ) ??
+        spec.payload;
+  }
+
+  _RelaySpec _keepListen(_RelaySpec prev, _RelaySpec next) {
+    final port = prev.listenPort;
+    final payload = next.inject && port > 0 && next.title != prev.title
+        ? _payloadFor(next, port)
+        : (prev.payload ?? next.payload);
+    return next.copyWith(listenPort: port, payload: payload);
+  }
+
+  Future<_ActiveRelay?> _startOne(_RelaySpec spec) async {
+    BigInt? forwardIndex;
+    var listenPort = spec.listenPort;
+    var payload = spec.payload;
+    if (spec.forward) {
+      final target = '${spec.targetHost}:${spec.targetPort}';
+      final started = await _startTcpForward(target);
+      if (started != null) {
+        forwardIndex = started.$1;
+        listenPort = started.$2;
+        payload = _payloadFor(spec, listenPort);
+        appLogger.i(
+          '[LanRelay] TCP $_forwardListenHost:$listenPort → $target '
+          '(index=$forwardIndex)',
+        );
+      }
+    }
+    spec = spec.copyWith(listenPort: listenPort, payload: payload);
+
     BigInt? mcastIndex;
     if (spec.injectMulticast &&
         spec.multicast.isNotEmpty &&
@@ -235,6 +287,7 @@ class LanLocalRelay {
         );
       }
     }
+    if (spec.forward && forwardIndex == null) return null;
     if (!spec.inject && forwardIndex == null && mcastIndex == null) return null;
     return _ActiveRelay(
       spec: spec,
@@ -269,7 +322,8 @@ class LanLocalRelay {
       for (final e in _active.entries)
         e.key: LanRelayStatus(
           listingKey: e.key,
-          localEndpoint: '${e.value.spec.bindHost}:${e.value.spec.gamePort}',
+          localEndpoint:
+              '${e.value.spec.listenHost}:${e.value.spec.listenPort}',
           remoteEndpoint:
               '${e.value.spec.targetHost}:${e.value.spec.targetPort}',
           inject: e.value.spec.inject,
@@ -298,11 +352,11 @@ class LanLocalRelay {
       final payload = spec.payload;
       if (payload == null || payload.isEmpty) continue;
       try {
-        final uni = await _uniOn(spec.bindHost);
+        final uni = await _uniOn();
         uni.send(
           payload,
-          InternetAddress(spec.bindHost),
-          spec.multicastPort > 0 ? spec.multicastPort : spec.gamePort,
+          InternetAddress.loopbackIPv4,
+          spec.multicastPort > 0 ? spec.multicastPort : _advertisePort(spec),
         );
       } catch (e) {
         appLogger.w('[LanRelay] 回环注入失败 ${spec.key}: $e');
@@ -328,12 +382,14 @@ class _RelaySpec {
     required this.injectMulticast,
     required this.injectLoopback,
     required this.forward,
-    required this.bindHost,
-    required this.gamePort,
+    required this.listenHost,
+    required this.listenPort,
     required this.targetHost,
     required this.targetPort,
     required this.multicast,
     required this.multicastPort,
+    required this.title,
+    required this.parser,
     required this.payload,
   });
 
@@ -342,26 +398,49 @@ class _RelaySpec {
   final bool injectMulticast;
   final bool injectLoopback;
   final bool forward;
-  final String bindHost;
-  final int gamePort;
+  final String listenHost;
+  final int listenPort;
   final String targetHost;
   final int targetPort;
   final String multicast;
   final int multicastPort;
+  final String title;
+  final String parser;
   final Uint8List? payload;
+
+  _RelaySpec copyWith({
+    int? listenPort,
+    Uint8List? payload,
+  }) {
+    return _RelaySpec(
+      key: key,
+      inject: inject,
+      injectMulticast: injectMulticast,
+      injectLoopback: injectLoopback,
+      forward: forward,
+      listenHost: listenHost,
+      listenPort: listenPort ?? this.listenPort,
+      targetHost: targetHost,
+      targetPort: targetPort,
+      multicast: multicast,
+      multicastPort: multicastPort,
+      title: title,
+      parser: parser,
+      payload: payload ?? this.payload,
+    );
+  }
 
   bool sameRuntime(_RelaySpec o) =>
       inject == o.inject &&
       injectMulticast == o.injectMulticast &&
       injectLoopback == o.injectLoopback &&
       forward == o.forward &&
-      bindHost == o.bindHost &&
-      gamePort == o.gamePort &&
+      listenHost == o.listenHost &&
       targetHost == o.targetHost &&
       targetPort == o.targetPort &&
       multicast == o.multicast &&
       multicastPort == o.multicastPort &&
-      _bytesEq(payload, o.payload);
+      parser == o.parser;
 }
 
 class _ActiveRelay {
@@ -375,13 +454,4 @@ class _ActiveRelay {
   final BigInt? forwardIndex;
   final BigInt? mcastIndex;
   final bool forwardOk;
-}
-
-bool _bytesEq(Uint8List? a, Uint8List? b) {
-  if (identical(a, b)) return true;
-  if (a == null || b == null || a.length != b.length) return false;
-  for (var i = 0; i < a.length; i++) {
-    if (a[i] != b[i]) return false;
-  }
-  return true;
 }

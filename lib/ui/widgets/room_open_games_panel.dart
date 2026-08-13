@@ -235,18 +235,6 @@ class _OpenGameTile extends StatelessWidget {
                         fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                     ),
-                    if (relaying) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        '${relay!.localEndpoint} → ${relay!.remoteEndpoint}'
-                        '${relay!.forward ? ' · TCP' : ''}'
-                        '${relay!.inject ? ' · 组播' : ''}',
-                        style: textTheme.labelSmall?.copyWith(
-                          color: liveColor,
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
-                      ),
-                    ],
                   ],
                 ),
               ),

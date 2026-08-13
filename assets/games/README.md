@@ -17,7 +17,7 @@
 }
 ```
 
-**仅 Windows** 做发现 / 组播注入 / 127 转发；其它平台只显示房间列表（配置回退 `windows`）。
+**仅 Windows** 做发现 / 组播注入 / 本机转发（`0.0.0.0` 随机端口）；其它平台只显示房间列表（配置回退 `windows`）。
 
 ## 图片字段 `icon_asset` / `grid_asset`
 
@@ -39,7 +39,7 @@
 
 可选：`title`（`{player}` `{game}` `{label}` `{motd}`）、`id`、`label`、`port`（probe 回退端口）。
 
-有 `parser` 且能重建载荷 → 默认本机组播 + 同伴 127 注入/TCP。不必再写 inject/forward 开关。
+有 `parser` 且能重建载荷 → 默认本机组播 + 同伴回环注入 / `0.0.0.0` 随机端口 TCP。不必再写 inject/forward 开关。
 
 ### Minecraft
 
