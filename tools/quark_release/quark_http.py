@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import http.client
 import json
 import mimetypes
 import os
@@ -17,6 +18,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 API = "https://open-api-drive.quark.cn"
@@ -341,7 +343,7 @@ class QuarkDrive:
             "hash_update": False,
             "same_path_file_reuse": True,
             "device_id": self.cfg["device_id"],
-            "device_name": "github-actions",
+            "device_name": "Astral Game CI",
         }
         if self.cfg.get("user_id"):
             body.update(self._proof(path, size, pre_headers["x-pan-token"]))
@@ -388,24 +390,12 @@ class QuarkDrive:
                     raise SystemExit(f"no upload url for part {part['no']}")
                 f.seek(part["start"])
                 chunk = f.read(part["end"] - part["start"])
-                put_headers = {
-                    **common,
-                    "Authorization": (info.get("signature_info") or {}).get("signature")
+                auth = (
+                    (info.get("signature_info") or {}).get("signature")
                     or info.get("authorization")
-                    or "",
-                }
-                put = Request(
-                    info["upload_url"],
-                    data=chunk,
-                    method="PUT",
-                    headers={k: str(v) for k, v in put_headers.items() if v},
+                    or ""
                 )
-                with urlopen(put, timeout=600) as resp:
-                    etag = (resp.headers.get("ETag") or resp.headers.get("etag") or "").strip().strip('"')
-                    if resp.status < 200 or resp.status >= 300:
-                        raise SystemExit(f"PUT part {part['no']} status {resp.status}")
-                if not etag:
-                    raise SystemExit(f"PUT part {part['no']} missing etag")
+                etag = _put_oss_chunk(str(info["upload_url"]), chunk, common, str(auth))
                 uploaded.append({"part_number": part["no"], "etag": etag})
                 print(
                     f"  part {part['no']}/{len(parts)} {path.name} {part['end'] - part['start']}B",
@@ -470,6 +460,34 @@ class QuarkDrive:
         if not url:
             raise SystemExit("share: empty url")
         return url
+
+
+def _put_oss_chunk(url: str, chunk: bytes, common: dict[str, Any], authorization: str) -> str:
+    """PUT one part to OSS. Do not invent Content-Type; signed headers must match exactly."""
+    parsed = urlparse(url)
+    headers = {str(k): str(v) for k, v in common.items() if v not in (None, "")}
+    if authorization:
+        headers["Authorization"] = authorization
+    headers["Content-Length"] = str(len(chunk))
+    conn_cls = http.client.HTTPSConnection if parsed.scheme == "https" else http.client.HTTPConnection
+    host = parsed.hostname or ""
+    port = parsed.port
+    path = parsed.path + (f"?{parsed.query}" if parsed.query else "")
+    conn = conn_cls(host, port, timeout=600)
+    try:
+        conn.request("PUT", path, body=chunk, headers=headers)
+        resp = conn.getresponse()
+        body = resp.read()
+        if resp.status < 200 or resp.status >= 300:
+            raise SystemExit(
+                f"PUT chunk HTTP {resp.status}: {body[:400]!r}"
+            )
+        etag = (resp.getheader("ETag") or resp.getheader("etag") or "").strip().strip('"')
+        if not etag:
+            raise SystemExit("PUT chunk missing etag")
+        return etag
+    finally:
+        conn.close()
 
 
 def _quote(value: str) -> str:

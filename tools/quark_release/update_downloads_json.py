@@ -37,7 +37,7 @@ def main() -> int:
     p.add_argument("--path", default="public/downloads.json")
     p.add_argument("--version", required=True)
     p.add_argument("--url", required=True)
-    p.add_argument("--branch", default="main")
+    p.add_argument("--branch", default="master")
     args = p.parse_args()
 
     version = args.version if args.version.startswith("v") else f"v{args.version}"
