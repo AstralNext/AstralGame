@@ -30,12 +30,6 @@ LanPayloadParser? lanPayloadParserOf(String name) {
   return _lanPayloadParsers[key];
 }
 
-void registerLanPayloadParser(String name, LanPayloadParser parser) {
-  final key = name.trim().toLowerCase();
-  if (key.isEmpty) return;
-  _lanPayloadParsers[key] = parser;
-}
-
 /// Mindustry `NetworkIO.writeServerData()`（UTF-8 长度前缀字符串 + big-endian）。
 LanPayloadHit? parseMindustryServerPayload(
   Uint8List data, {

@@ -24,13 +24,8 @@ class AppConstants {
   // 默认 IP 地址
   static const String defaultVirtualIp = '';
 
-  // 网络相关
-  static const Duration pollingInterval = Duration(seconds: 3);
   static const Duration pingTimeout = Duration(seconds: 5);
   static const int maxPingLatencyMs = 800;
-
-  // 分享码/房间码 显示长度（用于 UI 截断预览）
-  static const int uuidDisplayLength = 8;
 
   /// 加入历史最多保留条数（最新在前，按分享码去重）。
   static const int maxJoinHistoryEntries = 15;

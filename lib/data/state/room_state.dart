@@ -119,11 +119,6 @@ class RoomState {
     hostOnline.value = value;
   }
 
-  void setConnectedRoomName(String? roomName) {
-    connectedRoomName.value =
-        roomName == null || roomName.trim().isEmpty ? null : roomName.trim();
-  }
-
   void setSelectedRoom(RoomMod? room) {
     selectedRoom.value = room;
     final persistence = _persistence;

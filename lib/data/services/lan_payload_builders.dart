@@ -17,12 +17,6 @@ LanPayloadBuilder? lanPayloadBuilderOf(String name) {
   return _lanPayloadBuilders[key];
 }
 
-void registerLanPayloadBuilder(String name, LanPayloadBuilder builder) {
-  final key = name.trim().toLowerCase();
-  if (key.isEmpty) return;
-  _lanPayloadBuilders[key] = builder;
-}
-
 /// MC LAN：`[MOTD]title[/MOTD][AD]port[/AD]`
 Uint8List? buildMinecraftMotdPayload({
   required String title,

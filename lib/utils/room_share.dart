@@ -139,15 +139,6 @@ String encodeOfflineInvite(RoomInvitePayload payload) {
   return '$kOfflineInvitePrefix$b64';
 }
 
-/// 解析离线邀请；失败返回 null。
-RoomInvitePayload? tryDecodeOfflineInvite(String raw) {
-  try {
-    return decodeOfflineInvite(raw);
-  } catch (_) {
-    return null;
-  }
-}
-
 RoomInvitePayload decodeOfflineInvite(String raw) {
   var text = raw.trim();
   if (text.startsWith(kOfflineInvitePrefix)) {

@@ -61,9 +61,6 @@ class ConnectionService {
   EffectCleanup? _guestPresenceDispose;
   DateTime? _hostMissingSince;
 
-  /// 最近一次创建/加入时生成的 EasyTier TOML（调试弹窗用）。
-  String? lastConfigToml;
-
   /// 最近一次离线邀请串（短码服务失败时的回退）。
   String? lastOfflineInvite;
 
@@ -73,7 +70,6 @@ class ConnectionService {
     required String gameName,
     String? displayName,
   }) async {
-    lastConfigToml = null;
     lastOfflineInvite = null;
     _roomState.setPausedHost(null);
     final hostPeers = _p2pConfig.enabledPeers();
@@ -181,7 +177,6 @@ class ConnectionService {
 
   /// 加入房间：9 位短码。
   Future<ActiveRoomSession> joinWithShortCode(String code) async {
-    lastConfigToml = null;
     final payload = await _shareCodes.fetch(code);
     return _joinWithPayload(payload, shortCode: code.trim());
   }
@@ -190,7 +185,6 @@ class ConnectionService {
     RoomInvitePayload payload, {
     String? shortCode,
   }) async {
-    lastConfigToml = null;
     if (payload.networkSecret.isEmpty) {
       throw StateError('邀请无效：缺少房间密码（请让房主用新版重新分享）');
     }
@@ -319,22 +313,6 @@ class ConnectionService {
     return (shortCode: shortCode, offlineInvite: offline);
   }
 
-  /// 兼容旧调用：只返回短码。
-  Future<String> refreshShareCode() async {
-    final r = await refreshShareInvite();
-    final code = r.shortCode;
-    if (code == null || code.isEmpty) {
-      throw StateError('短码服务不可用，请复制离线邀请码');
-    }
-    return code;
-  }
-
-  Future<void> revokeCurrentShortCode() async {
-    final s = _roomState.session.value;
-    if (s?.shortCode == null || s?.adminToken == null) return;
-    await _shareCodes.revoke(s!.shortCode!, s.adminToken!);
-  }
-
   /// 离开房间：作废短码（若有）并关闭实例。
   Future<void> leaveRoom() async {
     await disconnect(revokeShare: true, pauseHost: false);
@@ -361,7 +339,6 @@ class ConnectionService {
       throw StateError('请先启用至少一个服务器，再恢复房间');
     }
 
-    lastConfigToml = null;
     lastOfflineInvite = null;
 
     final payload = RoomInvitePayload(
@@ -478,7 +455,6 @@ class ConnectionService {
         peersOverride: peersOverride,
         enableUdpBroadcastRelay: udpRelay,
       );
-      lastConfigToml = configToml;
       appLogger.i(
         '[ConnectionService] $purpose 启动实例 network=$networkName '
         'shared_secret=true\n'

@@ -8,9 +8,7 @@ abstract final class AppDimensions {
   static const pagePaddingV = 20.0;
   static const sectionGap = 16.0;
 
-  static const cardShadowBleed = 8.0;
   static const iconSize = 22.0;
-  static const iconSizeLg = 26.0;
 
   static const fadeBaseDelayMs = 60;
   static const fadeDurationMs = 250;
