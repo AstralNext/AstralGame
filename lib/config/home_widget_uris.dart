@@ -1,6 +1,8 @@
+import 'package:astral_game/utils/room_share.dart';
+
 /// Android 桌面小部件点击深链（与 Kotlin [WidgetClickHelper] 约定一致）。
 abstract final class HomeWidgetUris {
-  static const scheme = 'astralgame';
+  static const scheme = kJoinAppScheme;
   static const host = 'widget';
 
   static const pathConnect = '/connect';

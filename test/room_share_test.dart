@@ -63,4 +63,22 @@ void main() {
     expect(extractJoinToken('123456789'), '123456789');
     expect(extractJoinToken('AG1.offlineToken'), 'AG1.offlineToken');
   });
+
+  test('extractJoinToken ignores widget deep links', () {
+    expect(extractJoinToken('astralgame://widget/connect'), isNull);
+    expect(extractJoinToken('astralgame://widget/rooms?code=123456789'), isNull);
+  });
+
+  test('extractJoinToken from www and fragment', () {
+    expect(
+      extractJoinToken('https://www.next.astral.fan/j#123456789'),
+      '123456789',
+    );
+  });
+
+  test('looksLikeJoinToken', () {
+    expect(looksLikeJoinToken('123456789'), isTrue);
+    expect(looksLikeJoinToken('AG1.offlineToken'), isTrue);
+    expect(looksLikeJoinToken('hello'), isFalse);
+  });
 }

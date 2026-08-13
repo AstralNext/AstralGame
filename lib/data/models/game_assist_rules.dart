@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import 'package:astral_game/utils/net_addr.dart';
+
 /// 本地游戏规则目录（UI 元数据 / 网络标志 / 魔法墙 / TCP 转发 / 局域网发现）。
 /// 数据源：`https://astral.fan/gamerules.json`（失败回退本地 asset）。
 class GameAssistRulesCatalog {
@@ -214,30 +216,6 @@ class GameAssistLanGameDiscoverEntry {
       title: _optionalString(json['title']),
     );
   }
-}
-
-/// `224.0.2.60:4445` → host + port。
-({String host, int port})? parseHostPort(String? raw) {
-  final s = (raw ?? '').trim();
-  if (s.isEmpty) return null;
-  final i = s.lastIndexOf(':');
-  if (i <= 0 || i == s.length - 1) return (host: s, port: 0);
-  final port = int.tryParse(s.substring(i + 1).trim());
-  if (port == null || port <= 0 || port > 65535) {
-    return (host: s, port: 0);
-  }
-  return (host: s.substring(0, i).trim(), port: port);
-}
-
-/// 去掉 CIDR，得到纯 IPv4；无效则 null。
-String? stripIpv4Host(String? raw) {
-  if (raw == null) return null;
-  var s = raw.trim();
-  if (s.isEmpty) return null;
-  final slash = s.indexOf('/');
-  if (slash >= 0) s = s.substring(0, slash).trim();
-  if (s.isEmpty || s == '0.0.0.0') return null;
-  return s;
 }
 
 /// EasyTier / 虚拟网相关开关（按平台）。

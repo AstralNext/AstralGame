@@ -13,6 +13,7 @@ import 'package:astral_game/data/services/peer_rpc/peer_rpc_client.dart';
 import 'package:astral_game/data/services/peer_rpc/peer_rpc_router.dart';
 import 'package:astral_game/utils/lan_title_template.dart';
 import 'package:astral_game/utils/logger.dart';
+import 'package:astral_game/utils/net_addr.dart';
 import 'package:signals/signals_core.dart';
 
 /// 局域网游戏发现 + 经 EasyTier peer-RPC 向房间同步「开放游戏」列表。

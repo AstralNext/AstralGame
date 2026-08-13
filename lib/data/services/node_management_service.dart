@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show listEquals, mapEquals;
 import 'package:get_it/get_it.dart';
 import 'package:signals/signals_core.dart';
+import 'package:astral_game/utils/avatar_hash.dart';
 import 'package:astral_game/utils/client_runtime_info.dart';
 import 'package:astral_game/utils/logger.dart';
 import 'package:astral_game/config/constants.dart';
@@ -35,16 +36,16 @@ class NodeManagementService {
 
   /// 用户节点列表
   final userNodes = signal<List<EnhancedNodeInfo>>([]);
-  
+
   /// 当前实例 ID
   final currentInstanceId = signal<String?>(null);
-  
+
   /// 网络状态
   final networkStatus = signal<KVNetworkStatus?>(null);
-  
+
   /// 当前用户头像
   final currentUserAvatar = signal<Uint8List?>(null);
-  
+
   /// 当前用户名
   final currentUsername = signal<String>('');
 
@@ -566,7 +567,7 @@ class NodeManagementService {
       if (result is Map) {
         final map = Map<String, dynamic>.from(result);
         final name = map['name'] as String?;
-        final avatarHash = (map['avatarHash'] as String?)?.trim();
+        final avatarHash = avatarHashFromParams(map);
         final hasAvatarField = map['avatar'] != null;
         final avatarBytes = hasAvatarField
             ? base64Decode(map['avatar'] as String)

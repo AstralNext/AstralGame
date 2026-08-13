@@ -23,4 +23,10 @@ void main() {
     expect(shouldSendAvatarBytes('other', hash), isTrue);
     expect(shouldSendAvatarBytes(null, null), isFalse);
   });
+
+  test('avatarHashFromParams', () {
+    expect(avatarHashFromParams(null), isNull);
+    expect(avatarHashFromParams({'avatarHash': '  abc  '}), 'abc');
+    expect(avatarHashFromParams({'avatarHash': ''}), isNull);
+  });
 }

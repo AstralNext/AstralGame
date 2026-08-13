@@ -1,4 +1,5 @@
 import 'package:astral_game/data/models/game_assist_rules.dart';
+import 'package:astral_game/utils/net_addr.dart';
 
 /// 房间内某条「开放游戏」宣告（自己或同伴经 ET 发来）。
 class OpenGameListing {

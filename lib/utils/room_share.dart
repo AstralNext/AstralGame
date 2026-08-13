@@ -10,8 +10,6 @@ const String kJoinLegacyHttpsHost = 'astral.fan';
 const String kJoinHttpsPath = '/j';
 const String kJoinAppScheme = 'astralgame';
 
-String roomShareCodeForClipboard(String code) => code.trim();
-
 bool looksLikeShortCode(String raw) =>
     RegExp(r'^\d{9}$').hasMatch(raw.trim());
 
@@ -19,6 +17,17 @@ bool looksLikeOfflineInvite(String raw) {
   final t = raw.trim();
   if (t.startsWith(kOfflineInvitePrefix)) return true;
   return t.length > 40 && RegExp(r'^[A-Za-z0-9_\-+/=]+$').hasMatch(t);
+}
+
+bool looksLikeJoinToken(String raw) =>
+    looksLikeShortCode(raw) || looksLikeOfflineInvite(raw);
+
+bool isJoinHttpsHost(String host) {
+  final h = host.toLowerCase();
+  return h == kJoinHttpsHost ||
+      h == 'www.$kJoinHttpsHost' ||
+      h == kJoinLegacyHttpsHost ||
+      h == 'www.$kJoinLegacyHttpsHost';
 }
 
 /// 统一邀请链接：有短码用短码，否则用离线码。各平台同一条 URL。
@@ -82,27 +91,28 @@ String? extractJoinToken(String raw) {
     }
   }
 
-  if (looksLikeShortCode(text) || looksLikeOfflineInvite(text)) return text;
+  if (looksLikeJoinToken(text)) return text;
   return null;
 }
 
 String? tokenFromJoinUri(Uri uri) {
   final scheme = uri.scheme.toLowerCase();
   final host = uri.host.toLowerCase();
+  final segs = uri.pathSegments.where((s) => s.isNotEmpty).toList();
 
-  String? q() {
+  String? fromQueryOrFragment() {
     final c = uri.queryParameters['c'] ?? uri.queryParameters['code'];
-    final t = (c ?? '').trim();
-    return t.isEmpty ? null : t;
+    final q = (c ?? '').trim();
+    if (q.isNotEmpty) return q;
+    final f = uri.fragment.trim();
+    if (f.isEmpty) return null;
+    return Uri.decodeComponent(f);
   }
 
   if (scheme == kJoinAppScheme || scheme == 'astral') {
-    final query = q();
+    if (host == 'widget') return null;
+    final query = fromQueryOrFragment();
     if (query != null) return query;
-    if (uri.fragment.trim().isNotEmpty) {
-      return Uri.decodeComponent(uri.fragment.trim());
-    }
-    final segs = uri.pathSegments.where((s) => s.isNotEmpty).toList();
     if (host == 'j' || host == 'join') {
       if (segs.isNotEmpty) return Uri.decodeComponent(segs.first);
     }
@@ -112,17 +122,9 @@ String? tokenFromJoinUri(Uri uri) {
     return null;
   }
 
-  final isJoinHost = host == kJoinHttpsHost ||
-      host == 'www.$kJoinHttpsHost' ||
-      host == kJoinLegacyHttpsHost ||
-      host == 'www.$kJoinLegacyHttpsHost';
-  if ((scheme == 'http' || scheme == 'https') && isJoinHost) {
-    final query = q();
+  if ((scheme == 'http' || scheme == 'https') && isJoinHttpsHost(host)) {
+    final query = fromQueryOrFragment();
     if (query != null) return query;
-    if (uri.fragment.trim().isNotEmpty) {
-      return Uri.decodeComponent(uri.fragment.trim());
-    }
-    final segs = uri.pathSegments.where((s) => s.isNotEmpty).toList();
     if (segs.isNotEmpty && segs.first == 'j' && segs.length >= 2) {
       return Uri.decodeComponent(segs.sublist(1).join('/'));
     }

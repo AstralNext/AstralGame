@@ -1,11 +1,13 @@
 import 'dart:async';
 
 import 'package:app_links/app_links.dart';
+import 'package:astral_game/config/home_widget_uris.dart';
 import 'package:astral_game/utils/logger.dart';
 import 'package:astral_game/utils/room_share.dart';
 import 'package:signals/signals_core.dart';
 
 /// 用 app_links 监听 `astralgame://` 与 https://next.astral.fan/j（全平台）。
+/// 小组件深链 `astralgame://widget/...` 由 [HomeWidgetLaunchHandler] 处理。
 class JoinLinkService {
   final pendingToken = signal<String?>(null);
 
@@ -31,30 +33,27 @@ class JoinLinkService {
     _uriSub = null;
   }
 
-  void consume() => pendingToken.value = null;
+  void consume() {
+    pendingToken.value = null;
+    _lastRaw = null;
+  }
 
   void _considerUri(Uri? uri) {
     if (uri == null) return;
+    if (uri.scheme.toLowerCase() == kJoinAppScheme &&
+        uri.host.toLowerCase() == HomeWidgetUris.host) {
+      return;
+    }
     _considerRaw(uri.toString());
   }
 
-  void _considerRaw(String? raw) {
-    final s = (raw ?? '').trim();
+  void _considerRaw(String raw) {
+    final s = raw.trim();
     if (s.isEmpty || s == _lastRaw) return;
+    final token = extractJoinToken(s);
+    if (token == null) return;
     _lastRaw = s;
-    _emit(extractJoinToken(s) ?? s);
-  }
-
-  void _emit(String? token) {
-    final t = (token ?? '').trim();
-    if (t.isEmpty) return;
-    final extracted = extractJoinToken(t);
-    if (extracted == null &&
-        !looksLikeShortCode(t) &&
-        !looksLikeOfflineInvite(t)) {
-      return;
-    }
-    pendingToken.value = extracted ?? t;
-    appLogger.i('[JoinLink] 待加入 ${pendingToken.value}');
+    pendingToken.value = token;
+    appLogger.i('[JoinLink] 待加入 $token');
   }
 }

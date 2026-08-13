@@ -161,7 +161,7 @@ class HomeWidgetSyncService {
     bool inRoom,
   ) {
     if (inRoom) {
-      final active = activeRoomDisplayLabel(roomState);
+      final active = roomState.activeRoomDisplayLabel;
       if (active != null && active.isNotEmpty) return active;
     }
     if (selected == null) {

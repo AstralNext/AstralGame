@@ -1,23 +1,10 @@
-import 'dart:convert';
 import 'dart:math';
-import 'dart:typed_data';
 
 import 'package:astral_game/data/models/server_mod.dart';
 import 'package:astral_game/data/services/app_settings_service.dart';
 import 'package:astral_game/data/state/server_state.dart';
 import 'package:astral_game/utils/logger.dart';
 import 'package:astral_game/utils/runtime_platform.dart';
-import 'package:pointycastle/export.dart';
-
-class RoomShareCodeParts {
-  final String token;
-  final String roomName;
-
-  const RoomShareCodeParts({
-    required this.token,
-    required this.roomName,
-  });
-}
 
 class P2PConfigService {
   final AppSettingsService _appSettings;
@@ -33,45 +20,6 @@ class P2PConfigService {
       buffer.write(alphabet[random.nextInt(alphabet.length)]);
     }
     return buffer.toString();
-  }
-
-  String enabledServersFingerprint({int length = 8}) {
-    final normalized = enabledPeers()
-        .map((p) => _normalizeFullUri(p.uri) ?? p.uri.trim())
-        .toList()
-      ..sort();
-    final digestBytes = _md5(utf8.encode(normalized.join('\n')));
-    final hex = _toHex(digestBytes);
-    if (length <= 0) return '';
-    return hex.substring(0, length.clamp(1, hex.length));
-  }
-
-  String buildRoomShareCode({
-    required String roomName,
-    required String token,
-  }) {
-    return '${token.trim()}_${roomName.trim()}';
-  }
-
-  String normalizeRoomShareCode(String shareCode) {
-    final parts = parseRoomShareCode(shareCode);
-    if (parts == null) return shareCode.trim();
-    return buildRoomShareCode(roomName: parts.roomName, token: parts.token);
-  }
-
-  static final _shareTokenPattern = RegExp(
-    r'^[23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz]{6,20}$',
-  );
-
-  RoomShareCodeParts? parseRoomShareCode(String shareCode) {
-    final trimmed = shareCode.trim();
-    if (trimmed.isEmpty) return null;
-    final underscore = trimmed.indexOf('_');
-    if (underscore <= 0 || underscore >= trimmed.length - 1) return null;
-    final token = trimmed.substring(0, underscore);
-    final roomName = trimmed.substring(underscore + 1).trim();
-    if (roomName.isEmpty || !_shareTokenPattern.hasMatch(token)) return null;
-    return RoomShareCodeParts(token: token, roomName: roomName);
   }
 
   /// 构建 TOML：双方共享 [roomPassword] 作为 network_secret（旧版密码进房）。
@@ -103,8 +51,8 @@ class P2PConfigService {
         enableUdpBroadcastRelay ?? _appSettings.isEnableUdpBroadcastRelay();
     final udpBroadcastFlag =
         RuntimePlatform.operatingSystem == 'windows' && udpRelay
-        ? 'enable_udp_broadcast_relay = true\n'
-        : '';
+            ? 'enable_udp_broadcast_relay = true\n'
+            : '';
 
     final identityBlock = '''
 [network_identity]
@@ -154,41 +102,6 @@ $udpBroadcastFlag
     return out;
   }
 
-  /// 兼容旧调用：仅 URI 列表。
-  List<String> enabledPeerUris() =>
-      enabledPeers().map((p) => p.uri).toList(growable: false);
-
   String _escapeString(String s) =>
       s.replaceAll('\\', r'\\').replaceAll('"', r'\"');
-
-  String? _normalizeFullUri(String raw) {
-    final trimmed = raw.trim();
-    if (trimmed.isEmpty) return null;
-    final hasScheme = RegExp(r'^[a-zA-Z][a-zA-Z0-9+.-]*://').hasMatch(trimmed);
-    if (!hasScheme) return null;
-    final uri = Uri.tryParse(trimmed);
-    if (uri == null || uri.scheme.isEmpty || uri.host.isEmpty) return null;
-    final scheme = uri.scheme.toLowerCase();
-    final host = uri.host.toLowerCase();
-    final portPart = uri.hasPort ? ':${uri.port}' : '';
-    final path = (uri.path.isEmpty || uri.path == '/') ? '' : uri.path;
-    final query = uri.hasQuery ? '?${uri.query}' : '';
-    final fragment = uri.hasFragment ? '#${uri.fragment}' : '';
-    return '$scheme://$host$portPart$path$query$fragment';
-  }
-
-  Uint8List _md5(List<int> bytes) {
-    final d = Digest('MD5');
-    return d.process(Uint8List.fromList(bytes));
-  }
-
-  String _toHex(Uint8List bytes) {
-    const hex = '0123456789abcdef';
-    final buffer = StringBuffer();
-    for (final b in bytes) {
-      buffer.write(hex[b >> 4]);
-      buffer.write(hex[b & 0x0F]);
-    }
-    return buffer.toString();
-  }
 }

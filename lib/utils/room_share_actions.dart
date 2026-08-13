@@ -3,6 +3,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 
+Future<void> copyJoinInvite(BuildContext context, String url) async {
+  final t = url.trim();
+  if (t.isEmpty) return;
+  await Clipboard.setData(ClipboardData(text: t));
+  if (!context.mounted) return;
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(content: Text('邀请链接已复制')),
+  );
+}
+
 /// 手机走系统分享；桌面优先系统分享，失败则复制链接。
 Future<void> shareJoinInvite({
   required BuildContext context,
@@ -10,16 +20,14 @@ Future<void> shareJoinInvite({
   String? gameName,
 }) async {
   if (url.trim().isEmpty) return;
-  final text = joinShareMessage(url, gameName: gameName);
+  final name = (gameName ?? '').trim();
+  final text = joinShareMessage(url, gameName: name);
   try {
-    await Share.share(text, subject: (gameName ?? '').trim().isEmpty
-        ? 'Astral Game'
-        : gameName!.trim());
-  } catch (_) {
-    await Clipboard.setData(ClipboardData(text: url));
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('邀请链接已复制')),
+    await Share.share(
+      text,
+      subject: name.isEmpty ? 'Astral Game' : name,
     );
+  } catch (_) {
+    await copyJoinInvite(context, url);
   }
 }

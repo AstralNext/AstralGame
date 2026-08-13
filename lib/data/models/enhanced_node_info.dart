@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:astral_game/utils/net_addr.dart';
 import 'package:astral_rust_core/p2p_service.dart' show KVNodeInfo;
 
 /// 在 [`KVNodeInfo`] 上叠加 peer-RPC（`user.getInfo`）返回的昵称与头像等资料。
@@ -72,21 +73,9 @@ class EnhancedNodeInfo {
 
   /// 节点是否拥有有效的虚拟网 IPv4（兼容 CIDR：`x.x.x.x/24`）。
   /// 公共服务器、未分配 IP 的节点会返回 `false`。UI 用它决定"IP 文字是否高亮"。
-  bool get hasValidIpv4 {
-    final raw = baseInfo.ipv4.trim();
-    if (raw.isEmpty) return false;
-    final slash = raw.indexOf('/');
-    final ip = (slash >= 0 ? raw.substring(0, slash) : raw).trim();
-    return ip.isNotEmpty && ip != '0.0.0.0';
-  }
+  bool get hasValidIpv4 => stripIpv4Host(baseInfo.ipv4) != null;
 
   /// 节点是否拥有有效的虚拟网 IPv6（兼容 CIDR）。
-  bool get hasValidIpv6 {
-    final raw = baseInfo.ipv6.trim();
-    if (raw.isEmpty) return false;
-    final slash = raw.indexOf('/');
-    final ip = (slash >= 0 ? raw.substring(0, slash) : raw).trim();
-    if (ip.isEmpty || ip == '::') return false;
-    return true;
-  }
+  bool get hasValidIpv6 =>
+      stripCidrHost(baseInfo.ipv6, unspecified: const {'::'}) != null;
 }

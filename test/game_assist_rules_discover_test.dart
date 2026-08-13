@@ -1,4 +1,5 @@
 import 'package:astral_game/data/models/game_assist_rules.dart';
+import 'package:astral_game/utils/net_addr.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

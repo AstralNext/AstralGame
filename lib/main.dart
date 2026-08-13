@@ -29,7 +29,7 @@ Future<void> main() async {
   // Initialize window_manager only on desktop platforms
   if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
     await windowManager.ensureInitialized();
-    
+
     WindowOptions windowOptions = const WindowOptions(
       size: Size(940, 560),
       center: true,

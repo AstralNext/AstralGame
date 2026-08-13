@@ -24,16 +24,16 @@ class UserMethods {
   Future<Map<String, dynamic>> getInfo(dynamic params) async {
     final avatar = _settings.getAvatar();
     final hash = avatarContentHash(avatar);
-    final knownHash = _avatarHashFromParams(params);
+    final knownHash = avatarHashFromParams(params);
     final connectivity = GetIt.I.isRegistered<ConnectivityStatusService>()
         ? GetIt.I<ConnectivityStatusService>().current.value
         : NetworkKind.unknown;
+    var firewall = 'unsupported';
     if (GetIt.I.isRegistered<FirewallService>()) {
-      await GetIt.I<FirewallService>().refreshPrivateProfile();
+      final fw = GetIt.I<FirewallService>();
+      await fw.refreshPrivateProfile();
+      firewall = fw.firewallWireValue();
     }
-    final firewall = GetIt.I.isRegistered<FirewallService>()
-        ? GetIt.I<FirewallService>().firewallWireValue()
-        : 'unsupported';
     return {
       'name': _settings.getUsername(),
       'avatarHash': hash,
@@ -47,14 +47,6 @@ class UserMethods {
       'network': connectivity.wireValue,
       'firewall': firewall,
     };
-  }
-
-  String? _avatarHashFromParams(dynamic params) {
-    if (params is! Map) return null;
-    final raw = params['avatarHash'];
-    if (raw == null) return null;
-    final s = raw.toString().trim();
-    return s.isEmpty ? null : s;
   }
 
   /// 更新用户信息
