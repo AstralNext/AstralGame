@@ -28,7 +28,8 @@ class RoomOpenGamesPanel extends StatelessWidget {
 
     return Watch((context) {
       final entries = openGames.listings.value;
-      final relays = openGames.relayStatuses.value;
+      final showRelay = OpenGamesService.lanAssistEnabled;
+      final relays = showRelay ? openGames.relayStatuses.value : const {};
       final active = openGames.isActive;
 
       if (!active && entries.isEmpty) {
@@ -105,7 +106,8 @@ class RoomOpenGamesPanel extends StatelessWidget {
                             final e = entries[i];
                             return _OpenGameTile(
                               listing: e,
-                              relay: relays[e.key],
+                              relay: showRelay ? relays[e.key] : null,
+                              showAssist: showRelay,
                               onCopy: () => _copy(context, e),
                             );
                           },
@@ -131,11 +133,13 @@ class _OpenGameTile extends StatelessWidget {
   const _OpenGameTile({
     required this.listing,
     this.relay,
+    this.showAssist = false,
     required this.onCopy,
   });
 
   final OpenGameListing listing;
   final LanRelayStatus? relay;
+  final bool showAssist;
   final VoidCallback onCopy;
 
   @override
@@ -156,27 +160,28 @@ class _OpenGameTile extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Padding(
-                padding: const EdgeInsets.only(top: 6, right: 8),
-                child: Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: relaying
-                        ? liveColor
-                        : palette.textTertiary.withValues(alpha: 0.35),
-                    boxShadow: relaying
-                        ? [
-                            BoxShadow(
-                              color: liveColor.withValues(alpha: 0.55),
-                              blurRadius: 6,
-                            ),
-                          ]
-                        : null,
+              if (showAssist)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6, right: 8),
+                  child: Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: relaying
+                          ? liveColor
+                          : palette.textTertiary.withValues(alpha: 0.35),
+                      boxShadow: relaying
+                          ? [
+                              BoxShadow(
+                                color: liveColor.withValues(alpha: 0.55),
+                                blurRadius: 6,
+                              ),
+                            ]
+                          : null,
+                    ),
                   ),
                 ),
-              ),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

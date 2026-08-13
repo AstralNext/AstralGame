@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:astral_game/data/models/game_assist_rules.dart';
 import 'package:astral_game/data/models/lan_relay_status.dart';
 import 'package:astral_game/data/models/open_game_listing.dart';
+import 'package:astral_game/data/services/lan_inject_guard.dart';
 import 'package:astral_game/data/services/lan_payload_builders.dart';
 import 'package:astral_game/utils/logger.dart';
 import 'package:astral_rust_core/astral_rust_core.dart';
@@ -12,10 +14,11 @@ import 'package:signals/signals_core.dart';
 
 /// 只跟「开放游戏」通道走：listing 出现 → 本机组播 + 127 转发；消失立刻关。
 ///
-/// 不监听本机组播。发现仍由房主侧 discoverer 负责；本类只消费通道里的目标。
+/// 仅 Windows。不监听本机组播；发现仍由房主侧 discoverer 负责，本类只消费通道目标。
 class LanLocalRelay {
-  RawDatagramSocket? _socket;
+  RawDatagramSocket? _uniSocket;
   Timer? _tick;
+  DateTime? _lastMcastLogAt;
   final Map<String, _ActiveRelay> _active = {};
 
   /// UI：listing.key → 本机继电器状态。
@@ -25,9 +28,13 @@ class LanLocalRelay {
     required List<OpenGameListing> remotes,
     required List<GameAssistLanGameDiscoverEntry> entries,
   }) async {
+    if (!Platform.isWindows) {
+      await stop();
+      return;
+    }
     final wanted = <String, _RelaySpec>{};
     for (final listing in remotes) {
-      if (listing.isSelf || listing.isExpired) continue;
+      if (listing.isExpired) continue;
       final spec = _specFor(listing, entries);
       if (spec == null) continue;
       wanted[listing.key] = spec;
@@ -51,15 +58,25 @@ class LanLocalRelay {
         appLogger.i(
           '[LanRelay] 通道触发 ${spec.key} '
           'inject=${spec.inject} forward=${spec.forward} '
+          'mcast=${spec.injectMulticast} loop=${spec.injectLoopback} '
           '${spec.bindHost}:${spec.gamePort} → ${spec.targetHost}:${spec.targetPort}',
         );
       }
     }
 
     _publishStatuses();
+    _refreshInjectGuard();
     _ensureTicker();
-    if (_active.values.any((e) => e.spec.inject)) {
+    if (_active.values.any((e) => e.spec.injectLoopback)) {
       unawaited(_beaconOnce());
+    } else if (_active.values.any((e) => e.mcastIndex != null)) {
+      final now = DateTime.now();
+      if (_lastMcastLogAt == null ||
+          now.difference(_lastMcastLogAt!) > const Duration(seconds: 8)) {
+        _lastMcastLogAt = now;
+        final n = _active.values.where((e) => e.mcastIndex != null).length;
+        appLogger.i('[LanRelay] 组播发送中 $n 条 → 224.0.2.60:4445');
+      }
     }
   }
 
@@ -69,11 +86,15 @@ class LanLocalRelay {
     final all = _active.values.toList();
     _active.clear();
     _publishStatuses();
+    LanInjectGuard.clear();
     for (final s in all) {
       await _stopOne(s);
     }
-    _socket?.close();
-    _socket = null;
+    _uniSocket?.close();
+    _uniSocket = null;
+    try {
+      await stopAllMulticastSenders();
+    } catch (_) {}
   }
 
   _RelaySpec? _specFor(
@@ -89,32 +110,38 @@ class LanLocalRelay {
     }
     final parser = (entry.parser ?? '').trim();
     final canBuild = parser.isNotEmpty && lanPayloadBuilderOf(parser) != null;
-    final inject = entry.paramBool('inject_local', canBuild);
-    final forward = entry.paramBool('forward_local', canBuild);
+    // 有重建器就注入/转发；本机只组播，同伴再 127 单播 + TCP。
+    final inject = canBuild;
+    final forward = canBuild && !listing.isSelf;
     if (!inject && !forward) return null;
 
-    final bind = entry.paramString('inject_bind') ?? '127.0.0.1';
     final title = (listing.motd?.trim().isNotEmpty == true)
         ? listing.motd!.trim()
         : listing.label;
     Uint8List? payload;
-    if (inject && canBuild) {
+    if (inject) {
       payload = lanPayloadBuilderOf(parser)?.call(
         title: title,
         port: listing.port,
       );
     }
+    final hasPayload = payload != null && payload.isNotEmpty;
+    final wantMcast = inject && hasPayload;
+    final wantLoop = inject && hasPayload && !listing.isSelf;
+    if (!wantMcast && !wantLoop && !forward) return null;
+
     return _RelaySpec(
       key: listing.key,
-      inject: inject && payload != null && payload.isNotEmpty,
+      inject: wantMcast || wantLoop,
+      injectMulticast: wantMcast,
+      injectLoopback: wantLoop,
       forward: forward,
-      bindHost: bind,
+      bindHost: '127.0.0.1',
       gamePort: listing.port,
       targetHost: listing.ipv4,
       targetPort: listing.port,
       multicast: (entry.multicast ?? '').trim(),
-      multicastPort: entry.multicastPort ?? 0,
-      injectMode: (entry.paramString('inject_mode') ?? 'both').toLowerCase(),
+      multicastPort: entry.multicastPort,
       payload: payload,
     );
   }
@@ -138,19 +165,37 @@ class LanLocalRelay {
     return entries.first;
   }
 
-  Future<RawDatagramSocket> _socketOn(String bindHost) async {
-    final existing = _socket;
+  Future<RawDatagramSocket> _uniOn(String bindHost) async {
+    final existing = _uniSocket;
     if (existing != null && existing.address.address == bindHost) {
       return existing;
     }
     existing?.close();
-    final socket = await RawDatagramSocket.bind(
-      InternetAddress(bindHost),
-      0,
-    );
+    final socket = await RawDatagramSocket.bind(InternetAddress(bindHost), 0);
     socket.broadcastEnabled = true;
-    _socket = socket;
+    _uniSocket = socket;
     return socket;
+  }
+
+  void _refreshInjectGuard() {
+    LanInjectGuard.replaceEntries([
+      for (final s in _active.values)
+        if (s.spec.inject)
+          (s.spec.gamePort, _motdFromPayload(s.spec.payload)),
+    ]);
+  }
+
+  String _motdFromPayload(Uint8List? payload) {
+    if (payload == null || payload.isEmpty) return '';
+    final s = utf8.decode(payload, allowMalformed: true);
+    const open = '[MOTD]';
+    const close = '[/MOTD]';
+    final a = s.indexOf(open);
+    final b = s.indexOf(close);
+    if (a >= 0 && b > a) {
+      return s.substring(a + open.length, b).trim();
+    }
+    return s.trim();
   }
 
   Future<_ActiveRelay?> _startOne(_RelaySpec spec) async {
@@ -168,10 +213,33 @@ class LanLocalRelay {
         appLogger.w('[LanRelay] TCP 转发失败 $listen → $target: $e');
       }
     }
-    if (!spec.inject && forwardIndex == null) return null;
+    BigInt? mcastIndex;
+    if (spec.injectMulticast &&
+        spec.multicast.isNotEmpty &&
+        spec.multicastPort > 0 &&
+        spec.payload != null) {
+      try {
+        mcastIndex = await createMulticastSender(
+          multicastAddr: spec.multicast,
+          port: spec.multicastPort,
+          data: spec.payload!,
+          intervalMs: BigInt.from(1500),
+        );
+        appLogger.i(
+          '[LanRelay] 组播 ${spec.multicast}:${spec.multicastPort} '
+          '(index=$mcastIndex)',
+        );
+      } catch (e) {
+        appLogger.w(
+          '[LanRelay] 组播启动失败 ${spec.multicast}:${spec.multicastPort}: $e',
+        );
+      }
+    }
+    if (!spec.inject && forwardIndex == null && mcastIndex == null) return null;
     return _ActiveRelay(
       spec: spec,
       forwardIndex: forwardIndex,
+      mcastIndex: mcastIndex,
       forwardOk: forwardIndex != null,
     );
   }
@@ -184,6 +252,14 @@ class LanLocalRelay {
         await stopForwardServer(index: idx);
       } catch (e) {
         appLogger.d('[LanRelay] 停止转发失败 index=$idx: $e');
+      }
+    }
+    final midx = session.mcastIndex;
+    if (midx != null) {
+      try {
+        await stopMulticastSender(index: midx);
+      } catch (e) {
+        appLogger.d('[LanRelay] 停止组播失败 index=$midx: $e');
       }
     }
   }
@@ -203,8 +279,8 @@ class LanLocalRelay {
   }
 
   void _ensureTicker() {
-    final needInject = _active.values.any((e) => e.spec.inject);
-    if (!needInject) {
+    final needLoop = _active.values.any((e) => e.spec.injectLoopback);
+    if (!needLoop) {
       _tick?.cancel();
       _tick = null;
       return;
@@ -215,34 +291,31 @@ class LanLocalRelay {
   }
 
   Future<void> _beaconOnce() async {
-    final specs = _active.values.map((e) => e.spec).where((s) => s.inject);
+    final specs =
+        _active.values.map((e) => e.spec).where((s) => s.injectLoopback);
     if (specs.isEmpty) return;
     for (final spec in specs) {
       final payload = spec.payload;
       if (payload == null || payload.isEmpty) continue;
       try {
-        final socket = await _socketOn(spec.bindHost);
-        final mode = spec.injectMode;
-        if (mode == 'loopback' || mode == 'both') {
-          socket.send(
-            payload,
-            InternetAddress(spec.bindHost),
-            spec.multicastPort > 0 ? spec.multicastPort : spec.gamePort,
-          );
-        }
-        if ((mode == 'multicast' || mode == 'both') &&
-            spec.multicast.isNotEmpty &&
-            spec.multicastPort > 0) {
-          try {
-            socket.send(
-              payload,
-              InternetAddress(spec.multicast),
-              spec.multicastPort,
-            );
-          } catch (_) {}
-        }
+        final uni = await _uniOn(spec.bindHost);
+        uni.send(
+          payload,
+          InternetAddress(spec.bindHost),
+          spec.multicastPort > 0 ? spec.multicastPort : spec.gamePort,
+        );
       } catch (e) {
-        appLogger.d('[LanRelay] 注入失败 ${spec.key}: $e');
+        appLogger.w('[LanRelay] 回环注入失败 ${spec.key}: $e');
+      }
+    }
+    final now = DateTime.now();
+    if (_lastMcastLogAt == null ||
+        now.difference(_lastMcastLogAt!) > const Duration(seconds: 8)) {
+      _lastMcastLogAt = now;
+      final mcastN =
+          _active.values.where((e) => e.mcastIndex != null).length;
+      if (mcastN > 0) {
+        appLogger.i('[LanRelay] 组播发送中 $mcastN 条 → 224.0.2.60:4445');
       }
     }
   }
@@ -252,6 +325,8 @@ class _RelaySpec {
   _RelaySpec({
     required this.key,
     required this.inject,
+    required this.injectMulticast,
+    required this.injectLoopback,
     required this.forward,
     required this.bindHost,
     required this.gamePort,
@@ -259,12 +334,13 @@ class _RelaySpec {
     required this.targetPort,
     required this.multicast,
     required this.multicastPort,
-    required this.injectMode,
     required this.payload,
   });
 
   final String key;
   final bool inject;
+  final bool injectMulticast;
+  final bool injectLoopback;
   final bool forward;
   final String bindHost;
   final int gamePort;
@@ -272,11 +348,12 @@ class _RelaySpec {
   final int targetPort;
   final String multicast;
   final int multicastPort;
-  final String injectMode;
   final Uint8List? payload;
 
   bool sameRuntime(_RelaySpec o) =>
       inject == o.inject &&
+      injectMulticast == o.injectMulticast &&
+      injectLoopback == o.injectLoopback &&
       forward == o.forward &&
       bindHost == o.bindHost &&
       gamePort == o.gamePort &&
@@ -284,7 +361,6 @@ class _RelaySpec {
       targetPort == o.targetPort &&
       multicast == o.multicast &&
       multicastPort == o.multicastPort &&
-      injectMode == o.injectMode &&
       _bytesEq(payload, o.payload);
 }
 
@@ -292,10 +368,12 @@ class _ActiveRelay {
   _ActiveRelay({
     required this.spec,
     this.forwardIndex,
+    this.mcastIndex,
     this.forwardOk = false,
   });
   _RelaySpec spec;
   final BigInt? forwardIndex;
+  final BigInt? mcastIndex;
   final bool forwardOk;
 }
 

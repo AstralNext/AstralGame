@@ -7,18 +7,17 @@
 ## 结构
 
 游戏根级放目录元数据（`id` / `name` / `color` / `icon_asset` / `grid_asset` / …）。  
-平台相关配置写在 `platforms.<os>` 下：
+平台相关配置写在 `platforms.<os>` 下；没有特殊规则可以整段省略。
 
 ```json
 "platforms": {
   "windows": {
-    "network": { "enable_udp_broadcast_relay": false },
-    "lan_game_discover": { "...": "..." },
-    "magic_wall": { "...": "..." },
-    "forwards": []
+    "lan_game_discover": { "type": "udp_multicast", "multicast": "224.0.2.60:4445", "parser": "minecraft_motd", "title": "{player} · {game}" }
   }
 }
 ```
+
+**仅 Windows** 做发现 / 组播注入 / 127 转发；其它平台只显示房间列表（配置回退 `windows`）。
 
 ## 图片字段 `icon_asset` / `grid_asset`
 
@@ -30,84 +29,47 @@
 
 ## `lan_game_discover`
 
-主干：**发现 → 虚拟 IP 绑定 → ET 宣告 → 房间列表**。  
-新游戏优先只改 JSON；只有出现全新协议时才加通用 `type` / `parser`。
+有这块即启用。对象 = 一条规则；数组 = 多条。
 
-| type | 含义 | 典型字段 |
-|------|------|----------|
-| `static_port` | 固定端口宣告（默认真听端口才显示） | `port`；`params.require_listening`（默认 true） |
-| `udp_multicast` | 听 UDP 组播再解析 | `multicast` / `multicast_port` / `parser` |
-| `udp_probe` | 主动发探测包再解析回复 | `probe_hex` / `parser` / `multicast`? / `port`? |
+| type | 必填 | 说明 |
+|------|------|------|
+| `static_port` | `port` | 本机该 UDP 端口在听才宣告 |
+| `udp_multicast` | `multicast` `parser` | 听组播再解析 |
+| `udp_probe` | `probe` `parser` | 发探测包再解析回复 |
 
-| parser | 侧 | 游戏 |
-|--------|----|------|
-| `minecraft_motd` | 内核听 / Dart 重建 | MC `[MOTD]…[/MOTD][AD]port[/AD]` |
-| `mindustry_server` | Dart | Mindustry `NetworkIO.writeServerData()` |
+可选：`title`（`{player}` `{game}` `{label}` `{motd}`）、`id`、`label`、`port`（probe 回退端口）。
 
-### `params`：标题重建 + 本机注入（通用）
+有 `parser` 且能重建载荷 → 默认本机组播 + 同伴 127 注入/TCP。不必再写 inject/forward 开关。
 
-任意 `type` 都可加，不绑死某一款游戏。  
-**启停跟开放游戏事件走**：`game.advertiseOpen` 出现条目 → 开组播注入 + 转发；广告消失 / TTL 到期 / 退房 → 立刻停。
-
-| 字段 | 含义 |
-|------|------|
-| `title_template` | 重建标题：`{player}` `{game}` `{label}` `{motd}` |
-| `inject_local` | 向本机回环发 UDP 宣告载荷 |
-| `inject_bind` | 默认 `127.0.0.1`（游戏会连这个 IP） |
-| `inject_mode` | `loopback` / `multicast` / `both`（默认 both） |
-| `forward_local` | `127.0.0.1:游戏端口` TCP 转到对端虚拟 IP |
-
-新 parser 只需补「解析 + 重建载荷」，不必新发现器。
-
-### Minecraft 示例
+### Minecraft
 
 ```json
 {
-  "id": "mc",
-  "label": "Minecraft",
   "type": "udp_multicast",
-  "multicast": "224.0.2.60",
-  "multicast_port": 4445,
+  "multicast": "224.0.2.60:4445",
   "parser": "minecraft_motd",
-  "params": {
-    "title_template": "{player} · {game}",
-    "inject_local": true,
-    "inject_bind": "127.0.0.1",
-    "forward_local": true
-  }
+  "title": "{player} · {game}"
 }
 ```
 
-房主开局域网世界 → Astral 听 MOTD，标题改成「玩家名 · Minecraft」再经 ET 发出。  
-客人：本机 `127.0.0.1` 注入宣告 + TCP 转到房主虚拟 IP；MC 多人游戏里直接点 LAN。
-
-### Mindustry 示例（配置驱动）
+### Mindustry
 
 ```json
 {
-  "id": "mindustry",
-  "label": "Mindustry",
   "type": "udp_probe",
-  "probe_hex": "fe01",
+  "probe": "fe01",
   "parser": "mindustry_server",
-  "multicast": "227.2.7.7",
-  "multicast_port": 20151,
+  "multicast": "227.2.7.7:20151",
   "port": 6567
 }
 ```
 
-`probe_hex: "fe01"` = KryoNet/Arc `DiscoverHost`（字节 `[-2, 1]`）。
+`probe: "fe01"` = KryoNet/Arc `DiscoverHost`。
 
-### Stardew Valley（无原生局域网扫描）
-
-原版需在 Co-op → Join LAN Game **手动输入 IP**；默认游戏端口 **UDP 24642**。  
-Astral 用 `static_port` 把虚拟 IP:24642 宣告到房间，同伴复制后填入游戏即可（与泰拉同类）。  
-默认会检测本机 **UDP 24642 是否在听**：关主机后几秒内列表会消失。
+### Stardew Valley
 
 ```json
 {
-  "id": "stardew",
-  "label": "Stardew Valley",
   "type": "static_port",
   "port": 24642
 }

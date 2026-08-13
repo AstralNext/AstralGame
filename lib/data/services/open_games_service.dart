@@ -17,6 +17,7 @@ import 'package:signals/signals_core.dart';
 
 /// 局域网游戏发现 + 经 EasyTier peer-RPC 向房间同步「开放游戏」列表。
 ///
+/// 发现 / 组播注入 / 127 转发 **仅 Windows**。其它平台只收通道、展示列表。
 /// 发现方式由 [LanGameDiscovererRegistry] 按 JSON `type` 分发，与 ET 宣告解耦。
 class OpenGamesService {
   OpenGamesService(
@@ -49,6 +50,9 @@ class OpenGamesService {
   List<LocalOpenGameAd> _lastLocalAds = const [];
   String _roomGameName = '';
 
+  /// 本机发现 + 注入 + 转发：只在 Windows。
+  static bool get lanAssistEnabled => Platform.isWindows;
+
   bool get isActive => _roomGameId != null;
   String? get roomGameId => _roomGameId;
 
@@ -64,12 +68,9 @@ class OpenGamesService {
     await _rules.ensureLoaded();
     final game = await _rules.gameRules(gameId);
     final cfg = game?.lanGameDiscoverFor(GameAssistRulesService.platformKey);
-    if (cfg == null || !cfg.enabled || cfg.entries.isEmpty) {
+    if (cfg == null || cfg.entries.isEmpty) {
       appLogger.d('[OpenGames] 未启用 lan_game_discover game=$gameId');
       return;
-    }
-    if (cfg.hostOnly && !isHost) {
-      appLogger.d('[OpenGames] host_only：本机不宣告，仍接收列表');
     }
 
     _roomGameId = gameId;
@@ -80,7 +81,7 @@ class OpenGamesService {
         : gameId;
     _ensureNotifyListener();
 
-    if (Platform.isWindows) {
+    if (lanAssistEnabled) {
       await LanGameDiscovererRegistry.instance.startAll(cfg.entries);
     }
 
@@ -89,11 +90,14 @@ class OpenGamesService {
       unawaited(_onNodesChanged(nodes));
     });
 
-    final interval = Duration(milliseconds: cfg.intervalMs.clamp(2000, 60000));
+    const interval = Duration(
+      milliseconds: GameAssistLanGameDiscoverConfig.intervalMs,
+    );
     _tick = Timer.periodic(interval, (_) => unawaited(_tickOnce()));
     await _tickOnce();
     appLogger.i(
       '[OpenGames] 已启动 game=$gameId host=$isHost '
+      'assist=${lanAssistEnabled ? "windows" : "display-only"} '
       'entries=${cfg.entries.length} types='
       '${cfg.entries.map((e) => e.type).toSet().join(",")}',
     );
@@ -155,11 +159,9 @@ class OpenGamesService {
     final cfg = _config;
     final gameId = _roomGameId;
     if (cfg == null || gameId == null) return;
+    if (!lanAssistEnabled) return;
 
-    final shouldAnnounce = !cfg.hostOnly || _isHost;
-    final ads = shouldAnnounce
-        ? await _buildLocalAdsAsync()
-        : const <LocalOpenGameAd>[];
+    final ads = await _buildLocalAdsAsync();
     _lastLocalAds = ads;
 
     final myName = _settings.getUsername().trim().isEmpty
@@ -178,7 +180,7 @@ class OpenGamesService {
           port: ad.port,
           motd: ad.motd,
           expiresAt: DateTime.now().add(
-            Duration(milliseconds: cfg.ttlMs.clamp(3000, 120000)),
+            const Duration(milliseconds: GameAssistLanGameDiscoverConfig.ttlMs),
           ),
           isSelf: true,
           isRoomHost: _isHost,
@@ -223,8 +225,20 @@ class OpenGamesService {
     LocalOpenGameAd ad, {
     required String player,
   }) {
-    final template = ad.entry.paramString('title_template');
-    if (template == null) return ad;
+    final template = ad.entry.title;
+    if (template == null || template.isEmpty) {
+      if (ad.label.trim().isEmpty && _roomGameName.isNotEmpty) {
+        return LocalOpenGameAd(
+          entry: ad.entry,
+          ipv4: ad.ipv4,
+          roomGameId: ad.roomGameId,
+          port: ad.port,
+          label: _roomGameName,
+          motd: ad.motd,
+        );
+      }
+      return ad;
+    }
     final title = applyLanTitleTemplate(
       template,
       player: player.isEmpty ? 'Player' : player,
@@ -244,10 +258,14 @@ class OpenGamesService {
   }
 
   Future<void> _syncLocalRelay() async {
+    if (!lanAssistEnabled) {
+      await _localRelay.stop();
+      return;
+    }
     final cfg = _config;
     final remotes = cfg == null
         ? const <OpenGameListing>[]
-        : listings.value.where((e) => !e.isSelf && !e.isExpired).toList();
+        : listings.value.where((e) => !e.isExpired).toList();
     try {
       if (cfg == null || remotes.isEmpty) {
         await _localRelay.stop();
@@ -294,7 +312,7 @@ class OpenGamesService {
         fromPeerId: fromPeerId,
         ownerName: ownerName,
         raw: raw,
-        ttlMs: cfg.ttlMs,
+        ttlMs: GameAssistLanGameDiscoverConfig.ttlMs,
         isSelf: false,
         isRoomHost: isHostPeer,
       );

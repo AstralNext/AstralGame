@@ -125,37 +125,32 @@ class GameAssistGameRules {
 }
 
 /// 发现本机开放游戏，并经 EasyTier 隧道向房间同伴宣告。
+///
+/// JSON：对象 = 一条；数组 = 多条。有块即启用。
 class GameAssistLanGameDiscoverConfig {
-  const GameAssistLanGameDiscoverConfig({
-    required this.enabled,
-    this.hostOnly = false,
-    this.intervalMs = 5000,
-    this.ttlMs = 18000,
-    this.entries = const [],
-  });
+  const GameAssistLanGameDiscoverConfig({this.entries = const []});
 
-  final bool enabled;
-  /// 仅房主宣告自己的开放服。
-  final bool hostOnly;
-  final int intervalMs;
-  final int ttlMs;
+  static const intervalMs = 4000;
+  static const ttlMs = 18000;
+
   final List<GameAssistLanGameDiscoverEntry> entries;
 
-  factory GameAssistLanGameDiscoverConfig.fromJson(Map<String, dynamic> json) {
-    return GameAssistLanGameDiscoverConfig(
-      enabled: json['enabled'] == true,
-      hostOnly: json['host_only'] == true,
-      intervalMs: (json['interval_ms'] as num?)?.toInt() ?? 5000,
-      ttlMs: (json['ttl_ms'] as num?)?.toInt() ?? 18000,
-      entries: [
-        if (json['entries'] is List)
-          for (final e in json['entries'] as List)
-            if (e is Map)
-              GameAssistLanGameDiscoverEntry.fromJson(
-                Map<String, dynamic>.from(e),
-              ),
-      ],
-    );
+  static GameAssistLanGameDiscoverConfig? tryParse(Object? raw) {
+    final maps = <Map<String, dynamic>>[];
+    if (raw is List) {
+      for (final e in raw) {
+        if (e is Map) maps.add(Map<String, dynamic>.from(e));
+      }
+    } else if (raw is Map) {
+      maps.add(Map<String, dynamic>.from(raw));
+    } else {
+      return null;
+    }
+    final entries = [
+      for (final m in maps) GameAssistLanGameDiscoverEntry.fromJson(m),
+    ].where((e) => e.type.isNotEmpty).toList();
+    if (entries.isEmpty) return null;
+    return GameAssistLanGameDiscoverConfig(entries: entries);
   }
 }
 
@@ -166,57 +161,29 @@ class GameAssistLanGameDiscoverEntry {
     required this.type,
     this.port = 0,
     this.multicast,
-    this.multicastPort,
+    this.multicastPort = 0,
     this.parser,
-    this.probeHex,
-    this.params = const {},
+    this.probe,
+    this.title,
   });
 
   final String id;
   final String label;
-  /// 发现器类型：`static_port` | `udp_multicast` | `udp_probe`。
+  /// `static_port` | `udp_multicast` | `udp_probe`
   final String type;
-  /// `static_port` 端口；`udp_probe` 的游戏端口 / parser 回退端口。
   final int port;
-  /// `udp_multicast` / `udp_probe`：组播组 / 端口。
+  /// 组播地址（不含端口）。
   final String? multicast;
-  final int? multicastPort;
-  /// 载荷解析器名：`minecraft_motd`（内核）/ `mindustry_server`（Dart）等。
+  final int multicastPort;
+  /// `minecraft_motd` / `mindustry_server` …
   final String? parser;
-  /// `udp_probe`：探测包十六进制（如 Mindustry DiscoverHost `fe01`）。
-  final String? probeHex;
-  /// 预留扩展字段（超时、是否广播、本机注入等）。
-  final Map<String, dynamic> params;
+  /// `udp_probe` 探测包十六进制，如 `fe01`。
+  final String? probe;
+  /// 标题模板：`{player}` `{game}` `{label}` `{motd}`。
+  final String? title;
 
-  bool paramBool(String key, [bool def = false]) {
-    final v = params[key];
-    if (v is bool) return v;
-    if (v is String) {
-      final s = v.trim().toLowerCase();
-      if (s == 'true' || s == '1') return true;
-      if (s == 'false' || s == '0') return false;
-    }
-    return def;
-  }
-
-  int paramInt(String key, [int def = 0]) {
-    final v = params[key];
-    if (v is int) return v;
-    if (v is num) return v.toInt();
-    if (v is String) return int.tryParse(v.trim()) ?? def;
-    return def;
-  }
-
-  String? paramString(String key) {
-    final v = params[key];
-    if (v == null) return null;
-    final s = v.toString().trim();
-    return s.isEmpty ? null : s;
-  }
-
-  /// 解析 [probeHex]；非法则 null。
   Uint8List? get probeBytes {
-    final raw = (probeHex ?? '').trim();
+    final raw = (probe ?? '').trim();
     if (raw.isEmpty) return null;
     final hex = raw.replaceAll(RegExp(r'[\s:_-]'), '');
     if (hex.length.isOdd) return null;
@@ -232,31 +199,34 @@ class GameAssistLanGameDiscoverEntry {
   }
 
   factory GameAssistLanGameDiscoverEntry.fromJson(Map<String, dynamic> json) {
-    final id = '${json['id'] ?? 'default'}'.trim();
-    final type =
-        '${json['type'] ?? 'static_port'}'.trim().toLowerCase();
-    final paramsRaw = json['params'];
-    final params = <String, dynamic>{};
-    if (paramsRaw is Map) {
-      params.addAll(Map<String, dynamic>.from(paramsRaw));
-    }
-    // 也允许把 probe 写在 params 里
-    final probe = _optionalString(json['probe_hex']) ??
-        _optionalString(params['probe_hex']);
+    final type = '${json['type'] ?? ''}'.trim().toLowerCase();
+    final id = '${json['id'] ?? type}'.trim();
+    final mcast = parseHostPort(_optionalString(json['multicast']));
     return GameAssistLanGameDiscoverEntry(
-      id: id.isEmpty ? 'default' : id,
-      label: '${json['label'] ?? '开放游戏'}'.trim().isEmpty
-          ? '开放游戏'
-          : '${json['label'] ?? '开放游戏'}'.trim(),
+      id: id.isEmpty ? 'lan' : id,
+      label: '${json['label'] ?? ''}'.trim(),
       type: type,
       port: (json['port'] as num?)?.toInt() ?? 0,
-      multicast: _optionalString(json['multicast']),
-      multicastPort: (json['multicast_port'] as num?)?.toInt(),
+      multicast: mcast?.host,
+      multicastPort: mcast?.port ?? 0,
       parser: _optionalString(json['parser']),
-      probeHex: probe,
-      params: params,
+      probe: _optionalString(json['probe']),
+      title: _optionalString(json['title']),
     );
   }
+}
+
+/// `224.0.2.60:4445` → host + port。
+({String host, int port})? parseHostPort(String? raw) {
+  final s = (raw ?? '').trim();
+  if (s.isEmpty) return null;
+  final i = s.lastIndexOf(':');
+  if (i <= 0 || i == s.length - 1) return (host: s, port: 0);
+  final port = int.tryParse(s.substring(i + 1).trim());
+  if (port == null || port <= 0 || port > 65535) {
+    return (host: s, port: 0);
+  }
+  return (host: s.substring(0, i).trim(), port: port);
 }
 
 /// 去掉 CIDR，得到纯 IPv4；无效则 null。
@@ -317,11 +287,7 @@ class GameAssistPlatformRules {
             if (e is Map)
               GameAssistForwardRule.fromJson(Map<String, dynamic>.from(e)),
       ],
-      lanGameDiscover: discover is Map
-          ? GameAssistLanGameDiscoverConfig.fromJson(
-              Map<String, dynamic>.from(discover),
-            )
-          : null,
+      lanGameDiscover: GameAssistLanGameDiscoverConfig.tryParse(discover),
     );
   }
 }

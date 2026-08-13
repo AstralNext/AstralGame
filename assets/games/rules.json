@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "games": [
     {
       "id": "other",
@@ -7,16 +7,7 @@
       "color": "#6B7280",
       "icon": "sports_esports_outlined",
       "show_in_picker": true,
-      "sort": 900,
-      "platforms": {
-        "windows": {
-          "network": {
-            "enable_udp_broadcast_relay": false
-          },
-          "magic_wall": { "enabled": false, "rules": [] },
-          "forwards": []
-        }
-      }
+      "sort": 900
     }
   ]
 }
