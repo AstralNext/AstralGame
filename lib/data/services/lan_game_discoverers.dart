@@ -6,6 +6,7 @@ import 'package:astral_game/data/models/game_assist_rules.dart';
 import 'package:astral_game/data/models/open_game_listing.dart';
 import 'package:astral_game/data/services/lan_inject_guard.dart';
 import 'package:astral_game/data/services/lan_payload_parsers.dart';
+import 'package:astral_game/data/services/lan_process_udp_discoverer.dart';
 import 'package:astral_game/utils/logger.dart';
 import 'package:astral_rust_core/astral_rust_core.dart';
 
@@ -315,6 +316,130 @@ class UdpProbeDiscoverer extends LanGameDiscoverer {
   }
 }
 
+/// `udp_broadcast`：听 UDP 广播（如 Raft `255.255.255.255:6489`），只收本机发出的包。
+class UdpBroadcastDiscoverer extends LanGameDiscoverer {
+  @override
+  String get type => 'udp_broadcast';
+
+  final Map<int, _BroadcastSlot> _sockets = {};
+  final Map<String, _CachedHit> _cache = {};
+  Set<String> _locals = {'127.0.0.1'};
+
+  @override
+  Future<void> start(GameAssistLanGameDiscoverEntry entry) async {
+    final port = entry.port;
+    final parserName = (entry.parser ?? '').trim();
+    if (port <= 0 || parserName.isEmpty) {
+      appLogger.w(
+        '[LanDiscover] udp_broadcast 配置不完整 port=$port parser=$parserName',
+      );
+      return;
+    }
+    _locals = await _loadLocals();
+    if (_sockets.containsKey(port)) return;
+    try {
+      final socket = await RawDatagramSocket.bind(
+        InternetAddress.anyIPv4,
+        port,
+        reuseAddress: true,
+      );
+      socket.broadcastEnabled = true;
+      socket.readEventsEnabled = true;
+      final slot = _BroadcastSlot(socket: socket, parser: parserName);
+      slot.sub = socket.listen((event) {
+        if (event == RawSocketEvent.read) {
+          _drain(slot, entry);
+        }
+      });
+      _sockets[port] = slot;
+      appLogger.i(
+        '[LanDiscover] udp_broadcast 已听 0.0.0.0:$port parser=$parserName',
+      );
+    } catch (e) {
+      appLogger.w('[LanDiscover] udp_broadcast 绑定 $port 失败: $e');
+    }
+  }
+
+  @override
+  Future<void> stop() async {
+    for (final slot in _sockets.values) {
+      await slot.sub?.cancel();
+      slot.socket.close();
+    }
+    _sockets.clear();
+    _cache.clear();
+  }
+
+  @override
+  Future<List<DiscoveredGameHit>> poll(
+    GameAssistLanGameDiscoverEntry entry,
+  ) async {
+    final slot = _sockets[entry.port];
+    if (slot != null) {
+      _drain(slot, entry);
+    }
+    final now = DateTime.now();
+    final prefix = '${entry.id}:';
+    _cache.removeWhere(
+      (k, v) =>
+          k.startsWith(prefix) &&
+          now.difference(v.at) > const Duration(seconds: 18),
+    );
+    return [
+      for (final e in _cache.entries)
+        if (e.key.startsWith(prefix)) e.value.hit,
+    ];
+  }
+
+  void _drain(_BroadcastSlot slot, GameAssistLanGameDiscoverEntry entry) {
+    final parser = lanPayloadParserOf(slot.parser);
+    if (parser == null) return;
+    final fallbackLabel = entry.label.trim().isEmpty ? 'Raft' : entry.label;
+    while (true) {
+      final dg = slot.socket.receive();
+      if (dg == null) break;
+      if (dg.address.type != InternetAddressType.IPv4) continue;
+      if (!_locals.contains(dg.address.address) &&
+          !dg.address.address.startsWith('127.')) {
+        continue;
+      }
+      final parsed = parser(dg.data, fallbackPort: entry.port);
+      if (parsed == null || parsed.port <= 0) continue;
+      _cache['${entry.id}:${parsed.port}'] = _CachedHit(
+        DiscoveredGameHit(
+          port: parsed.port,
+          label: parsed.label.isNotEmpty ? parsed.label : fallbackLabel,
+          motd: parsed.motd,
+          parser: slot.parser,
+        ),
+        DateTime.now(),
+      );
+    }
+  }
+
+  Future<Set<String>> _loadLocals() async {
+    final set = <String>{'127.0.0.1'};
+    try {
+      for (final iface in await NetworkInterface.list()) {
+        for (final addr in iface.addresses) {
+          if (addr.type == InternetAddressType.IPv4) {
+            set.add(addr.address);
+          }
+        }
+      }
+    } catch (_) {}
+    return set;
+  }
+}
+
+class _BroadcastSlot {
+  _BroadcastSlot({required this.socket, required this.parser});
+
+  final RawDatagramSocket socket;
+  final String parser;
+  StreamSubscription<RawSocketEvent>? sub;
+}
+
 class _CachedHit {
   _CachedHit(this.hit, this.at);
   final DiscoveredGameHit hit;
@@ -327,6 +452,8 @@ class LanGameDiscovererRegistry {
     register(StaticPortDiscoverer());
     register(UdpMulticastDiscoverer());
     register(UdpProbeDiscoverer());
+    register(UdpBroadcastDiscoverer());
+    register(ProcessUdpDiscoverer());
   }
 
   static final LanGameDiscovererRegistry instance = LanGameDiscovererRegistry._();

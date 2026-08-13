@@ -54,7 +54,7 @@ packages:
     description:
       path: "."
       ref: main
-      resolved-ref: "6be6f166f8f4ab3107dd373685626ea70c5704a4"
+      resolved-ref: "39cbe5b6d794b3949cc1d4f6f94451613eee385b"
       url: "https://github.com/AstralNext/astral_rust_core.git"
     source: git
     version: "0.1.0"

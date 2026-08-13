@@ -1,6 +1,71 @@
 {
-  "version": 2,
+  "version": 3,
   "games": [
+    {
+      "id": "raft",
+      "name": "Raft",
+      "color": "#2A7F9E",
+      "icon": "sailing",
+      "steam_app_id": 648800,
+      "sgdb_game_id": 18740,
+      "icon_asset": "assets/games/raft/icon.png",
+      "grid_asset": "assets/games/raft/grid.png",
+      "show_in_picker": true,
+      "sort": 20,
+      "platforms": {
+        "windows": {
+          "network": {
+            "enable_udp_broadcast_relay": true
+          },
+          "lan_game_discover": {
+            "id": "raft_lan",
+            "type": "udp_broadcast",
+            "port": 6489,
+            "parser": "raft_lan",
+            "title": "{player} * Astral",
+            "label": "Raft"
+          },
+          "inject": {
+            "type": "mono",
+            "process": ["Raft.exe"],
+            "window": ["Raft"],
+            "dll": "AstralRaftNet.dll",
+            "namespace": "AstralRaftNet",
+            "class": "Loader",
+            "method": "Init"
+          }
+        }
+      }
+    },
+    {
+      "id": "forged_alliance",
+      "name": "Forged Alliance",
+      "color": "#3B6EA5",
+      "icon": "military_tech",
+      "steam_app_id": 9420,
+      "sgdb_game_id": 31467,
+      "icon_asset": "assets/games/forged_alliance/icon.png",
+      "grid_asset": "assets/games/forged_alliance/grid.png",
+      "show_in_picker": true,
+      "sort": 25,
+      "platforms": {
+        "windows": {
+          "network": {
+            "enable_udp_broadcast_relay": true
+          },
+          "lan_game_discover": {
+            "id": "scfa",
+            "type": "process_udp",
+            "parser": "scfa_lan",
+            "beacon_port": 15000,
+            "process": ["game.exe", "ForgedAlliance.exe", "SupremeCommander.exe"],
+            "window": ["Forged Alliance", "Supreme Commander"],
+            "title": "{player} * Astral",
+            "label": "Forged Alliance"
+          }
+        }
+      }
+    },
     {
       "id": "other",
       "name": "其他",

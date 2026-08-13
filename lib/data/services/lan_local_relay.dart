@@ -22,6 +22,7 @@ class LanLocalRelay {
   Timer? _tick;
   DateTime? _lastMcastLogAt;
   final Map<String, _ActiveRelay> _active = {};
+  bool _stopped = true;
 
   /// UI：listing.key → 本机继电器状态。
   final statuses = signal<Map<String, LanRelayStatus>>(const {});
@@ -34,6 +35,7 @@ class LanLocalRelay {
       await stop();
       return;
     }
+    _stopped = false;
     final wanted = <String, _RelaySpec>{};
     for (final listing in remotes) {
       if (listing.isExpired) continue;
@@ -84,6 +86,13 @@ class LanLocalRelay {
   }
 
   Future<void> stop() async {
+    if (_stopped &&
+        _active.isEmpty &&
+        _tick == null &&
+        _uniSocket == null) {
+      return;
+    }
+    _stopped = true;
     _tick?.cancel();
     _tick = null;
     final all = _active.values.toList();
@@ -95,9 +104,11 @@ class LanLocalRelay {
     }
     _uniSocket?.close();
     _uniSocket = null;
-    try {
-      await stopAllMulticastSenders();
-    } catch (_) {}
+    if (all.isNotEmpty) {
+      try {
+        await stopAllMulticastSenders();
+      } catch (_) {}
+    }
   }
 
   _RelaySpec? _specFor(

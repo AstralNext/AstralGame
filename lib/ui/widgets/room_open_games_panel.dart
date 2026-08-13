@@ -235,6 +235,16 @@ class _OpenGameTile extends StatelessWidget {
                         fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                     ),
+                    if ((listing.motd ?? '').trim().isNotEmpty &&
+                        listing.motd!.trim() != listing.label.trim()) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        listing.motd!.trim(),
+                        style: textTheme.labelSmall?.copyWith(
+                          color: palette.textTertiary,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),

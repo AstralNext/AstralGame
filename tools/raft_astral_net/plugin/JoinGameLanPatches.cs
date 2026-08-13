@@ -1,0 +1,204 @@
+using System.Collections.Generic;
+using HarmonyLib;
+using Steamworks;
+using UnityEngine;
+using UnityEngine.UI;
+
+namespace AstralRaftNet
+{
+    [HarmonyPatch(typeof(JoinGameBox), nameof(JoinGameBox.Open))]
+    internal static class Patch_JoinOpenLan
+    {
+        private static void Postfix(JoinGameBox __instance)
+        {
+            AstralLanDiscovery.EnsureReceiver();
+            AstralLanUi.Retitle(__instance);
+        }
+    }
+
+    [HarmonyPatch(typeof(JoinGameBox), "RefreshGames")]
+    internal static class Patch_RefreshGames
+    {
+        private static bool Prefix(JoinGameBox __instance)
+        {
+            AstralLanUi.Retitle(__instance);
+            AstralLanUi.Populate(__instance);
+            return false;
+        }
+    }
+
+    [HarmonyPatch(typeof(JoinGameBox), "HandleFriendInfo")]
+    internal static class Patch_HandleFriendInfo
+    {
+        private static bool Prefix()
+        {
+            return false;
+        }
+    }
+
+    [HarmonyPatch(typeof(JoinGameBox), nameof(JoinGameBox.JoinSelectedGame))]
+    internal static class Patch_JoinSelectedGame
+    {
+        private static bool Prefix(JoinGameBox __instance)
+        {
+            AstralLanUi.TryJoinSelected(__instance);
+            return false;
+        }
+    }
+
+    [HarmonyPatch(typeof(JoinGame_Selection), nameof(JoinGame_Selection.Set))]
+    internal static class Patch_JoinSelectionSet
+    {
+        private static bool Prefix(JoinGame_Selection __instance, CSteamID steamID, bool passwordProtected)
+        {
+            LanRoom room;
+            if (!AstralLanDiscovery.TryGet(steamID, out room))
+            {
+                return true;
+            }
+
+            __instance.steamID = steamID;
+            __instance.passwordProtected = passwordProtected;
+            Text name = AccessTools.Field(typeof(JoinGame_Selection), "text_GameName").GetValue(__instance) as Text;
+            if (name != null)
+            {
+                name.text = room.DisplayName;
+            }
+
+            Image lockImage = AccessTools.Field(typeof(JoinGame_Selection), "image_passwordLock").GetValue(__instance) as Image;
+            if (lockImage != null)
+            {
+                lockImage.gameObject.SetActive(passwordProtected);
+            }
+
+            return false;
+        }
+    }
+
+    internal static class AstralLanUi
+    {
+        public static void Retitle(JoinGameBox box)
+        {
+            if (box == null)
+            {
+                return;
+            }
+
+            Text[] texts = box.GetComponentsInChildren<Text>(true);
+            bool titled = false;
+            for (int i = 0; i < texts.Length; i++)
+            {
+                Text text = texts[i];
+                if (text == null)
+                {
+                    continue;
+                }
+
+                if (text.GetComponentInParent<Button>() != null)
+                {
+                    continue;
+                }
+
+                DisableLocalize(text.gameObject);
+                string value = text.text ?? string.Empty;
+                if (!titled && (value.Contains("加入世界") || value.IndexOf("Join", System.StringComparison.OrdinalIgnoreCase) >= 0 || value.Contains("astral")))
+                {
+                    text.text = "加入astral房间";
+                    titled = true;
+                    continue;
+                }
+
+                if (value.Contains("创建") || value.IndexOf("Friend", System.StringComparison.OrdinalIgnoreCase) >= 0 || value.Contains("好友"))
+                {
+                    text.text = "lan发现";
+                }
+            }
+
+            GameObject none = AccessTools.Field(typeof(JoinGameBox), "noGamesFoundsText").GetValue(box) as GameObject;
+            if (none != null)
+            {
+                DisableLocalize(none);
+                Text noneText = none.GetComponentInChildren<Text>(true);
+                if (noneText != null)
+                {
+                    noneText.text = "未发现Astral房间";
+                }
+            }
+        }
+
+        public static void Populate(JoinGameBox box)
+        {
+            ScrollRect scroll = AccessTools.Field(typeof(JoinGameBox), "scrollRect").GetValue(box) as ScrollRect;
+            JoinGame_Selection prefab = AccessTools.Field(typeof(JoinGameBox), "gameSelectionPrefab").GetValue(box) as JoinGame_Selection;
+            List<JoinGame_Selection> list = AccessTools.Field(typeof(JoinGameBox), "joinGameSelections").GetValue(box) as List<JoinGame_Selection>;
+            GameObject none = AccessTools.Field(typeof(JoinGameBox), "noGamesFoundsText").GetValue(box) as GameObject;
+            if (scroll == null || prefab == null || list == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (list[i] != null)
+                {
+                    UnityEngine.Object.Destroy(list[i].gameObject);
+                }
+            }
+
+            list.Clear();
+            AccessTools.Field(typeof(JoinGameBox), "selectedGame").SetValue(box, null);
+
+            List<LanRoom> rooms = AstralLanDiscovery.Snapshot();
+            for (int i = 0; i < rooms.Count; i++)
+            {
+                LanRoom room = rooms[i];
+                JoinGame_Selection item = UnityEngine.Object.Instantiate(prefab, scroll.content);
+                list.Add(item);
+                item.Set(new CSteamID(room.SteamId), room.Password);
+            }
+
+            if (none != null)
+            {
+                none.SetActive(list.Count == 0);
+            }
+        }
+
+        public static bool TryJoinSelected(JoinGameBox box)
+        {
+            JoinGame_Selection selected = AccessTools.Field(typeof(JoinGameBox), "selectedGame").GetValue(box) as JoinGame_Selection;
+            if (selected == null || !selected.steamID.IsValid())
+            {
+                return false;
+            }
+
+            LanRoom room;
+            if (!AstralLanDiscovery.TryGet(selected.steamID, out room))
+            {
+                AstralLog.Error("LAN room expired, refresh");
+                return true;
+            }
+
+            AstralLog.Info("join LAN " + room.EndPoint);
+            AstralTransport.ConnectAndJoin(room.EndPoint, GameManager.Password ?? string.Empty);
+            if (box.connectingBox != null)
+            {
+                box.connectingBox.gameObject.SetActive(true);
+                box.connectingBox.StartConnectTimeoutTimer();
+            }
+
+            return true;
+        }
+
+        private static void DisableLocalize(GameObject go)
+        {
+            MonoBehaviour[] behaviours = go.GetComponentsInChildren<MonoBehaviour>(true);
+            for (int i = 0; i < behaviours.Length; i++)
+            {
+                if (behaviours[i] != null && behaviours[i].GetType().Name == "Localize")
+                {
+                    behaviours[i].enabled = false;
+                }
+            }
+        }
+    }
+}

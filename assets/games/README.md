@@ -36,6 +36,8 @@
 | `static_port` | `port` | 本机该 UDP 端口在听才宣告 |
 | `udp_multicast` | `multicast` `parser` | 听组播再解析 |
 | `udp_probe` | `probe` `parser` | 发探测包再解析回复 |
+| `udp_broadcast` | `port` `parser` | 听 UDP 广播（如 Raft 6489） |
+| `process_udp` | `process` / `window` | 按进程名或窗口标题找游戏，取其 UDP 对战口 |
 
 可选：`title`（`{player}` `{game}` `{label}` `{motd}`）、`id`、`label`、`port`（probe 回退端口）。
 
@@ -74,5 +76,48 @@
   "port": 24642
 }
 ```
+
+### Forged Alliance
+
+驭空 / LEM 开房不听 UDP 15000，LAN 列表会空。`process_udp` 扫 `Forged Alliance` 窗口 / `game.exe`，把对战 UDP 口宣告到 Astral，并在本机 15000 代答游戏内搜索（回包从虚拟 IP 发出，KV 带 `Address`）。会忽略 mDNS `5353` 等系统/Steam 口。对战口经常不回 LAN 探测，不能单靠探测失败判断；玩家加入后多出来的口再丢掉。
+
+```json
+{
+  "type": "process_udp",
+  "parser": "scfa_lan",
+  "beacon_port": 15000,
+  "process": ["game.exe", "ForgedAlliance.exe"],
+  "window": ["Forged Alliance"],
+  "title": "{player} * Astral"
+}
+```
+
+建议同时开 `network.enable_udp_broadcast_relay`，让 15000 探测能穿过 EasyTier。
+
+### Raft
+
+进 Astral 房间后自动检测 `Raft.exe`，用 Rust mono 注入器注入 `AstralRaftNet.dll`。游戏首页右上角显示「Astral已注入」。房主勾选「启用Astral局域网」后 UDP `255.255.255.255:6489` 广播房间；加入世界列表改为 LAN 发现。
+
+```json
+{
+  "type": "udp_broadcast",
+  "port": 6489,
+  "parser": "raft_lan",
+  "title": "{player} * Astral"
+}
+```
+
+```json
+"inject": {
+  "type": "mono",
+  "process": ["Raft.exe"],
+  "dll": "AstralRaftNet.dll",
+  "namespace": "AstralRaftNet",
+  "class": "Loader",
+  "method": "Init"
+}
+```
+
+建议同时开 `network.enable_udp_broadcast_relay`。
 
 ET：`game.advertiseOpen` / `game.listOpen`。

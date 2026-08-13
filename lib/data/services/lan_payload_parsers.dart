@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:astral_game/data/services/scfa_lan_codec.dart';
+
 /// 主动探测 / 被动监听共用的载荷解析结果。
 class LanPayloadHit {
   const LanPayloadHit({
@@ -22,12 +24,30 @@ typedef LanPayloadParser = LanPayloadHit? Function(
 
 final Map<String, LanPayloadParser> _lanPayloadParsers = {
   'mindustry_server': parseMindustryServerPayload,
+  'scfa_lan': parseScfaLanPayload,
+  'raft_lan': parseRaftLanPayload,
 };
 
 LanPayloadParser? lanPayloadParserOf(String name) {
   final key = name.trim().toLowerCase();
   if (key.isEmpty) return null;
   return _lanPayloadParsers[key];
+}
+
+LanPayloadHit? parseScfaLanPayload(
+  Uint8List data, {
+  required int fallbackPort,
+}) {
+  final info = parseScfaLanReply(data, fallbackPort: fallbackPort);
+  if (info == null) return null;
+  final label = info.gameName.isNotEmpty
+      ? info.gameName
+      : (info.hostedBy.isNotEmpty ? info.hostedBy : 'Forged Alliance');
+  return LanPayloadHit(
+    port: info.lobbyPort,
+    label: label,
+    motd: info.mapName.isEmpty ? null : info.mapName,
+  );
 }
 
 /// Mindustry `NetworkIO.writeServerData()`（UTF-8 长度前缀字符串 + big-endian）。
@@ -58,6 +78,30 @@ LanPayloadHit? parseMindustryServerPayload(
   } catch (_) {
     return null;
   }
+}
+
+/// Raft Astral 插件 UDP 6489 宣告：`ASTR` + steamId + tcpPort + name。
+LanPayloadHit? parseRaftLanPayload(
+  Uint8List data, {
+  required int fallbackPort,
+}) {
+  if (data.length < 19) return null;
+  final bd = ByteData.sublistView(data);
+  if (bd.getUint32(0, Endian.little) != 0x41535452) return null;
+  if (data[4] != 1 || data[5] != 10) return null;
+  final steamId = bd.getUint64(6, Endian.little);
+  final tcpPort = bd.getUint16(14, Endian.little);
+  final nameLen = bd.getUint16(17, Endian.little);
+  if (steamId == 0 || tcpPort <= 0 || tcpPort > 65535) return null;
+  if (nameLen < 0 || 19 + nameLen > data.length) return null;
+  final name = utf8.decode(
+    data.sublist(19, 19 + nameLen),
+    allowMalformed: true,
+  ).trim();
+  return LanPayloadHit(
+    port: tcpPort != 0 ? tcpPort : fallbackPort,
+    label: name.isEmpty ? 'Raft' : name,
+  );
 }
 
 class _ByteReader {

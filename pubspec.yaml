@@ -2,7 +2,7 @@ name: astral_game
 description: "Astral Game Client"
 publish_to: 'none'
 
-version: 1.0.19
+version: 1.0.20
 
 environment:
   sdk: ^3.8.0
@@ -101,6 +101,10 @@ flutter:
     - assets/games/ark/grid.png
     - assets/games/rust/icon.png
     - assets/games/rust/grid.png
+    - assets/games/forged_alliance/icon.png
+    - assets/games/forged_alliance/grid.png
+    - assets/games/raft/icon.png
+    - assets/games/raft/grid.png
     # Offline generic fallback; full rules at https://astral.fan/gamerules.json
     - assets/games/rules.json
     - assets/scenery/daily.jpg

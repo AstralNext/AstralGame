@@ -167,22 +167,31 @@ class GameAssistLanGameDiscoverEntry {
     this.parser,
     this.probe,
     this.title,
+    this.process = const [],
+    this.window = const [],
+    this.beaconPort = 0,
   });
 
   final String id;
   final String label;
-  /// `static_port` | `udp_multicast` | `udp_probe`
+  /// `static_port` | `udp_multicast` | `udp_probe` | `udp_broadcast` | `process_udp`
   final String type;
   final int port;
   /// 组播地址（不含端口）。
   final String? multicast;
   final int multicastPort;
-  /// `minecraft_motd` / `mindustry_server` …
+  /// `minecraft_motd` / `mindustry_server` / `scfa_lan` …
   final String? parser;
   /// `udp_probe` 探测包十六进制，如 `fe01`。
   final String? probe;
-  /// 标题模板：`{player}` `{game}` `{label}` `{motd}`。
+  /// 标题模板：`{player}` `{game}` `{label}` `{motd}` `{map}`。
   final String? title;
+  /// `process_udp`：exe 名，如 `game.exe`。
+  final List<String> process;
+  /// `process_udp`：窗口标题关键字，如 `Forged Alliance`。
+  final List<String> window;
+  /// `process_udp`：本机代答发现口（FA 默认 15000）。
+  final int beaconPort;
 
   Uint8List? get probeBytes {
     final raw = (probe ?? '').trim();
@@ -214,8 +223,23 @@ class GameAssistLanGameDiscoverEntry {
       parser: _optionalString(json['parser']),
       probe: _optionalString(json['probe']),
       title: _optionalString(json['title']),
+      process: _stringList(json['process']),
+      window: _stringList(json['window']),
+      beaconPort: (json['beacon_port'] as num?)?.toInt() ?? 0,
     );
   }
+}
+
+List<String> _stringList(Object? raw) {
+  if (raw is List) {
+    return [
+      for (final e in raw)
+        if ('$e'.trim().isNotEmpty) '$e'.trim(),
+    ];
+  }
+  final s = raw?.toString().trim();
+  if (s == null || s.isEmpty) return const [];
+  return [s];
 }
 
 /// EasyTier / 虚拟网相关开关（按平台）。
@@ -240,6 +264,7 @@ class GameAssistPlatformRules {
     required this.magicWall,
     required this.forwards,
     this.lanGameDiscover,
+    this.inject,
   });
 
   final GameAssistNetworkConfig network;
@@ -247,11 +272,14 @@ class GameAssistPlatformRules {
   final List<GameAssistForwardRule> forwards;
   /// 发现本机开放游戏并经 ET 宣告。
   final GameAssistLanGameDiscoverConfig? lanGameDiscover;
+  /// 进房后自动检测进程并注入（Windows / Unity Mono）。
+  final GameAssistInjectConfig? inject;
 
   factory GameAssistPlatformRules.fromJson(Map<String, dynamic> json) {
     final mw = json['magic_wall'];
     final discover = json['lan_game_discover'];
     final net = json['network'];
+    final inject = json['inject'];
     return GameAssistPlatformRules(
       network: net is Map
           ? GameAssistNetworkConfig.fromJson(Map<String, dynamic>.from(net))
@@ -266,6 +294,48 @@ class GameAssistPlatformRules {
               GameAssistForwardRule.fromJson(Map<String, dynamic>.from(e)),
       ],
       lanGameDiscover: GameAssistLanGameDiscoverConfig.tryParse(discover),
+      inject: inject is Map
+          ? GameAssistInjectConfig.fromJson(Map<String, dynamic>.from(inject))
+          : null,
+    );
+  }
+}
+
+/// `platforms.<os>.inject`：自动找游戏进程并注入插件。
+class GameAssistInjectConfig {
+  const GameAssistInjectConfig({
+    required this.type,
+    this.process = const [],
+    this.window = const [],
+    this.dll = '',
+    this.namespace = '',
+    this.className = '',
+    this.method = 'Init',
+  });
+
+  /// 目前仅 `mono`（Unity）。
+  final String type;
+  final List<String> process;
+  final List<String> window;
+  /// 相对 `native/raft/` 或文件名，如 `AstralRaftNet.dll`。
+  final String dll;
+  final String namespace;
+  final String className;
+  final String method;
+
+  bool get isMono =>
+      type == 'mono' && dll.isNotEmpty && className.isNotEmpty;
+
+  factory GameAssistInjectConfig.fromJson(Map<String, dynamic> json) {
+    final method = '${json['method'] ?? 'Init'}'.trim();
+    return GameAssistInjectConfig(
+      type: '${json['type'] ?? ''}'.trim().toLowerCase(),
+      process: _stringList(json['process']),
+      window: _stringList(json['window']),
+      dll: '${json['dll'] ?? ''}'.trim(),
+      namespace: '${json['namespace'] ?? ''}'.trim(),
+      className: '${json['class'] ?? ''}'.trim(),
+      method: method.isEmpty ? 'Init' : method,
     );
   }
 }

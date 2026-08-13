@@ -26,6 +26,7 @@ on:
       - 'windows/**'
       - 'assets/**'
       - 'installer/**'
+      - 'tools/raft_astral_net/**'
       - 'pubspec.yaml'
       - 'pubspec.lock'
       - '.github/workflows/build.yml'
@@ -41,6 +42,7 @@ on:
       - 'windows/**'
       - 'assets/**'
       - 'installer/**'
+      - 'tools/raft_astral_net/**'
       - 'pubspec.yaml'
       - 'pubspec.lock'
       - '.github/workflows/build.yml'
@@ -189,8 +191,8 @@ jobs:
           Get-Command nasm -ErrorAction SilentlyContinue | Out-String | Write-Host
 
       - name: 📚 Get dependencies
-        # 跟 pubspec.lock（含 git resolved-ref）；升 tip 时本地 upgrade 后提交 lock。
-        run: flutter pub get
+        # git 包（astral_rust_core / vpn_service_plugin）始终跟远端 main tip，不钉 lock 里的旧 resolved-ref。
+        run: flutter pub upgrade astral_rust_core vpn_service_plugin
         shell: bash
 
       - name: 🧊 Cache cargo and cargokit
@@ -251,6 +253,21 @@ jobs:
             exit 1
           fi
           ls -la dlls/
+
+      - name: 🛶 Build Raft rust injector
+        if: matrix.flutter_platform == 'windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not (Test-Path tools\raft_astral_net\dist\AstralRaftNet.dll)) {
+            throw 'tools/raft_astral_net/dist/AstralRaftNet.dll missing'
+          }
+          cargo build --release --manifest-path tools\raft_astral_net\injector_rs\Cargo.toml
+          New-Item -ItemType Directory -Force -Path tools\raft_astral_net\bin\injector_rs | Out-Null
+          Copy-Item tools\raft_astral_net\injector_rs\target\release\astral_mono_inject.exe `
+            tools\raft_astral_net\bin\injector_rs\astral_mono_inject.exe -Force
+          Get-Item tools\raft_astral_net\dist\AstralRaftNet.dll,
+                   tools\raft_astral_net\bin\injector_rs\astral_mono_inject.exe
 
       - name: 🛠️ Build for ${{ matrix.platform }}
         run: ${{ matrix.build_cmd }}

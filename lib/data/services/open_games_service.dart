@@ -8,6 +8,7 @@ import 'package:astral_game/data/services/app_settings_service.dart';
 import 'package:astral_game/data/services/game_assist_rules_service.dart';
 import 'package:astral_game/data/services/lan_game_discoverers.dart';
 import 'package:astral_game/data/services/lan_local_relay.dart';
+import 'package:astral_game/data/services/scfa_discovery_beacon.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
 import 'package:astral_game/data/services/peer_rpc/peer_rpc_client.dart';
 import 'package:astral_game/data/services/peer_rpc/peer_rpc_router.dart';
@@ -117,6 +118,7 @@ class OpenGamesService {
     listings.value = const [];
     _roomGameName = '';
     await _syncLocalRelay();
+    ScfaDiscoveryBeacon.instance.publish(const []);
     await LanGameDiscovererRegistry.instance.stopAll();
   }
 
@@ -217,9 +219,28 @@ class OpenGamesService {
       virtualIp: ip,
     );
     final player = _settings.getUsername().trim();
-    return [
+    final ads = [
       for (final ad in raw) _rewriteLocalAdTitle(ad, player: player),
     ];
+    _publishScfaBeacon(ads, player: player);
+    return ads;
+  }
+
+  void _publishScfaBeacon(List<LocalOpenGameAd> ads, {required String player}) {
+    if (!lanAssistEnabled) return;
+    final host = player.isEmpty ? 'Player' : player;
+    ScfaDiscoveryBeacon.instance.publish([
+      for (final ad in ads)
+        if (ad.entry.type == 'process_udp' ||
+            (ad.entry.parser ?? '').trim().toLowerCase() == 'scfa_lan')
+          ScfaLanAnnounce(
+            title: ad.label,
+            lobbyPort: ad.port,
+            mapName: ad.motd,
+            hostedBy: host,
+            ipv4: ad.ipv4,
+          ),
+    ]);
   }
 
   LocalOpenGameAd _rewriteLocalAdTitle(
@@ -246,6 +267,7 @@ class OpenGamesService {
       game: _roomGameName.isEmpty ? ad.entry.label : _roomGameName,
       label: ad.label,
       motd: ad.motd ?? '',
+      map: ad.motd ?? '',
     );
     if (title.isEmpty) return ad;
     return LocalOpenGameAd(
@@ -372,8 +394,25 @@ class OpenGamesService {
 
   /// 开放游戏列表是唯一真相：出现 → 开组播/转发；消失/退房 → 立刻关。
   void _setListings(List<OpenGameListing> next) {
+    if (_sameListings(listings.value, next)) return;
     listings.value = next;
     unawaited(_syncLocalRelay());
+  }
+
+  bool _sameListings(List<OpenGameListing> a, List<OpenGameListing> b) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      final x = a[i];
+      final y = b[i];
+      if (x.key != y.key ||
+          x.endpoint != y.endpoint ||
+          x.label != y.label ||
+          x.motd != y.motd) {
+        return false;
+      }
+    }
+    return true;
   }
 
   List<OpenGameListing> _sorted(Iterable<OpenGameListing> items) {

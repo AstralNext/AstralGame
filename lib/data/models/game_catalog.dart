@@ -123,6 +123,10 @@ IconData resolveGameIcon(String name) {
       return Icons.warning_amber_rounded;
     case 'hardware':
       return Icons.handyman;
+    case 'sailing':
+      return Icons.sailing;
+    case 'military_tech':
+      return Icons.military_tech;
     case 'sports_esports':
       return Icons.sports_esports;
     case 'sports_esports_outlined':

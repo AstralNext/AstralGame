@@ -1,10 +1,11 @@
-/// 局域网宣告标题模板：`{player}` `{game}` `{label}` `{motd}`。
+/// 局域网宣告标题模板：`{player}` `{game}` `{label}` `{motd}` `{map}`。
 String applyLanTitleTemplate(
   String template, {
   required String player,
   required String game,
   String label = '',
   String motd = '',
+  String map = '',
 }) {
   var out = template.trim();
   if (out.isEmpty) {
@@ -22,6 +23,7 @@ String applyLanTitleTemplate(
       .replaceAll('{player}', player.trim())
       .replaceAll('{game}', game.trim())
       .replaceAll('{label}', label.trim())
-      .replaceAll('{motd}', motd.trim());
+      .replaceAll('{motd}', motd.trim())
+      .replaceAll('{map}', map.trim().isNotEmpty ? map.trim() : motd.trim());
   return out.replaceAll(RegExp(r'\s+'), ' ').trim();
 }

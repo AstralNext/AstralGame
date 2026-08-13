@@ -64,9 +64,12 @@ class GameAssistRulesService {
       if (decoded is! Map) {
         throw const FormatException('gamerules.json root must be object');
       }
-      final catalog = GameAssistRulesCatalog.fromJson(
+      final incoming = GameAssistRulesCatalog.fromJson(
         Map<String, dynamic>.from(decoded),
       );
+      final catalog = source == 'remote' && _catalog != null
+          ? _mergeCatalogs(local: _catalog!, remote: incoming)
+          : incoming;
       _applyCatalog(catalog);
       appLogger.i(
         '[GameAssistRules] 已应用 ($source) v${catalog.version} '
@@ -79,6 +82,22 @@ class GameAssistRulesService {
         stackTrace: st,
       );
     }
+  }
+
+  /// 远程覆盖同 id；本地独有（如尚未上 CDN 的 FA）保留。
+  GameAssistRulesCatalog _mergeCatalogs({
+    required GameAssistRulesCatalog local,
+    required GameAssistRulesCatalog remote,
+  }) {
+    final byId = <String, GameAssistGameRules>{
+      for (final g in local.games) g.id: g,
+    };
+    for (final g in remote.games) {
+      byId[g.id] = g;
+    }
+    final games = byId.values.toList()
+      ..sort((a, b) => a.sort.compareTo(b.sort));
+    return GameAssistRulesCatalog(version: remote.version, games: games);
   }
 
   void _applyCatalog(GameAssistRulesCatalog catalog) {

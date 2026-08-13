@@ -16,6 +16,7 @@ import 'package:astral_game/data/services/peer_rpc/peer_rpc_client.dart';
 import 'package:astral_game/data/services/peer_rpc/peer_rpc_router.dart';
 import 'package:astral_game/data/services/p2p_config_service.dart';
 import 'package:astral_game/data/services/game_assist_rules_service.dart';
+import 'package:astral_game/data/services/game_inject_service.dart';
 import 'package:astral_game/data/services/open_games_service.dart';
 import 'package:astral_game/data/services/room_assist_service.dart';
 import 'package:astral_game/data/services/room_persistence_service.dart';
@@ -97,6 +98,9 @@ Future<void> setupDI() async {
       getIt<GameAssistRulesService>(),
     ),
   );
+  getIt.registerLazySingleton<GameInjectService>(
+    () => GameInjectService(getIt<GameAssistRulesService>()),
+  );
   getIt.registerLazySingleton<OpenGamesService>(
     () => OpenGamesService(
       getIt<GameAssistRulesService>(),
@@ -151,6 +155,7 @@ Future<void> setupDI() async {
       getIt<VpnManager>(),
       getIt<ShareCodeService>(),
       getIt<RoomAssistService>(),
+      getIt<GameInjectService>(),
       getIt<GameAssistRulesService>(),
       getIt<AppSettingsService>(),
       getIt<OpenGamesService>(),

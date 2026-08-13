@@ -1,4 +1,5 @@
 import 'package:astral_game/data/models/game_assist_rules.dart';
+import 'package:astral_game/data/services/lan_process_udp_discoverer.dart';
 import 'package:astral_game/utils/net_addr.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -42,6 +43,99 @@ void main() {
     expect(cfg.entries[0].port, 24642);
     expect(cfg.entries[1].probe, 'fe01');
     expect(cfg.entries[1].multicastPort, 20151);
+  });
+
+  test('udp_broadcast raft + mono inject', () {
+    final cfg = GameAssistLanGameDiscoverConfig.tryParse({
+      'id': 'raft_lan',
+      'type': 'udp_broadcast',
+      'port': 6489,
+      'parser': 'raft_lan',
+      'title': '{player} * Astral',
+      'label': 'Raft',
+    });
+    expect(cfg, isNotNull);
+    final e = cfg!.entries.single;
+    expect(e.type, 'udp_broadcast');
+    expect(e.port, 6489);
+    expect(e.parser, 'raft_lan');
+
+    final platform = GameAssistPlatformRules.fromJson({
+      'inject': {
+        'type': 'mono',
+        'process': ['Raft.exe'],
+        'dll': 'AstralRaftNet.dll',
+        'namespace': 'AstralRaftNet',
+        'class': 'Loader',
+        'method': 'Init',
+      },
+    });
+    expect(platform.inject?.isMono, isTrue);
+    expect(platform.inject?.process, ['Raft.exe']);
+    expect(platform.inject?.className, 'Loader');
+  });
+
+  test('process_udp forged alliance', () {
+    final cfg = GameAssistLanGameDiscoverConfig.tryParse({
+      'id': 'scfa',
+      'type': 'process_udp',
+      'parser': 'scfa_lan',
+      'beacon_port': 15000,
+      'process': ['game.exe', 'ForgedAlliance.exe'],
+      'window': ['Forged Alliance'],
+      'title': '{player} * Astral',
+    });
+    expect(cfg, isNotNull);
+    final e = cfg!.entries.single;
+    expect(e.type, 'process_udp');
+    expect(e.parser, 'scfa_lan');
+    expect(e.beaconPort, 15000);
+    expect(e.process, ['game.exe', 'ForgedAlliance.exe']);
+    expect(e.window, ['Forged Alliance']);
+    expect(e.title, '{player} * Astral');
+  });
+
+  test('process_udp skips mDNS and other non-lobby ports', () {
+    expect(isNonLobbyUdpPort(5353), isTrue);
+    expect(isNonLobbyUdpPort(1900), isTrue);
+    expect(isNonLobbyUdpPort(53), isTrue);
+    expect(isNonLobbyUdpPort(62320), isFalse);
+    expect(isNonLobbyUdpPort(58336), isFalse);
+  });
+
+  test('scfa lobby keeps probed port, drops join/peer ports', () {
+    expect(
+      selectScfaLobbyPorts(
+        udpPorts: [57431, 50122, 49801],
+        probedOk: {57431},
+        lastLobbyPort: null,
+      ),
+      [57431],
+    );
+    expect(
+      selectScfaLobbyPorts(
+        udpPorts: [57431, 50122],
+        probedOk: {},
+        lastLobbyPort: 57431,
+      ),
+      [57431],
+    );
+    expect(
+      selectScfaLobbyPorts(
+        udpPorts: [59179],
+        probedOk: {},
+        lastLobbyPort: null,
+      ),
+      [59179],
+    );
+    expect(
+      selectScfaLobbyPorts(
+        udpPorts: [50122, 49801],
+        probedOk: {},
+        lastLobbyPort: 57431,
+      ),
+      isEmpty,
+    );
   });
 
   test('missing discover is null', () {

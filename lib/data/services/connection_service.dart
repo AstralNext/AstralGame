@@ -6,6 +6,7 @@ import 'package:astral_game/data/models/active_room_session.dart';
 import 'package:astral_game/data/models/server_mod.dart';
 import 'package:astral_game/data/services/app_settings_service.dart';
 import 'package:astral_game/data/services/game_assist_rules_service.dart';
+import 'package:astral_game/data/services/game_inject_service.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
 import 'package:astral_game/data/services/open_games_service.dart';
 import 'package:astral_game/data/services/p2p_config_service.dart';
@@ -33,6 +34,7 @@ class ConnectionService {
     this._vpnManager,
     this._shareCodes,
     this._roomAssist,
+    this._gameInject,
     this._gameRules,
     this._appSettings,
     this._openGames,
@@ -45,6 +47,7 @@ class ConnectionService {
   final VpnManager _vpnManager;
   final ShareCodeService _shareCodes;
   final RoomAssistService _roomAssist;
+  final GameInjectService _gameInject;
   final GameAssistRulesService _gameRules;
   final AppSettingsService _appSettings;
   final OpenGamesService _openGames;
@@ -132,6 +135,7 @@ class ConnectionService {
         throw StateError('连接失败，请重试');
       }
       await _roomAssist.startForRoom(isHost: true, gameId: gameId);
+      await _gameInject.startForRoom(gameId: gameId);
       await _openGames.startForRoom(isHost: true, gameId: gameId);
       linked = true;
       return session;
@@ -226,6 +230,7 @@ class ConnectionService {
         throw StateError('连接失败，请重试');
       }
       await _roomAssist.startForRoom(isHost: false, gameId: session.gameId);
+      await _gameInject.startForRoom(gameId: session.gameId);
       await _openGames.startForRoom(isHost: false, gameId: session.gameId);
       linked = true;
       return session;
@@ -393,6 +398,7 @@ class ConnectionService {
       }
       _armGuestPresenceWatch();
       await _roomAssist.startForRoom(isHost: true, gameId: session.gameId);
+      await _gameInject.startForRoom(gameId: session.gameId);
       await _openGames.startForRoom(isHost: true, gameId: session.gameId);
       linked = true;
       return session;
@@ -565,6 +571,7 @@ class ConnectionService {
       _linkEpoch++;
     }
     await _roomAssist.stopAll();
+    await _gameInject.stop();
     await _openGames.stop();
     if (abortLink) {
       isLinking.value = false;

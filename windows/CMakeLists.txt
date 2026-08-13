@@ -98,6 +98,33 @@ install(FILES ${ASTRAL_RUNTIME_DLLS}
   DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
   COMPONENT Runtime)
 
+# Raft Unity/Mono 自动注入（exe 旁 native/raft/）。
+set(ASTRAL_RAFT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../tools/raft_astral_net")
+set(ASTRAL_RAFT_PLUGIN "${ASTRAL_RAFT_DIR}/dist/AstralRaftNet.dll")
+if(NOT EXISTS "${ASTRAL_RAFT_PLUGIN}")
+  set(ASTRAL_RAFT_PLUGIN "${ASTRAL_RAFT_DIR}/bin/plugin/AstralRaftNet.dll")
+endif()
+set(ASTRAL_RAFT_INJECT "${ASTRAL_RAFT_DIR}/injector_rs/target/release/astral_mono_inject.exe")
+set(ASTRAL_RAFT_INJECT_FALLBACK "${ASTRAL_RAFT_DIR}/bin/injector_rs/astral_mono_inject.exe")
+if(EXISTS "${ASTRAL_RAFT_INJECT}")
+  install(FILES "${ASTRAL_RAFT_INJECT}"
+    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}/native/raft"
+    COMPONENT Runtime)
+elseif(EXISTS "${ASTRAL_RAFT_INJECT_FALLBACK}")
+  install(FILES "${ASTRAL_RAFT_INJECT_FALLBACK}"
+    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}/native/raft"
+    COMPONENT Runtime)
+else()
+  message(WARNING "Raft injector missing (${ASTRAL_RAFT_INJECT}); auto-inject disabled")
+endif()
+if(EXISTS "${ASTRAL_RAFT_PLUGIN}")
+  install(FILES "${ASTRAL_RAFT_PLUGIN}"
+    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}/native/raft"
+    COMPONENT Runtime)
+else()
+  message(WARNING "Raft plugin missing (${ASTRAL_RAFT_PLUGIN}); auto-inject disabled")
+endif()
+
 # Copy the native assets provided by the build.dart from all packages.
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/windows/")
 install(DIRECTORY "${NATIVE_ASSETS_DIR}"
