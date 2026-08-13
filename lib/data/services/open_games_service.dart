@@ -7,9 +7,11 @@ import 'package:astral_game/data/models/open_game_listing.dart';
 import 'package:astral_game/data/services/app_settings_service.dart';
 import 'package:astral_game/data/services/game_assist_rules_service.dart';
 import 'package:astral_game/data/services/lan_game_discoverers.dart';
+import 'package:astral_game/data/services/lan_local_relay.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
 import 'package:astral_game/data/services/peer_rpc/peer_rpc_client.dart';
 import 'package:astral_game/data/services/peer_rpc/peer_rpc_router.dart';
+import 'package:astral_game/utils/lan_title_template.dart';
 import 'package:astral_game/utils/logger.dart';
 import 'package:signals/signals_core.dart';
 
@@ -41,6 +43,8 @@ class OpenGamesService {
   final Set<int> _pulledPeers = {};
   bool _listening = false;
   List<LocalOpenGameAd> _lastLocalAds = const [];
+  final LanLocalRelay _localRelay = LanLocalRelay();
+  String _roomGameName = '';
 
   bool get isActive => _roomGameId != null;
   String? get roomGameId => _roomGameId;
@@ -68,6 +72,9 @@ class OpenGamesService {
     _roomGameId = gameId;
     _isHost = isHost;
     _config = cfg;
+    _roomGameName = (game?.name.trim().isNotEmpty == true)
+        ? game!.name.trim()
+        : gameId;
     _ensureNotifyListener();
 
     if (Platform.isWindows) {
@@ -100,6 +107,8 @@ class OpenGamesService {
     _isHost = false;
     _lastLocalAds = const [];
     listings.value = const [];
+    _roomGameName = '';
+    await _syncLocalRelay();
     await LanGameDiscovererRegistry.instance.stopAll();
   }
 
@@ -196,11 +205,55 @@ class OpenGamesService {
     if (cfg == null || gameId == null) return const [];
     final ip = stripIpv4Host(_nodes.myVirtualIpv4.value);
     if (ip == null) return const [];
-    return LanGameDiscovererRegistry.instance.collectAds(
+    final raw = await LanGameDiscovererRegistry.instance.collectAds(
       entries: cfg.entries,
       roomGameId: gameId,
       virtualIp: ip,
     );
+    final player = _settings.getUsername().trim();
+    return [
+      for (final ad in raw) _rewriteLocalAdTitle(ad, player: player),
+    ];
+  }
+
+  LocalOpenGameAd _rewriteLocalAdTitle(
+    LocalOpenGameAd ad, {
+    required String player,
+  }) {
+    final template = ad.entry.paramString('title_template');
+    if (template == null) return ad;
+    final title = applyLanTitleTemplate(
+      template,
+      player: player.isEmpty ? 'Player' : player,
+      game: _roomGameName.isEmpty ? ad.entry.label : _roomGameName,
+      label: ad.label,
+      motd: ad.motd ?? '',
+    );
+    if (title.isEmpty) return ad;
+    return LocalOpenGameAd(
+      entry: ad.entry,
+      ipv4: ad.ipv4,
+      roomGameId: ad.roomGameId,
+      port: ad.port,
+      label: title,
+      motd: title,
+    );
+  }
+
+  Future<void> _syncLocalRelay() async {
+    final cfg = _config;
+    final remotes = cfg == null
+        ? const <OpenGameListing>[]
+        : listings.value.where((e) => !e.isSelf && !e.isExpired).toList();
+    try {
+      if (cfg == null || remotes.isEmpty) {
+        await _localRelay.stop();
+        return;
+      }
+      await _localRelay.sync(remotes: remotes, entries: cfg.entries);
+    } catch (e) {
+      appLogger.d('[OpenGames] 本机注入同步失败: $e');
+    }
   }
 
   void _ingestAds({
@@ -268,30 +321,37 @@ class OpenGamesService {
 
   /// 用本机最新探测结果整表替换 self 条目（空则立即消失）。
   void _replaceSelfListings(List<OpenGameListing> selfAds) {
-    final others = listings.value.where((e) => !e.isSelf);
-    listings.value = _sorted([...others, ...selfAds]);
+    _setListings(_sorted([
+      ...listings.value.where((e) => !e.isSelf),
+      ...selfAds,
+    ]));
   }
 
   void _clearPeerListings(int peerId) {
     final next = listings.value.where((e) => e.fromPeerId != peerId).toList();
     if (next.length != listings.value.length) {
-      listings.value = _sorted(next);
+      _setListings(_sorted(next));
     }
   }
 
   void _replacePeerListings(int peerId, List<OpenGameListing> incoming) {
-    final others = listings.value.where((e) => e.fromPeerId != peerId);
-    listings.value = _sorted([
-      ...others,
+    _setListings(_sorted([
+      ...listings.value.where((e) => e.fromPeerId != peerId),
       ...incoming.where((e) => !e.isExpired),
-    ]);
+    ]));
   }
 
   void _pruneExpired() {
     final next = listings.value.where((e) => !e.isExpired).toList();
     if (next.length != listings.value.length) {
-      listings.value = _sorted(next);
+      _setListings(_sorted(next));
     }
+  }
+
+  /// 开放游戏列表是唯一真相：出现 → 开组播/转发；消失/退房 → 立刻关。
+  void _setListings(List<OpenGameListing> next) {
+    listings.value = next;
+    unawaited(_syncLocalRelay());
   }
 
   List<OpenGameListing> _sorted(Iterable<OpenGameListing> items) {

@@ -185,8 +185,34 @@ class GameAssistLanGameDiscoverEntry {
   final String? parser;
   /// `udp_probe`：探测包十六进制（如 Mindustry DiscoverHost `fe01`）。
   final String? probeHex;
-  /// 预留扩展字段（超时、是否广播等）。
+  /// 预留扩展字段（超时、是否广播、本机注入等）。
   final Map<String, dynamic> params;
+
+  bool paramBool(String key, [bool def = false]) {
+    final v = params[key];
+    if (v is bool) return v;
+    if (v is String) {
+      final s = v.trim().toLowerCase();
+      if (s == 'true' || s == '1') return true;
+      if (s == 'false' || s == '0') return false;
+    }
+    return def;
+  }
+
+  int paramInt(String key, [int def = 0]) {
+    final v = params[key];
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    if (v is String) return int.tryParse(v.trim()) ?? def;
+    return def;
+  }
+
+  String? paramString(String key) {
+    final v = params[key];
+    if (v == null) return null;
+    final s = v.toString().trim();
+    return s.isEmpty ? null : s;
+  }
 
   /// 解析 [probeHex]；非法则 null。
   Uint8List? get probeBytes {

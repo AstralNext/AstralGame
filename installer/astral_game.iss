@@ -22,11 +22,12 @@ AppId={{B2F8E4C1-9A3D-4E7B-8F1A-2C9D0E1F3A5B}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
-DefaultDirName={autopf}\{#MyAppName}
+DefaultDirName={commonpf}\{#MyAppName}
 UninstallDisplayIcon={app}\{#MyAppExeName}
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 DisableProgramGroupPage=yes
+; 必须管理员（UAC）；不要设置 PrivilegesRequiredOverridesAllowed，以免降权安装。
 PrivilegesRequired=admin
 WizardStyle=modern
 SolidCompression=yes
@@ -44,8 +45,17 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "{#BuildOutput}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{commonprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{commondesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Flags: nowait postinstall skipifsilent
+; 安装结束勾选「启动」时以管理员运行（与 exe manifest requireAdministrator 一致）。
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent shellexec; Verb: runas
+
+[Code]
+function InitializeSetup(): Boolean;
+begin
+  Result := IsAdminInstallMode;
+  if not Result then
+    MsgBox('Astral Game 安装程序必须以管理员身份运行。', mbError, MB_OK);
+end;

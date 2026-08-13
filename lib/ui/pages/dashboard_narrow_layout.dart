@@ -104,6 +104,7 @@ class DashboardNarrowLayout extends StatelessWidget {
                         ? myIp
                         : AppConstants.defaultVirtualIp)
                     : null,
+                traffic: isRunning ? nodeManagement.roomTraffic.value : null,
                 onCreateRoom: onCreateRoom,
                 onJoinRoom: onJoinRoom,
                 onShareRoom: onShareRoom,

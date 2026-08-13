@@ -1,10 +1,12 @@
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/models/game_catalog.dart';
+import 'package:astral_game/data/models/room_traffic_stats.dart';
 import 'package:astral_game/data/services/alcy_wallpaper_service.dart';
 import 'package:astral_game/data/services/hitokoto_service.dart';
 import 'package:astral_game/di.dart';
 import 'package:astral_game/ui/widgets/astral_card.dart';
 import 'package:astral_game/utils/client_runtime_info.dart';
+import 'package:astral_game/utils/traffic_format.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -23,6 +25,7 @@ class DashboardHomePanel extends StatelessWidget {
     this.hostOnline = true,
     this.pausedRoomName,
     this.virtualIp,
+    this.traffic,
     required this.onCreateRoom,
     required this.onJoinRoom,
     required this.onShareRoom,
@@ -42,6 +45,7 @@ class DashboardHomePanel extends StatelessWidget {
   final bool hostOnline;
   final String? pausedRoomName;
   final String? virtualIp;
+  final RoomTrafficStats? traffic;
   final VoidCallback onCreateRoom;
   final VoidCallback onJoinRoom;
   final VoidCallback onShareRoom;
@@ -65,6 +69,7 @@ class DashboardHomePanel extends StatelessWidget {
               hostOnline: hostOnline,
               isLinking: isLinking,
               virtualIp: virtualIp,
+              traffic: traffic,
               onShare: onShareRoom,
               onDisconnect: onDisconnect,
             )
@@ -489,6 +494,7 @@ class _ConnectedRoomCard extends StatelessWidget {
     this.hostOnline = true,
     this.isLinking = false,
     this.virtualIp,
+    this.traffic,
     required this.onShare,
     required this.onDisconnect,
   });
@@ -501,6 +507,7 @@ class _ConnectedRoomCard extends StatelessWidget {
   final bool hostOnline;
   final bool isLinking;
   final String? virtualIp;
+  final RoomTrafficStats? traffic;
   final VoidCallback onShare;
   final VoidCallback onDisconnect;
 
@@ -626,6 +633,10 @@ class _ConnectedRoomCard extends StatelessWidget {
                         ),
                       ),
                     ],
+                    if (!isLinking && traffic != null) ...[
+                      const SizedBox(height: 8),
+                      _RoomTrafficLines(traffic: traffic!),
+                    ],
                     if (code.isNotEmpty) ...[
                       const SizedBox(height: 10),
                       Row(
@@ -697,6 +708,54 @@ class _ConnectedRoomCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _RoomTrafficLines extends StatelessWidget {
+  const _RoomTrafficLines({required this.traffic});
+
+  final RoomTrafficStats traffic;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.astralPalette;
+    final textTheme = Theme.of(context).textTheme;
+    final rateStyle = textTheme.labelMedium?.copyWith(
+      color: palette.textSecondary,
+      fontWeight: FontWeight.w600,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    final totalStyle = textTheme.labelSmall?.copyWith(
+      color: palette.textTertiary,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.arrow_downward_rounded, size: 14, color: palette.accent),
+            const SizedBox(width: 2),
+            Text(TrafficFormat.rate(traffic.rxRateBps), style: rateStyle),
+            const SizedBox(width: 12),
+            Icon(
+              Icons.arrow_upward_rounded,
+              size: 14,
+              color: palette.textSecondary,
+            ),
+            const SizedBox(width: 2),
+            Text(TrafficFormat.rate(traffic.txRateBps), style: rateStyle),
+          ],
+        ),
+        const SizedBox(height: 2),
+        Text(
+          '累计 ↓ ${TrafficFormat.bytes(traffic.rxTotalBytes)}'
+          ' · ↑ ${TrafficFormat.bytes(traffic.txTotalBytes)}',
+          style: totalStyle,
+        ),
+      ],
     );
   }
 }

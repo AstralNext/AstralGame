@@ -12,6 +12,7 @@ import 'package:astral_game/config/constants.dart';
 import 'package:astral_rust_core/p2p_service.dart';
 
 import '../models/enhanced_node_info.dart';
+import '../models/room_traffic_stats.dart';
 import 'app_settings_service.dart';
 import 'connectivity_status_service.dart';
 import 'firewall_service.dart';
@@ -51,11 +52,18 @@ class NodeManagementService {
   /// 哨兵节点的 ipv4。未连接 / 尚未拿到地址 / DHCP 未分配时为空字符串。
   final myVirtualIpv4 = signal<String>('');
 
+  /// 房间流量：对端合计的累计上下行 + 实时速率。
+  final roomTraffic = signal<RoomTrafficStats>(RoomTrafficStats.zero);
+
   Timer? _pollingTimer;
   int _pollTick = 0;
   /// 已连接但尚未拿到虚拟 IP 时，节流告警，避免每秒刷屏。
   DateTime? _noIpSince;
   DateTime? _lastNoIpWarnAt;
+
+  BigInt? _prevTrafficRx;
+  BigInt? _prevTrafficTx;
+  DateTime? _prevTrafficAt;
 
   /// 本机在当前 EasyTier instance 内的 peer_id。`null` 表示尚未取到（首次轮询
   /// 期间会在后台异步刷新）。用于在拉取资料时把"自己"过滤掉，避免无意义的
@@ -97,6 +105,7 @@ class NodeManagementService {
     _noIpSince = DateTime.now();
     _lastNoIpWarnAt = null;
     myVirtualIpv4.value = '';
+    _resetRoomTraffic();
     // 后台异步取本机 peer_id，不阻塞 polling 启动；取到之前 polling 已经会用
     // `peerId == 0` 这个守卫挡掉合成本机节点。
     unawaited(_refreshMyPeerId(instanceId));
@@ -126,6 +135,7 @@ class NodeManagementService {
     _myPeerId = null;
     userNodes.value = [];
     myVirtualIpv4.value = '';
+    _resetRoomTraffic();
     _noIpSince = null;
     _lastNoIpWarnAt = null;
     _peerInfoFetchStartedAt.clear();
@@ -280,6 +290,7 @@ class NodeManagementService {
         );
       }
       _trackMissingVirtualIp(myIp, normalized);
+      _updateRoomTraffic(newNodesList);
 
       if (_verbosePollLogs) {
         // 每秒打印“本次实际获取到的节点列表”（非常刷屏）
@@ -307,6 +318,70 @@ class NodeManagementService {
 
   /// 是否为本机节点（含 Rust 合成本机哨兵 id）。
   bool isLocalPeer(int peerId) => _isLocalPeer(peerId);
+
+  void _resetRoomTraffic() {
+    _prevTrafficRx = null;
+    _prevTrafficTx = null;
+    _prevTrafficAt = null;
+    roomTraffic.value = RoomTrafficStats.zero;
+  }
+
+  /// 汇总对端 rx/tx，差分得到实时速率（不含本机哨兵与公共服务器）。
+  void _updateRoomTraffic(List<KVNodeInfo> rawNodes) {
+    var rx = BigInt.zero;
+    var tx = BigInt.zero;
+    for (final n in rawNodes) {
+      if (n.hostname.startsWith(AppConstants.publicServerHostname)) continue;
+      if (_isLocalPeer(n.peerId)) continue;
+      rx += n.rxBytes;
+      tx += n.txBytes;
+    }
+
+    final now = DateTime.now();
+    var rxRate = 0.0;
+    var txRate = 0.0;
+    final prevRx = _prevTrafficRx;
+    final prevTx = _prevTrafficTx;
+    final prevAt = _prevTrafficAt;
+    if (prevRx != null && prevTx != null && prevAt != null) {
+      final dtSec = now.difference(prevAt).inMilliseconds / 1000.0;
+      if (dtSec > 0.2) {
+        final dRx = rx - prevRx;
+        final dTx = tx - prevTx;
+        if (dRx > BigInt.zero) {
+          rxRate = dRx.toDouble() / dtSec;
+        }
+        if (dTx > BigInt.zero) {
+          txRate = dTx.toDouble() / dtSec;
+        }
+      }
+    }
+
+    _prevTrafficRx = rx;
+    _prevTrafficTx = tx;
+    _prevTrafficAt = now;
+
+    final next = RoomTrafficStats(
+      rxTotalBytes: _bigIntToClampedInt(rx),
+      txTotalBytes: _bigIntToClampedInt(tx),
+      rxRateBps: rxRate,
+      txRateBps: txRate,
+    );
+    final prev = roomTraffic.value;
+    if (prev.rxTotalBytes != next.rxTotalBytes ||
+        prev.txTotalBytes != next.txTotalBytes ||
+        (prev.rxRateBps - next.rxRateBps).abs() > 0.5 ||
+        (prev.txRateBps - next.txRateBps).abs() > 0.5) {
+      roomTraffic.value = next;
+    }
+  }
+
+  int _bigIntToClampedInt(BigInt v) {
+    if (v <= BigInt.zero) return 0;
+    final max = BigInt.from(1) << 62;
+    if (v >= max) return max.toInt();
+    return v.toInt();
+  }
 
   /// 成员是否为当前房间房主（管理节点 / 本机会话房主）。
   /// 是否为当前房间房主节点。共享密码模式下客人侧无法可靠识别，仅房主本人标为房主。

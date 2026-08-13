@@ -41,8 +41,45 @@
 
 | parser | 侧 | 游戏 |
 |--------|----|------|
-| `minecraft_motd` | 内核 | MC `[MOTD]…[/MOTD][AD]port[/AD]` |
+| `minecraft_motd` | 内核听 / Dart 重建 | MC `[MOTD]…[/MOTD][AD]port[/AD]` |
 | `mindustry_server` | Dart | Mindustry `NetworkIO.writeServerData()` |
+
+### `params`：标题重建 + 本机注入（通用）
+
+任意 `type` 都可加，不绑死某一款游戏。  
+**启停跟开放游戏事件走**：`game.advertiseOpen` 出现条目 → 开组播注入 + 转发；广告消失 / TTL 到期 / 退房 → 立刻停。
+
+| 字段 | 含义 |
+|------|------|
+| `title_template` | 重建标题：`{player}` `{game}` `{label}` `{motd}` |
+| `inject_local` | 向本机回环发 UDP 宣告载荷 |
+| `inject_bind` | 默认 `127.0.0.1`（游戏会连这个 IP） |
+| `inject_mode` | `loopback` / `multicast` / `both`（默认 both） |
+| `forward_local` | `127.0.0.1:游戏端口` TCP 转到对端虚拟 IP |
+
+新 parser 只需补「解析 + 重建载荷」，不必新发现器。
+
+### Minecraft 示例
+
+```json
+{
+  "id": "mc",
+  "label": "Minecraft",
+  "type": "udp_multicast",
+  "multicast": "224.0.2.60",
+  "multicast_port": 4445,
+  "parser": "minecraft_motd",
+  "params": {
+    "title_template": "{player} · {game}",
+    "inject_local": true,
+    "inject_bind": "127.0.0.1",
+    "forward_local": true
+  }
+}
+```
+
+房主开局域网世界 → Astral 听 MOTD，标题改成「玩家名 · Minecraft」再经 ET 发出。  
+客人：本机 `127.0.0.1` 注入宣告 + TCP 转到房主虚拟 IP；MC 多人游戏里直接点 LAN。
 
 ### Mindustry 示例（配置驱动）
 
