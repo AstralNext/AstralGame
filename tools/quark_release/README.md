@@ -40,5 +40,5 @@ Get-Content -Raw config.json | gh secret set QUARK_DRIVE_CONFIG_JSON --repo Astr
 ```bash
 $env:QUARK_DRIVE_CONFIG_JSON = Get-Content -Raw config.json
 python tools/quark_release/quark_http.py whoami
-python tools/quark_release/quark_http.py upload 1.0.22 release
+python tools/quark_release/quark_http.py upload 1.0.23 release
 ```
