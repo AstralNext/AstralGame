@@ -9,7 +9,7 @@
 #   （Build 工作流正式签名 Android APK；PR 无密钥时回退 debug）
 # - QUARK_DRIVE_CONFIG_JSON 或 QUARK_USER_ID/QUARK_DEVICE_ID/QUARK_ACCESS_TOKEN/QUARK_REFRESH_TOKEN
 # - QUARK_PARENT_FID（建议，AstralGame 目录 FID）
-# - ASTRAL_SITE_TOKEN（可选，写 next.astral.github.io/public/downloads.json）
+# - ASTRAL_SITE_TOKEN（写 next.astral.github.io；同时用于创建 GitHub Release，避免 GITHUB_TOKEN 403）
 # 附件命名：astral-game-<semver>-<platform>-<arch>.<ext>
 
 name: 发布
@@ -51,6 +51,8 @@ on:
 
 permissions:
   contents: write
+  actions: read
+  attestations: write
 
 jobs:
   release:
@@ -254,7 +256,7 @@ jobs:
           fail_on_unmatched_files: false
           files: release/*
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.ASTRAL_SITE_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: 上传夸克网盘并更新官网下载
         id: quark
@@ -279,7 +281,7 @@ jobs:
       - name: Release 备注夸克链接
         if: steps.cfg.outputs.skip != 'true' && steps.quark.outputs.share_url != ''
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.ASTRAL_SITE_TOKEN || secrets.GITHUB_TOKEN }}
           SHARE: ${{ steps.quark.outputs.share_url }}
           TAG: ${{ steps.cfg.outputs.tag }}
         run: |
