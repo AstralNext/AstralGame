@@ -34,6 +34,10 @@ class OpenGamesService {
   final AppSettingsService _settings;
 
   final listings = signal<List<OpenGameListing>>(const []);
+  final LanLocalRelay _localRelay = LanLocalRelay();
+
+  /// 通道目标在本机的 127 转发 / 组播注入状态（UI 绿点）。
+  late final relayStatuses = _localRelay.statuses;
 
   String? _roomGameId;
   bool _isHost = false;
@@ -43,7 +47,6 @@ class OpenGamesService {
   final Set<int> _pulledPeers = {};
   bool _listening = false;
   List<LocalOpenGameAd> _lastLocalAds = const [];
-  final LanLocalRelay _localRelay = LanLocalRelay();
   String _roomGameName = '';
 
   bool get isActive => _roomGameId != null;

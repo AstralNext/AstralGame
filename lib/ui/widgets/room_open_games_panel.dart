@@ -1,5 +1,6 @@
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/models/game_catalog.dart';
+import 'package:astral_game/data/models/lan_relay_status.dart';
 import 'package:astral_game/data/models/open_game_listing.dart';
 import 'package:astral_game/data/services/open_games_service.dart';
 import 'package:astral_game/di.dart';
@@ -27,6 +28,7 @@ class RoomOpenGamesPanel extends StatelessWidget {
 
     return Watch((context) {
       final entries = openGames.listings.value;
+      final relays = openGames.relayStatuses.value;
       final active = openGames.isActive;
 
       if (!active && entries.isEmpty) {
@@ -103,6 +105,7 @@ class RoomOpenGamesPanel extends StatelessWidget {
                             final e = entries[i];
                             return _OpenGameTile(
                               listing: e,
+                              relay: relays[e.key],
                               onCopy: () => _copy(context, e),
                             );
                           },
@@ -127,10 +130,12 @@ class RoomOpenGamesPanel extends StatelessWidget {
 class _OpenGameTile extends StatelessWidget {
   const _OpenGameTile({
     required this.listing,
+    this.relay,
     required this.onCopy,
   });
 
   final OpenGameListing listing;
+  final LanRelayStatus? relay;
   final VoidCallback onCopy;
 
   @override
@@ -138,6 +143,8 @@ class _OpenGameTile extends StatelessWidget {
     final palette = context.astralPalette;
     final textTheme = Theme.of(context).textTheme;
     final colorScheme = Theme.of(context).colorScheme;
+    final relaying = relay?.isActive == true;
+    const liveColor = Color(0xFF22C55E);
 
     return Material(
       color: Colors.transparent,
@@ -149,6 +156,27 @@ class _OpenGameTile extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 6, right: 8),
+                child: Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: relaying
+                        ? liveColor
+                        : palette.textTertiary.withValues(alpha: 0.35),
+                    boxShadow: relaying
+                        ? [
+                            BoxShadow(
+                              color: liveColor.withValues(alpha: 0.55),
+                              blurRadius: 6,
+                            ),
+                          ]
+                        : null,
+                  ),
+                ),
+              ),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -179,6 +207,13 @@ class _OpenGameTile extends StatelessWidget {
                             colorScheme.primaryContainer,
                             colorScheme.onPrimaryContainer,
                           ),
+                        if (relaying)
+                          _chip(
+                            textTheme,
+                            '本机转发',
+                            liveColor.withValues(alpha: 0.18),
+                            liveColor,
+                          ),
                         Text(
                           listing.ownerName,
                           style: textTheme.labelSmall?.copyWith(
@@ -195,6 +230,18 @@ class _OpenGameTile extends StatelessWidget {
                         fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                     ),
+                    if (relaying) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        '${relay!.localEndpoint} → ${relay!.remoteEndpoint}'
+                        '${relay!.forward ? ' · TCP' : ''}'
+                        '${relay!.inject ? ' · 组播' : ''}',
+                        style: textTheme.labelSmall?.copyWith(
+                          color: liveColor,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),

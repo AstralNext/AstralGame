@@ -3,22 +3,23 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:astral_game/data/models/game_assist_rules.dart';
+import 'package:astral_game/data/models/lan_relay_status.dart';
 import 'package:astral_game/data/models/open_game_listing.dart';
 import 'package:astral_game/data/services/lan_payload_builders.dart';
 import 'package:astral_game/utils/logger.dart';
 import 'package:astral_rust_core/astral_rust_core.dart';
+import 'package:signals/signals_core.dart';
 
-/// 把房间内同伴的「开放游戏」宣告，注入到本机回环，并按需做 TCP 转发。
+/// 只跟「开放游戏」通道走：listing 出现 → 本机组播 + 127 转发；消失立刻关。
 ///
-/// 启停只跟 [OpenGameListing] 走：有条目才开，条目没了 / 退房立刻关。
-/// 通用能力（由 JSON `params` 打开），不绑死某一款游戏：
-/// - `inject_local`：向 `inject_bind`（默认 127.0.0.1）+ 发现端口发 UDP 载荷
-/// - `forward_local`：`inject_bind:gamePort` → `peerIp:gamePort` TCP
-/// - `title_template`：重建标题（在上层写进 listing.motd/label）
+/// 不监听本机组播。发现仍由房主侧 discoverer 负责；本类只消费通道里的目标。
 class LanLocalRelay {
   RawDatagramSocket? _socket;
   Timer? _tick;
   final Map<String, _ActiveRelay> _active = {};
+
+  /// UI：listing.key → 本机继电器状态。
+  final statuses = signal<Map<String, LanRelayStatus>>(const {});
 
   Future<void> sync({
     required List<OpenGameListing> remotes,
@@ -27,37 +28,9 @@ class LanLocalRelay {
     final wanted = <String, _RelaySpec>{};
     for (final listing in remotes) {
       if (listing.isSelf || listing.isExpired) continue;
-      final entry = _entryFor(listing, entries);
-      if (entry == null) continue;
-      final inject = entry.paramBool('inject_local');
-      final forward = entry.paramBool('forward_local');
-      if (!inject && !forward) continue;
-
-      final bind = entry.paramString('inject_bind') ?? '127.0.0.1';
-      final parser = (entry.parser ?? '').trim();
-      final title = (listing.motd?.trim().isNotEmpty == true)
-          ? listing.motd!.trim()
-          : listing.label;
-      Uint8List? payload;
-      if (inject && parser.isNotEmpty) {
-        payload = lanPayloadBuilderOf(parser)?.call(
-          title: title,
-          port: listing.port,
-        );
-      }
-      wanted[listing.key] = _RelaySpec(
-        key: listing.key,
-        inject: inject && payload != null && payload.isNotEmpty,
-        forward: forward,
-        bindHost: bind,
-        gamePort: listing.port,
-        targetHost: listing.ipv4,
-        targetPort: listing.port,
-        multicast: (entry.multicast ?? '').trim(),
-        multicastPort: entry.multicastPort ?? 0,
-        injectMode: (entry.paramString('inject_mode') ?? 'both').toLowerCase(),
-        payload: payload,
-      );
+      final spec = _specFor(listing, entries);
+      if (spec == null) continue;
+      wanted[listing.key] = spec;
     }
 
     final stale = _active.keys.where((k) => !wanted.containsKey(k)).toList();
@@ -73,10 +46,21 @@ class LanLocalRelay {
       }
       if (prev != null) await _stopOne(_active.remove(spec.key));
       final next = await _startOne(spec);
-      if (next != null) _active[spec.key] = next;
+      if (next != null) {
+        _active[spec.key] = next;
+        appLogger.i(
+          '[LanRelay] 通道触发 ${spec.key} '
+          'inject=${spec.inject} forward=${spec.forward} '
+          '${spec.bindHost}:${spec.gamePort} → ${spec.targetHost}:${spec.targetPort}',
+        );
+      }
     }
 
+    _publishStatuses();
     _ensureTicker();
+    if (_active.values.any((e) => e.spec.inject)) {
+      unawaited(_beaconOnce());
+    }
   }
 
   Future<void> stop() async {
@@ -84,6 +68,7 @@ class LanLocalRelay {
     _tick = null;
     final all = _active.values.toList();
     _active.clear();
+    _publishStatuses();
     for (final s in all) {
       await _stopOne(s);
     }
@@ -91,15 +76,66 @@ class LanLocalRelay {
     _socket = null;
   }
 
+  _RelaySpec? _specFor(
+    OpenGameListing listing,
+    List<GameAssistLanGameDiscoverEntry> entries,
+  ) {
+    final entry = _entryFor(listing, entries);
+    if (entry == null) {
+      appLogger.d(
+        '[LanRelay] 无匹配规则，跳过 ${listing.key} adId=${listing.adId}',
+      );
+      return null;
+    }
+    final parser = (entry.parser ?? '').trim();
+    final canBuild = parser.isNotEmpty && lanPayloadBuilderOf(parser) != null;
+    final inject = entry.paramBool('inject_local', canBuild);
+    final forward = entry.paramBool('forward_local', canBuild);
+    if (!inject && !forward) return null;
+
+    final bind = entry.paramString('inject_bind') ?? '127.0.0.1';
+    final title = (listing.motd?.trim().isNotEmpty == true)
+        ? listing.motd!.trim()
+        : listing.label;
+    Uint8List? payload;
+    if (inject && canBuild) {
+      payload = lanPayloadBuilderOf(parser)?.call(
+        title: title,
+        port: listing.port,
+      );
+    }
+    return _RelaySpec(
+      key: listing.key,
+      inject: inject && payload != null && payload.isNotEmpty,
+      forward: forward,
+      bindHost: bind,
+      gamePort: listing.port,
+      targetHost: listing.ipv4,
+      targetPort: listing.port,
+      multicast: (entry.multicast ?? '').trim(),
+      multicastPort: entry.multicastPort ?? 0,
+      injectMode: (entry.paramString('inject_mode') ?? 'both').toLowerCase(),
+      payload: payload,
+    );
+  }
+
   GameAssistLanGameDiscoverEntry? _entryFor(
     OpenGameListing listing,
     List<GameAssistLanGameDiscoverEntry> entries,
   ) {
-    final adId = listing.adId;
+    if (entries.isEmpty) return null;
+    final adId = listing.adId.trim();
     for (final e in entries) {
       if (adId == e.id || adId.startsWith('${e.id}:')) return e;
     }
-    return null;
+    for (final e in entries) {
+      final parser = (e.parser ?? '').trim();
+      if (parser.isNotEmpty && lanPayloadBuilderOf(parser) != null) return e;
+    }
+    for (final e in entries) {
+      if ((e.multicast ?? '').trim().isNotEmpty) return e;
+    }
+    return entries.first;
   }
 
   Future<RawDatagramSocket> _socketOn(String bindHost) async {
@@ -133,7 +169,11 @@ class LanLocalRelay {
       }
     }
     if (!spec.inject && forwardIndex == null) return null;
-    return _ActiveRelay(spec: spec, forwardIndex: forwardIndex);
+    return _ActiveRelay(
+      spec: spec,
+      forwardIndex: forwardIndex,
+      forwardOk: forwardIndex != null,
+    );
   }
 
   Future<void> _stopOne(_ActiveRelay? session) async {
@@ -146,6 +186,20 @@ class LanLocalRelay {
         appLogger.d('[LanRelay] 停止转发失败 index=$idx: $e');
       }
     }
+  }
+
+  void _publishStatuses() {
+    statuses.value = {
+      for (final e in _active.entries)
+        e.key: LanRelayStatus(
+          listingKey: e.key,
+          localEndpoint: '${e.value.spec.bindHost}:${e.value.spec.gamePort}',
+          remoteEndpoint:
+              '${e.value.spec.targetHost}:${e.value.spec.targetPort}',
+          inject: e.value.spec.inject,
+          forward: e.value.forwardOk,
+        ),
+    };
   }
 
   void _ensureTicker() {
@@ -235,9 +289,14 @@ class _RelaySpec {
 }
 
 class _ActiveRelay {
-  _ActiveRelay({required this.spec, this.forwardIndex});
+  _ActiveRelay({
+    required this.spec,
+    this.forwardIndex,
+    this.forwardOk = false,
+  });
   _RelaySpec spec;
   final BigInt? forwardIndex;
+  final bool forwardOk;
 }
 
 bool _bytesEq(Uint8List? a, Uint8List? b) {
