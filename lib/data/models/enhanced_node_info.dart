@@ -25,12 +25,13 @@ class EnhancedNodeInfo {
     Map<String, dynamic>? metadata,
     String? customName,
     Uint8List? avatar,
+    bool clearAvatar = false,
   }) {
     return EnhancedNodeInfo(
       baseInfo: baseInfo ?? this.baseInfo,
       metadata: metadata ?? this.metadata,
       customName: customName ?? this.customName,
-      avatar: avatar ?? this.avatar,
+      avatar: clearAvatar ? null : (avatar ?? this.avatar),
     );
   }
 
@@ -61,6 +62,13 @@ class EnhancedNodeInfo {
 
   /// 对端 Windows 专用防火墙：`enabled` / `disabled` / `unsupported`。
   String? get peerFirewall => metadata['peerFirewall'] as String?;
+
+  /// 对端头像内容 hash；无头像或尚未拉取时为空。
+  String? get peerAvatarHash {
+    final raw = metadata['avatarHash']?.toString().trim();
+    if (raw == null || raw.isEmpty) return null;
+    return raw;
+  }
 
   /// 节点是否拥有有效的虚拟网 IPv4（兼容 CIDR：`x.x.x.x/24`）。
   /// 公共服务器、未分配 IP 的节点会返回 `false`。UI 用它决定"IP 文字是否高亮"。

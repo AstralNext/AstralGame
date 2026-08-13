@@ -2,7 +2,7 @@ name: astral_game
 description: "Astral Game Client"
 publish_to: 'none'
 
-version: 1.0.17
+version: 1.0.18
 
 environment:
   sdk: ^3.8.0
@@ -19,6 +19,7 @@ dependencies:
       url: https://github.com/AstralNext/vpn_service_plugin.git
       ref: main
   pointycastle: ^3.9.1
+  crypto: ^3.0.7
   window_manager: ^0.4.3
   get_it: ^9.2.0
   signals: ^6.3.0

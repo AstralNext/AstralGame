@@ -1,28 +1,17 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:app_links/app_links.dart';
 import 'package:astral_game/utils/logger.dart';
 import 'package:astral_game/utils/room_share.dart';
-import 'package:path/path.dart' as p;
 import 'package:signals/signals_core.dart';
 
-/// 监听 https://next.astral.fan/j?c=… / astralgame:// 深链，交给 UI 自动进房。
+/// 用 app_links 监听 `astralgame://` 与 https://next.astral.fan/j（全平台）。
 class JoinLinkService {
   final pendingToken = signal<String?>(null);
 
   final _appLinks = AppLinks();
   StreamSubscription<Uri>? _uriSub;
-  StreamSubscription<FileSystemEvent>? _fileSub;
-  Timer? _filePoll;
-  String? _lastFileToken;
-
-  static String get windowsPendingPath {
-    final tmp = Platform.environment['TEMP'] ??
-        Platform.environment['TMP'] ??
-        Directory.systemTemp.path;
-    return p.join(tmp, 'astral_game_pending_uri.txt');
-  }
+  String? _lastRaw;
 
   Future<void> start() async {
     try {
@@ -35,67 +24,37 @@ class JoinLinkService {
       _considerUri,
       onError: (e) => appLogger.d('[JoinLink] 链接流错误: $e'),
     );
-    if (Platform.isWindows) {
-      _watchWindowsPendingFile();
-    }
   }
 
   void dispose() {
     unawaited(_uriSub?.cancel());
     _uriSub = null;
-    unawaited(_fileSub?.cancel());
-    _fileSub = null;
-    _filePoll?.cancel();
-    _filePoll = null;
   }
 
   void consume() => pendingToken.value = null;
 
   void _considerUri(Uri? uri) {
     if (uri == null) return;
-    final token = tokenFromJoinUri(uri) ?? extractJoinToken(uri.toString());
-    _emit(token);
+    _considerRaw(uri.toString());
+  }
+
+  void _considerRaw(String? raw) {
+    final s = (raw ?? '').trim();
+    if (s.isEmpty || s == _lastRaw) return;
+    _lastRaw = s;
+    _emit(extractJoinToken(s) ?? s);
   }
 
   void _emit(String? token) {
     final t = (token ?? '').trim();
     if (t.isEmpty) return;
-    if (extractJoinToken(t) == null &&
+    final extracted = extractJoinToken(t);
+    if (extracted == null &&
         !looksLikeShortCode(t) &&
         !looksLikeOfflineInvite(t)) {
       return;
     }
-    pendingToken.value = extractJoinToken(t) ?? t;
+    pendingToken.value = extracted ?? t;
     appLogger.i('[JoinLink] 待加入 ${pendingToken.value}');
-  }
-
-  void _watchWindowsPendingFile() {
-    final file = File(windowsPendingPath);
-    unawaited(_readPendingFile(file));
-    try {
-      _fileSub = file.parent.watch(events: FileSystemEvent.all).listen((ev) {
-        if (p.basename(ev.path) != p.basename(file.path)) return;
-        unawaited(_readPendingFile(file));
-      });
-    } catch (_) {
-      _filePoll = Timer.periodic(const Duration(milliseconds: 800), (_) {
-        unawaited(_readPendingFile(file));
-      });
-    }
-  }
-
-  Future<void> _readPendingFile(File file) async {
-    try {
-      if (!await file.exists()) return;
-      final raw = (await file.readAsString()).trim();
-      if (raw.isEmpty || raw == _lastFileToken) return;
-      _lastFileToken = raw;
-      try {
-        await file.delete();
-      } catch (_) {}
-      _emit(extractJoinToken(raw) ?? raw);
-    } catch (e) {
-      appLogger.d('[JoinLink] 读 pending uri 失败: $e');
-    }
   }
 }

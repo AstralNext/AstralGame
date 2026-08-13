@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:astral_game/data/services/home_widget_sync_service.dart';
 import 'package:astral_game/di.dart';
 import 'package:astral_game/firebase_options.dart';
+import 'package:astral_game/utils/join_protocol.dart';
 import 'package:astral_game/utils/single_instance_guard.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:home_widget/home_widget.dart';
@@ -44,6 +45,7 @@ Future<void> main() async {
   }
 
   await setupDI();
+  await registerJoinProtocol();
 
   final nodeManager = getIt<NodeManagementService>();
   nodeManager.initUserInfo();

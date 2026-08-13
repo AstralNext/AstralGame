@@ -554,14 +554,25 @@ class NodeManagementService {
     if (!client.isBound) return;
 
     try {
-      final result = await client.call(node.peerId, 'user.getInfo');
+      final knownHash = node.peerAvatarHash;
+      final result = await client.call(
+        node.peerId,
+        'user.getInfo',
+        params: {
+          if (knownHash != null) 'avatarHash': knownHash,
+        },
+      );
 
       if (result is Map) {
         final map = Map<String, dynamic>.from(result);
         final name = map['name'] as String?;
-        final avatarBytes = map['avatar'] != null
+        final avatarHash = (map['avatarHash'] as String?)?.trim();
+        final hasAvatarField = map['avatar'] != null;
+        final avatarBytes = hasAvatarField
             ? base64Decode(map['avatar'] as String)
             : null;
+        final clearAvatar =
+            !hasAvatarField && (avatarHash == null || avatarHash.isEmpty);
 
         final meta = <String, dynamic>{
           if (map['os'] != null) 'peerOs': map['os'],
@@ -570,14 +581,19 @@ class NodeManagementService {
           if (map['appVersion'] != null) 'peerAppVersion': map['appVersion'],
           if (map['network'] != null) 'peerNetwork': map['network'],
           if (map['firewall'] != null) 'peerFirewall': map['firewall'],
+          'avatarHash': avatarHash ?? '',
         };
 
-        if (name != null || avatarBytes != null || meta.isNotEmpty) {
+        if (name != null ||
+            avatarBytes != null ||
+            clearAvatar ||
+            meta.isNotEmpty) {
           _updateNodeInfo(
             node.peerId,
             name: name,
             avatar: avatarBytes,
-            metadataPatch: meta.isEmpty ? null : meta,
+            clearAvatar: clearAvatar,
+            metadataPatch: meta,
           );
         }
       }
@@ -606,6 +622,7 @@ class NodeManagementService {
     int peerId, {
     String? name,
     Uint8List? avatar,
+    bool clearAvatar = false,
     Map<String, dynamic>? metadataPatch,
   }) {
     final list = userNodes.value;
@@ -624,7 +641,8 @@ class NodeManagementService {
     };
     final merged = before.copyWith(
       customName: name ?? before.customName,
-      avatar: avatar ?? before.avatar,
+      avatar: avatar,
+      clearAvatar: clearAvatar,
       metadata: mergedMeta,
     );
     if (_sameEnhancedPollSnapshot(before, merged)) return;
