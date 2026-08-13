@@ -1,48 +1,44 @@
 # 夸克网盘自动上传（Release）
 
-打 `v*` 标签并完成 GitHub Release 后，Actions 会把 `release/` 里的安装包上传到夸克网盘，创建永久公开分享，并（可选）更新官网 `downloads.json`。
+打 `v*` 标签并完成 GitHub Release 后，Actions 用夸克 **Open HTTP API**（`https://open-api-drive.quark.cn`）上传 `release/` 安装包，创建永久公开分享，并（可选）更新官网 `downloads.json`。
+
+不依赖 `quark-drive.cjs`，因此不受 CLI「无法识别当前 Agent 环境」限制。
 
 ## 仓库 Secrets
 
-在 `AstralNext/AstralGame` → Settings → Secrets and variables → Actions 添加：
+在 `AstralNext/AstralGame` → Settings → Secrets and variables → Actions：
 
 | Secret | 必填 | 说明 |
 |---|---|---|
-| `QUARK_DRIVE_CONFIG_JSON` | 二选一 | 夸克官方 CLI 的完整 `config.json`（含 access/refresh token） |
-| `QUARK_USER_ID` / `QUARK_DEVICE_ID` / `QUARK_ACCESS_TOKEN` / `QUARK_REFRESH_TOKEN` | 二选一 | 拆开写 token，脚本会拼成 config |
-| `QUARK_PARENT_FID` | 建议 | 网盘里「AstralGame」目录的 FID。不填则每次在根目录幂等创建 `AstralGame` |
-| `ASTRAL_SITE_TOKEN` | 可选 | 能写 `AstralNext/next.astral.github.io` 的 PAT，用来更新 `public/downloads.json` |
-
-本地若已绑定夸克 Skill，`config.json` 一般在用户目录下的 `.quarkclouddrive/` 或 Skill 的 `openclaw/`。把**整份 JSON**贴进 `QUARK_DRIVE_CONFIG_JSON` 即可，不要提交到 git。
+| `QUARK_DRIVE_CONFIG_JSON` | 二选一 | 夸克 CLI 的完整 `config.json`（含 access/refresh token） |
+| `QUARK_USER_ID` / `QUARK_DEVICE_ID` / `QUARK_ACCESS_TOKEN` / `QUARK_REFRESH_TOKEN` | 二选一 | 拆开写 token |
+| `QUARK_PARENT_FID` | 建议 | 「AstralGame」目录 FID。不填则在根目录幂等创建 |
+| `ASTRAL_SITE_TOKEN` | 可选 | 能写 `AstralNext/next.astral.github.io` 的 PAT |
 
 ```bash
-gh secret set QUARK_DRIVE_CONFIG_JSON < config.json
-gh secret set QUARK_PARENT_FID
-gh secret set ASTRAL_SITE_TOKEN
+gh secret set QUARK_DRIVE_CONFIG_JSON --repo AstralNext/AstralGame
+# 然后把 config.json 内容贴进 stdin，或以管道传入
+Get-Content -Raw config.json | gh secret set QUARK_DRIVE_CONFIG_JSON --repo AstralNext/AstralGame
 ```
 
-`ASTRAL_SITE_TOKEN` 权限：`repo`（或至少该网站仓库 Contents: Read and write）。
+## 接口（Open API）
 
-## 网盘目录
+签名头：`x-pan-client-id` / `x-pan-tm` / `x-pan-token`（`sha256(METHOD&PATH&ts&signKey)`）
 
-```
-夸克网盘/
-  AstralGame/          ← QUARK_PARENT_FID
-    v1.0.22/
-      astral-game-1.0.22-windows-x64.zip
-      astral-game-1.0.22-windows-x64-setup.exe
-      astral-game-1.0.22-linux-x64.tar.gz
-      astral-game-1.0.22-android-arm64.apk
-```
-
-每个版本文件夹会生成一条永久公开分享，写入 [next.astral.fan/downloads.json](https://next.astral.fan/downloads.json)。
+| 用途 | 方法 | 路径 |
+|---|---|---|
+| 刷新 token | POST | `/agent/v1/oauth/access_token/rotate` |
+| 用户信息 | GET | `/open/v1/user/info` |
+| 建文件夹 | POST | `/open/v1/dir` |
+| 预上传 / 秒传 | POST | `/open/v1/file/upload_pre` |
+| 分片 URL | POST | `/open/v1/file/get_upload_urls` |
+| 完成上传 | POST | `/open/v1/file/upload_finish` |
+| 公开分享 | POST | `/agent/v1/share/create` |
 
 ## 本地试跑
 
 ```bash
-export QUARK_DRIVE_CONFIG_JSON="$(cat /path/to/config.json)"
-export QUARK_PARENT_FID="你的目录FID"
-bash tools/quark_release/upload.sh 1.0.22 release
+$env:QUARK_DRIVE_CONFIG_JSON = Get-Content -Raw config.json
+python tools/quark_release/quark_http.py whoami
+python tools/quark_release/quark_http.py upload 1.0.22 release
 ```
-
-没有 Secrets 时，Release 工作流会跳过夸克步骤，不影响 GitHub Release。

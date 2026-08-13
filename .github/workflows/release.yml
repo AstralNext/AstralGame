@@ -274,8 +274,7 @@ jobs:
             echo "Quark secrets 未配置，跳过网盘上传"
             exit 0
           fi
-          chmod +x tools/quark_release/upload.sh
-          tools/quark_release/upload.sh "${{ steps.cfg.outputs.version }}" release
+          python3 tools/quark_release/quark_http.py upload "${{ steps.cfg.outputs.version }}" release
 
       - name: Release 备注夸克链接
         if: steps.cfg.outputs.skip != 'true' && steps.quark.outputs.share_url != ''
