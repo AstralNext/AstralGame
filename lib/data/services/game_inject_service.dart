@@ -17,6 +17,7 @@ class GameInjectService {
   GameAssistInjectConfig? _config;
   final Set<int> _injected = {};
   final Set<int> _inflight = {};
+  final Map<int, DateTime> _retryAfter = {};
 
   Future<void> startForRoom({required String gameId}) async {
     await stop();
@@ -31,13 +32,17 @@ class GameInjectService {
       appLogger.d('[GameInject] 未配置 mono 注入 game=$gameId');
       return;
     }
+    if (inject.process.isEmpty) {
+      appLogger.w('[GameInject] 未配置 process，拒绝按窗口标题注入');
+      return;
+    }
     _config = inject;
     _timer = Timer.periodic(const Duration(seconds: 2), (_) {
       unawaited(_tick());
     });
     await _tick();
     appLogger.i(
-      '[GameInject] 已监视 ${inject.process.join(",")} dll=${inject.dll}',
+      '[GameInject] 已监视 exe=${inject.process.join(",")} dll=${inject.dll}',
     );
   }
 
@@ -47,6 +52,7 @@ class GameInjectService {
     _config = null;
     _injected.clear();
     _inflight.clear();
+    _retryAfter.clear();
   }
 
   Future<void> _tick() async {
@@ -54,24 +60,46 @@ class GameInjectService {
     if (cfg == null) return;
     if (!Platform.isWindows) return;
 
+    // 只认 exe，不用窗口标题：标签页叫 Raft 的浏览器也会中招。
     final procs = await listWindowsGameProcesses(
       exeNames: cfg.process,
-      windowNeedles: cfg.window,
+      windowNeedles: const [],
     );
     final alive = <int>{};
+    final now = DateTime.now();
     for (final proc in procs) {
       if (proc.pid <= 0) continue;
+      if (_isUnsafeInjectTarget(proc.exe)) {
+        appLogger.d(
+          '[GameInject] 跳过非游戏进程 ${proc.exe} pid=${proc.pid}',
+        );
+        continue;
+      }
+      if (!_exeAllowed(proc.exe, cfg.process)) continue;
       alive.add(proc.pid);
       if (_injected.contains(proc.pid) || _inflight.contains(proc.pid)) {
         continue;
       }
+      final waitUntil = _retryAfter[proc.pid];
+      if (waitUntil != null && now.isBefore(waitUntil)) {
+        continue;
+      }
       _inflight.add(proc.pid);
-      unawaited(_injectPid(proc.pid, cfg));
+      appLogger.i(
+        '[GameInject] 发现 ${proc.exe} pid=${proc.pid}'
+        '${proc.title.isEmpty ? "" : " title=${proc.title}"}',
+      );
+      unawaited(_injectPid(proc.pid, proc.exe, cfg));
     }
     _injected.removeWhere((pid) => !alive.contains(pid));
+    _retryAfter.removeWhere((pid, _) => !alive.contains(pid));
   }
 
-  Future<void> _injectPid(int pid, GameAssistInjectConfig cfg) async {
+  Future<void> _injectPid(
+    int pid,
+    String exe,
+    GameAssistInjectConfig cfg,
+  ) async {
     try {
       final injector = _findInjector();
       final dll = _findDll(cfg.dll);
@@ -81,7 +109,7 @@ class GameInjectService {
         );
         return;
       }
-      appLogger.i('[GameInject] 注入 pid=$pid dll=$dll');
+      appLogger.i('[GameInject] 注入 $exe pid=$pid');
       final result = await Process.run(
         injector,
         [
@@ -101,17 +129,57 @@ class GameInjectService {
       final out = '${result.stdout}\n${result.stderr}'.trim();
       if (result.exitCode == 0) {
         _injected.add(pid);
-        appLogger.i('[GameInject] 成功 pid=$pid $out');
+        _retryAfter.remove(pid);
+        appLogger.i('[GameInject] 成功 $exe pid=$pid $out');
       } else {
+        final monoWait = out.contains('mono.dll not found');
+        _retryAfter[pid] = DateTime.now().add(
+          Duration(seconds: monoWait ? 10 : 4),
+        );
         appLogger.w(
-          '[GameInject] 失败 pid=${pid} code=${result.exitCode} $out',
+          '[GameInject] 失败 $exe pid=$pid code=${result.exitCode} $out',
         );
       }
     } catch (e) {
+      _retryAfter[pid] = DateTime.now().add(const Duration(seconds: 6));
       appLogger.w('[GameInject] 异常 pid=$pid: $e');
     } finally {
       _inflight.remove(pid);
     }
+  }
+
+  bool _exeAllowed(String exe, List<String> names) {
+    if (names.isEmpty) return false;
+    final got = p.basename(exe.trim().toLowerCase());
+    final stem = p.basenameWithoutExtension(got);
+    for (final raw in names) {
+      final want = p.basename(raw.trim().toLowerCase());
+      if (want.isEmpty) continue;
+      if (got == want) return true;
+      if (stem == p.basenameWithoutExtension(want)) return true;
+    }
+    return false;
+  }
+
+  static const _unsafeExes = {
+    'chrome.exe',
+    'msedge.exe',
+    'firefox.exe',
+    'iexplore.exe',
+    'brave.exe',
+    'opera.exe',
+    'vivaldi.exe',
+    'chromium.exe',
+    'qqbrowser.exe',
+    '360chrome.exe',
+    '360se.exe',
+    'sogouexplorer.exe',
+    'steam.exe',
+    'steamwebhelper.exe',
+  };
+
+  bool _isUnsafeInjectTarget(String exe) {
+    return _unsafeExes.contains(p.basename(exe.trim().toLowerCase()));
   }
 
   String? _findInjector() {

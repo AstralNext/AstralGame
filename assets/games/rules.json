@@ -28,7 +28,6 @@
           "inject": {
             "type": "mono",
             "process": ["Raft.exe"],
-            "window": ["Raft"],
             "dll": "AstralRaftNet.dll",
             "namespace": "AstralRaftNet",
             "class": "Loader",

@@ -3,6 +3,8 @@
 use std::ffi::c_void;
 use std::mem::{size_of, transmute};
 use std::ptr::null_mut;
+use std::thread;
+use std::time::{Duration, Instant};
 use windows::Win32::Foundation::{CloseHandle, HANDLE, HMODULE, WAIT_OBJECT_0};
 use windows::Win32::System::Diagnostics::Debug::{ReadProcessMemory, WriteProcessMemory};
 use windows::Win32::System::Diagnostics::ToolHelp::{
@@ -82,7 +84,7 @@ pub fn inject(
             if !is_64bit(handle) {
                 return Err("32-bit Unity is not supported".into());
             }
-            let mono = find_mono_module(handle)?;
+            let mono = wait_for_mono(handle)?;
             let exports = resolve_exports(handle, mono)?;
             let mut mem = RemoteMemory::new(handle);
             let root = call(
@@ -383,6 +385,23 @@ fn is_64bit(handle: HANDLE) -> bool {
         }
     }
     wow.0 == 0
+}
+
+fn wait_for_mono(handle: HANDLE) -> Result<u64, String> {
+    let deadline = Instant::now() + Duration::from_secs(45);
+    let mut last = String::new();
+    loop {
+        match find_mono_module(handle) {
+            Ok(addr) => return Ok(addr),
+            Err(err) => {
+                last = err;
+                if Instant::now() >= deadline {
+                    return Err(last);
+                }
+                thread::sleep(Duration::from_millis(800));
+            }
+        }
+    }
 }
 
 fn find_mono_module(handle: HANDLE) -> Result<u64, String> {
