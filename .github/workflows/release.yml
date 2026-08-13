@@ -7,6 +7,9 @@
 # - GOOGLE 或 GOOGLE_API_KEY（Gemini，可选；无则回退为提交列表）
 # - ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_PASSWORD / ANDROID_KEY_ALIAS
 #   （Build 工作流正式签名 Android APK；PR 无密钥时回退 debug）
+# - QUARK_DRIVE_CONFIG_JSON 或 QUARK_USER_ID/QUARK_DEVICE_ID/QUARK_ACCESS_TOKEN/QUARK_REFRESH_TOKEN
+# - QUARK_PARENT_FID（建议，AstralGame 目录 FID）
+# - ASTRAL_SITE_TOKEN（可选，写 next.astral.github.io/public/downloads.json）
 # 附件命名：astral-game-<semver>-<platform>-<arch>.<ext>
 
 name: 发布
@@ -252,3 +255,36 @@ jobs:
           files: release/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 上传夸克网盘并更新官网下载
+        id: quark
+        if: steps.cfg.outputs.skip != 'true'
+        continue-on-error: true
+        env:
+          QUARK_DRIVE_CONFIG_JSON: ${{ secrets.QUARK_DRIVE_CONFIG_JSON }}
+          QUARK_USER_ID: ${{ secrets.QUARK_USER_ID }}
+          QUARK_DEVICE_ID: ${{ secrets.QUARK_DEVICE_ID }}
+          QUARK_ACCESS_TOKEN: ${{ secrets.QUARK_ACCESS_TOKEN }}
+          QUARK_REFRESH_TOKEN: ${{ secrets.QUARK_REFRESH_TOKEN }}
+          QUARK_PARENT_FID: ${{ secrets.QUARK_PARENT_FID }}
+          ASTRAL_SITE_TOKEN: ${{ secrets.ASTRAL_SITE_TOKEN }}
+        run: |
+          set -euxo pipefail
+          if [ -z "${QUARK_DRIVE_CONFIG_JSON:-}" ] && [ -z "${QUARK_ACCESS_TOKEN:-}" ]; then
+            echo "Quark secrets 未配置，跳过网盘上传"
+            exit 0
+          fi
+          chmod +x tools/quark_release/upload.sh
+          tools/quark_release/upload.sh "${{ steps.cfg.outputs.version }}" release
+
+      - name: Release 备注夸克链接
+        if: steps.cfg.outputs.skip != 'true' && steps.quark.outputs.share_url != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHARE: ${{ steps.quark.outputs.share_url }}
+          TAG: ${{ steps.cfg.outputs.tag }}
+        run: |
+          set -euxo pipefail
+          body=$(gh release view "$TAG" --json body -q .body)
+          printf '%s\n\n## 夸克网盘\n%s\n' "$body" "$SHARE" > /tmp/rel-body.md
+          gh release edit "$TAG" --notes-file /tmp/rel-body.md
