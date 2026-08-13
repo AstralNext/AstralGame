@@ -7,9 +7,10 @@
 # - GOOGLE 或 GOOGLE_API_KEY（Gemini，可选；无则回退为提交列表）
 # - ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_PASSWORD / ANDROID_KEY_ALIAS
 #   （Build 工作流正式签名 Android APK；PR 无密钥时回退 debug）
-# - QUARK_DRIVE_CONFIG_JSON 或 QUARK_USER_ID/QUARK_DEVICE_ID/QUARK_ACCESS_TOKEN/QUARK_REFRESH_TOKEN
+# - QUARK_DRIVE_CONFIG_JSON（夸克官方 CLI config.json）
 # - QUARK_PARENT_FID（建议，AstralGame 目录 FID）
-# - ASTRAL_SITE_TOKEN（写 next.astral.github.io；同时用于创建 GitHub Release，避免 GITHUB_TOKEN 403）
+# - ASTRAL_SITE_TOKEN（repo 写权限 PAT：创建 Release + 更新 next.astral.github.io）
+# 夸克：OPENCLAW_CLI=1 + 官方 skill zip 里的 quark-drive.cjs（见 tools/quark_release/upload.sh）
 # 附件命名：astral-game-<semver>-<platform>-<arch>.<ext>
 
 name: 发布
@@ -74,7 +75,7 @@ jobs:
       - name: 解析发布参数
         id: cfg
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.ASTRAL_SITE_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           set -euxo pipefail
           AUTO="${{ github.event_name == 'workflow_run' && '1' || '0' }}"
@@ -245,24 +246,37 @@ jobs:
 
       - name: 创建 GitHub Release
         if: steps.cfg.outputs.skip != 'true'
-        uses: softprops/action-gh-release@v2
-        with:
-          name: Astral Game ${{ steps.cfg.outputs.tag }}
-          tag_name: ${{ steps.cfg.outputs.tag }}
-          target_commitish: ${{ steps.cfg.outputs.target }}
-          body: ${{ steps.changelog.outputs.body }}
-          draft: ${{ steps.cfg.outputs.draft == 'true' }}
-          prerelease: ${{ steps.cfg.outputs.prerelease == 'true' }}
-          fail_on_unmatched_files: false
-          files: release/*
         env:
-          GITHUB_TOKEN: ${{ secrets.ASTRAL_SITE_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.ASTRAL_SITE_TOKEN || secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.cfg.outputs.tag }}
+          TARGET: ${{ steps.cfg.outputs.target }}
+          DRAFT: ${{ steps.cfg.outputs.draft }}
+          PRE: ${{ steps.cfg.outputs.prerelease }}
+          BODY: ${{ steps.changelog.outputs.body }}
+        run: |
+          set -euxo pipefail
+          if [ ! -d release ] || [ -z "$(ls -A release 2>/dev/null || true)" ]; then
+            echo "release/ 为空，无法创建 Release" >&2
+            exit 1
+          fi
+          printf '%s\n' "$BODY" > /tmp/release-body.md
+          args=(release create "$TAG" --title "Astral Game $TAG" --notes-file /tmp/release-body.md --target "$TARGET")
+          if [ "$DRAFT" = "true" ]; then args+=(--draft); fi
+          if [ "$PRE" = "true" ]; then args+=(--prerelease); fi
+          gh "${args[@]}" release/*
+
+      - name: 安装 Node（夸克官方 CLI）
+        if: steps.cfg.outputs.skip != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
       - name: 上传夸克网盘并更新官网下载
         id: quark
         if: steps.cfg.outputs.skip != 'true'
         continue-on-error: true
         env:
+          OPENCLAW_CLI: '1'
           QUARK_DRIVE_CONFIG_JSON: ${{ secrets.QUARK_DRIVE_CONFIG_JSON }}
           QUARK_USER_ID: ${{ secrets.QUARK_USER_ID }}
           QUARK_DEVICE_ID: ${{ secrets.QUARK_DEVICE_ID }}
