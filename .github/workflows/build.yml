@@ -13,24 +13,10 @@ on:
           - linux-x64
           - windows-x64
         default: 'all'
+  # 不在 main/develop 推送时编译；发版靠打 v* 标签，或手动 Run workflow。
   push:
-    branches: [main, develop]
     tags:
       - 'v*'
-    paths:
-      - 'lib/**'
-      - 'android/**'
-      - 'ios/**'
-      - 'linux/**'
-      - 'macos/**'
-      - 'windows/**'
-      - 'assets/**'
-      - 'installer/**'
-      - 'tools/raft_astral_net/**'
-      - 'pubspec.yaml'
-      - 'pubspec.lock'
-      - '.github/workflows/build.yml'
-      - '.github/workflows/release.yml'
   pull_request:
     branches: [main]
     paths:
