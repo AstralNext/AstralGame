@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:astral_game/data/services/lan_payload_builders.dart';
 import 'package:astral_game/data/services/lan_payload_parsers.dart';
+import 'package:astral_game/data/services/scfa_discovery_beacon.dart';
 import 'package:astral_game/data/services/scfa_lan_codec.dart';
 import 'package:astral_game/utils/lan_title_template.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -53,6 +54,28 @@ void main() {
     final hit = parseScfaLanPayload(bytes, fallbackPort: 0);
     expect(hit?.port, 58336);
     expect(hit?.motd, 'Four-Corners');
+  });
+
+  test('scfa remote announce prefers local UDP forward port', () {
+    final proxied = scfaAnnounceForRemote(
+      title: 'a * Astral',
+      hostedBy: 'host',
+      mapName: 'Four-Corners',
+      remotePort: 8888,
+      remoteIpv4: '10.126.126.2',
+      localUdpPort: 54321,
+    );
+    expect(proxied.lobbyPort, 54321);
+    expect(proxied.ipv4, isNull);
+
+    final direct = scfaAnnounceForRemote(
+      title: 'a * Astral',
+      hostedBy: 'host',
+      remotePort: 8888,
+      remoteIpv4: '10.126.126.2',
+    );
+    expect(direct.lobbyPort, 8888);
+    expect(direct.ipv4, '10.126.126.2');
   });
 
   test('raft_lan announce', () {

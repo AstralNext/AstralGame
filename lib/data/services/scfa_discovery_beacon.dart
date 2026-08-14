@@ -18,8 +18,36 @@ class ScfaLanAnnounce {
   final int lobbyPort;
   final String? mapName;
   final String? hostedBy;
-  /// 回包源 / KV Address：本机房主用虚拟 IP；远端房间留空（用 15000 听口来源 IP + 随机转发口）。
+  /// 回包源 / KV Address：本机房主用虚拟 IP。
+  /// 加入方 UDP 转发口留空（回包走 15000 听口来源 IP，引擎用来源 IP 连大厅）。
   final String? ipv4;
+}
+
+/// 加入方：有本机 UDP 转发口就代答该口；否则直接宣告房主 VIP:真实大厅口。
+ScfaLanAnnounce scfaAnnounceForRemote({
+  required String title,
+  required String hostedBy,
+  required int remotePort,
+  required String remoteIpv4,
+  String? mapName,
+  int? localUdpPort,
+}) {
+  final local = localUdpPort;
+  if (local != null && local > 0 && local <= 65535) {
+    return ScfaLanAnnounce(
+      title: title,
+      lobbyPort: local,
+      mapName: mapName,
+      hostedBy: hostedBy,
+    );
+  }
+  return ScfaLanAnnounce(
+    title: title,
+    lobbyPort: remotePort,
+    mapName: mapName,
+    hostedBy: hostedBy,
+    ipv4: remoteIpv4,
+  );
 }
 
 /// 本机 UDP 15000：替 FA 主机回答 LAN 搜索（驭空开房不听此口）。
@@ -52,7 +80,11 @@ class ScfaDiscoveryBeacon {
     if (_socket != null && _port == port) return;
     await stop();
     try {
-      final socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, port);
+      final socket = await RawDatagramSocket.bind(
+        InternetAddress.anyIPv4,
+        port,
+        reuseAddress: true,
+      );
       socket.broadcastEnabled = true;
       socket.readEventsEnabled = true;
       _socket = socket;
@@ -104,12 +136,17 @@ class ScfaDiscoveryBeacon {
             sock = await RawDatagramSocket.bind(
               InternetAddress(ip),
               _port,
+              reuseAddress: true,
             );
           } catch (_) {
             sock = null;
           }
         }
-        sock ??= await RawDatagramSocket.bind(InternetAddress(ip), 0);
+        // 绑不上 :15000 就别改用随机源端口：FA 常丢掉非 15000 的发现回包。
+        if (sock == null) {
+          appLogger.w('[ScfaBeacon] 无法绑定回包源 $ip:$_port，改用听口来源');
+          continue;
+        }
         sock.broadcastEnabled = true;
         _replyByIp[ip] = sock;
         appLogger.i('[ScfaBeacon] 回包源 $ip:${sock.port}');

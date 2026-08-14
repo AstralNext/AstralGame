@@ -254,20 +254,20 @@ class OpenGamesService {
       if (listing.isSelf || listing.isExpired) continue;
       final entry = _scfaEntryForListing(listing, cfg.entries);
       if (entry == null) continue;
+      final hostedBy = listing.ownerName.trim().isEmpty
+          ? host
+          : listing.ownerName.trim();
       final st = relays[listing.key];
-      if (st == null || !st.forward) continue;
-      final localPort = _portFromEndpoint(st.localEndpoint);
-      if (localPort == null) continue;
+      final localPort =
+          st != null && st.forward ? _portFromEndpoint(st.localEndpoint) : null;
       out.add(
-        ScfaLanAnnounce(
+        scfaAnnounceForRemote(
           title: listing.label,
-          lobbyPort: localPort,
+          hostedBy: hostedBy,
           mapName: listing.motd,
-          hostedBy: listing.ownerName.trim().isEmpty
-              ? host
-              : listing.ownerName.trim(),
-          // 不用 127：回包走本机 15000 听口来源 IP，大厅口写成随机转发口。
-          ipv4: null,
+          remotePort: listing.port,
+          remoteIpv4: listing.ipv4,
+          localUdpPort: localPort,
         ),
       );
     }

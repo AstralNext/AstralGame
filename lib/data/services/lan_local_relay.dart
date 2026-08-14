@@ -8,16 +8,18 @@ import 'package:astral_game/data/models/lan_relay_status.dart';
 import 'package:astral_game/data/models/open_game_listing.dart';
 import 'package:astral_game/data/services/lan_inject_guard.dart';
 import 'package:astral_game/data/services/lan_payload_builders.dart';
+import 'package:astral_game/data/services/scfa_udp_relay.dart';
 import 'package:astral_game/utils/logger.dart';
 import 'package:astral_rust_core/astral_rust_core.dart';
 import 'package:signals/signals_core.dart';
 
 const _forwardListenHost = '0.0.0.0';
 
-/// 只跟「开放游戏」通道走：listing 出现 → 本机组播/代答 + 0.0.0.0 随机端口 TCP 转发；消失立刻关。
+/// 只跟「开放游戏」通道走：listing 出现 → 本机组播/代答 + 转发；消失立刻关。
 ///
 /// 仅 Windows。不监听本机组播；发现仍由房主侧 discoverer 负责，本类只消费通道目标。
-/// Minecraft：组播注入 MOTD，[AD] 写成随机口；Forged Alliance：仅 TCP 转发，由 OpenGames 灌进 15000 beacon。
+/// Minecraft：组播注入 MOTD，[AD] 写成随机口 + TCP 转发。
+/// Forged Alliance：UDP 转发到房主虚拟 IP:大厅口，由 OpenGames 灌进 15000 beacon。
 /// 听 0.0.0.0（不用 127.0.0.1：部分游戏/环境连环回有问题）。
 class LanLocalRelay {
   RawDatagramSocket? _uniSocket;
@@ -128,10 +130,11 @@ class LanLocalRelay {
     final parserKey = parser.toLowerCase();
     final canBuild = parser.isNotEmpty && lanPayloadBuilderOf(parser) != null;
     final isScfa = parserKey == 'scfa_lan';
-    // MC 等：有重建器 → 组播注入 + 转发；SCFA：无 MOTD 重建器，只开 TCP 转发，发现代答在 OpenGames。
+    // MC 等：有重建器 → 组播注入 + TCP 转发；SCFA：大厅是 UDP，走 UDP 转发，发现代答在 OpenGames。
     final inject = canBuild;
-    final forward = (canBuild || isScfa) && !listing.isSelf;
-    if (!inject && !forward) return null;
+    final forward = canBuild && !listing.isSelf;
+    final udpForward = isScfa && !listing.isSelf;
+    if (!inject && !forward && !udpForward) return null;
 
     final title = (listing.motd?.trim().isNotEmpty == true)
         ? listing.motd!.trim()
@@ -145,7 +148,7 @@ class LanLocalRelay {
     final hasPayload = probe != null && probe.isNotEmpty;
     final wantMcast = inject && hasPayload;
     final wantLoop = inject && hasPayload && !listing.isSelf;
-    if (!wantMcast && !wantLoop && !forward) return null;
+    if (!wantMcast && !wantLoop && !forward && !udpForward) return null;
 
     return _RelaySpec(
       key: listing.key,
@@ -153,6 +156,7 @@ class LanLocalRelay {
       injectMulticast: wantMcast,
       injectLoopback: wantLoop,
       forward: forward,
+      udpForward: udpForward,
       listenHost: _forwardListenHost,
       listenPort: 0,
       targetHost: listing.ipv4,
@@ -161,7 +165,7 @@ class LanLocalRelay {
       multicastPort: entry.multicastPort,
       title: title,
       parser: parser,
-      payload: forward && !wantMcast && !wantLoop ? null : probe,
+      payload: (forward || udpForward) && !wantMcast && !wantLoop ? null : probe,
     );
   }
 
@@ -267,9 +271,27 @@ class LanLocalRelay {
 
   Future<_ActiveRelay?> _startOne(_RelaySpec spec) async {
     BigInt? forwardIndex;
+    ScfaUdpRelay? udpRelay;
     var listenPort = spec.listenPort;
     var payload = spec.payload;
-    if (spec.forward) {
+    if (spec.udpForward) {
+      final started = await ScfaUdpRelay.start(
+        targetHost: spec.targetHost,
+        targetPort: spec.targetPort,
+      );
+      if (started != null) {
+        udpRelay = started;
+        listenPort = started.port;
+        appLogger.i(
+          '[LanRelay] UDP $_forwardListenHost:$listenPort → '
+          '${spec.targetHost}:${spec.targetPort}',
+        );
+      } else {
+        appLogger.w(
+          '[LanRelay] UDP 转发失败 → ${spec.targetHost}:${spec.targetPort}',
+        );
+      }
+    } else if (spec.forward) {
       final target = '${spec.targetHost}:${spec.targetPort}';
       final started = await _startTcpForward(target);
       if (started != null) {
@@ -283,6 +305,8 @@ class LanLocalRelay {
       }
     }
     spec = spec.copyWith(listenPort: listenPort, payload: payload);
+    if (spec.udpForward && udpRelay == null) return null;
+    if (spec.forward && forwardIndex == null) return null;
 
     BigInt? mcastIndex;
     if (spec.injectMulticast &&
@@ -306,13 +330,18 @@ class LanLocalRelay {
         );
       }
     }
-    if (spec.forward && forwardIndex == null) return null;
-    if (!spec.inject && forwardIndex == null && mcastIndex == null) return null;
+    if (!spec.inject &&
+        forwardIndex == null &&
+        mcastIndex == null &&
+        udpRelay == null) {
+      return null;
+    }
     return _ActiveRelay(
       spec: spec,
       forwardIndex: forwardIndex,
       mcastIndex: mcastIndex,
-      forwardOk: forwardIndex != null,
+      udpRelay: udpRelay,
+      forwardOk: forwardIndex != null || udpRelay != null,
     );
   }
 
@@ -332,6 +361,14 @@ class LanLocalRelay {
         await stopMulticastSender(index: midx);
       } catch (e) {
         appLogger.d('[LanRelay] 停止组播失败 index=$midx: $e');
+      }
+    }
+    final udp = session.udpRelay;
+    if (udp != null) {
+      try {
+        await udp.close();
+      } catch (e) {
+        appLogger.d('[LanRelay] 停止 UDP 转发失败: $e');
       }
     }
   }
@@ -401,6 +438,7 @@ class _RelaySpec {
     required this.injectMulticast,
     required this.injectLoopback,
     required this.forward,
+    required this.udpForward,
     required this.listenHost,
     required this.listenPort,
     required this.targetHost,
@@ -417,6 +455,7 @@ class _RelaySpec {
   final bool injectMulticast;
   final bool injectLoopback;
   final bool forward;
+  final bool udpForward;
   final String listenHost;
   final int listenPort;
   final String targetHost;
@@ -437,6 +476,7 @@ class _RelaySpec {
       injectMulticast: injectMulticast,
       injectLoopback: injectLoopback,
       forward: forward,
+      udpForward: udpForward,
       listenHost: listenHost,
       listenPort: listenPort ?? this.listenPort,
       targetHost: targetHost,
@@ -454,6 +494,7 @@ class _RelaySpec {
       injectMulticast == o.injectMulticast &&
       injectLoopback == o.injectLoopback &&
       forward == o.forward &&
+      udpForward == o.udpForward &&
       listenHost == o.listenHost &&
       targetHost == o.targetHost &&
       targetPort == o.targetPort &&
@@ -467,10 +508,12 @@ class _ActiveRelay {
     required this.spec,
     this.forwardIndex,
     this.mcastIndex,
+    this.udpRelay,
     this.forwardOk = false,
   });
   _RelaySpec spec;
   final BigInt? forwardIndex;
   final BigInt? mcastIndex;
+  final ScfaUdpRelay? udpRelay;
   final bool forwardOk;
 }
