@@ -14,9 +14,11 @@ import 'package:signals/signals_core.dart';
 
 const _forwardListenHost = '0.0.0.0';
 
-/// 只跟「开放游戏」通道走：listing 出现 → 本机组播 + 0.0.0.0 随机端口转发；消失立刻关。
+/// 只跟「开放游戏」通道走：listing 出现 → 本机组播/代答 + 0.0.0.0 随机端口 TCP 转发；消失立刻关。
 ///
 /// 仅 Windows。不监听本机组播；发现仍由房主侧 discoverer 负责，本类只消费通道目标。
+/// Minecraft：组播注入 MOTD，[AD] 写成随机口；Forged Alliance：仅 TCP 转发，由 OpenGames 灌进 15000 beacon。
+/// 听 0.0.0.0（不用 127.0.0.1：部分游戏/环境连环回有问题）。
 class LanLocalRelay {
   RawDatagramSocket? _uniSocket;
   Timer? _tick;
@@ -123,10 +125,12 @@ class LanLocalRelay {
       return null;
     }
     final parser = (entry.parser ?? '').trim();
+    final parserKey = parser.toLowerCase();
     final canBuild = parser.isNotEmpty && lanPayloadBuilderOf(parser) != null;
-    // 有重建器就注入/转发；本机只组播，同伴再回环单播 + TCP。
+    final isScfa = parserKey == 'scfa_lan';
+    // MC 等：有重建器 → 组播注入 + 转发；SCFA：无 MOTD 重建器，只开 TCP 转发，发现代答在 OpenGames。
     final inject = canBuild;
-    final forward = canBuild && !listing.isSelf;
+    final forward = (canBuild || isScfa) && !listing.isSelf;
     if (!inject && !forward) return null;
 
     final title = (listing.motd?.trim().isNotEmpty == true)
@@ -157,7 +161,7 @@ class LanLocalRelay {
       multicastPort: entry.multicastPort,
       title: title,
       parser: parser,
-      payload: forward ? null : probe,
+      payload: forward && !wantMcast && !wantLoop ? null : probe,
     );
   }
 
@@ -169,6 +173,10 @@ class LanLocalRelay {
     final adId = listing.adId.trim();
     for (final e in entries) {
       if (adId == e.id || adId.startsWith('${e.id}:')) return e;
+    }
+    for (final e in entries) {
+      final parser = (e.parser ?? '').trim().toLowerCase();
+      if (parser == 'scfa_lan') return e;
     }
     for (final e in entries) {
       final parser = (e.parser ?? '').trim();

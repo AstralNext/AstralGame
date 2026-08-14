@@ -1,3 +1,4 @@
+using System;
 using HarmonyLib;
 using PlayFab.Party;
 using Steamworks;
@@ -94,7 +95,9 @@ namespace AstralRaftNet
     {
         private static void Postfix(SceneName sceneName)
         {
-            if (sceneName != SceneName.Lobby && sceneName != SceneName.Exit)
+            string dest = sceneName.ToString();
+            if (dest == Raft_Network.GameSceneName
+                || dest.IndexOf("Game", StringComparison.OrdinalIgnoreCase) >= 0)
             {
                 return;
             }
@@ -116,6 +119,12 @@ namespace AstralRaftNet
                 return true;
             }
 
+            if (AstralTransport.IsJoining && AstralTransport.PeerCount > 0)
+            {
+                AstralLog.Info("ignore ForceLeave during Astral join " + reason);
+                return false;
+            }
+
             if (reason == LeaveSessionReason.ConnectionLoss
                 || reason == LeaveSessionReason.InternetLoss
                 || reason == LeaveSessionReason.Blocked
@@ -126,6 +135,21 @@ namespace AstralRaftNet
             }
 
             return true;
+        }
+    }
+
+    [HarmonyPatch(typeof(ConnectingBox), nameof(ConnectingBox.StartConnectTimeoutTimer))]
+    internal static class Patch_ConnectTimeout
+    {
+        private static bool Prefix()
+        {
+            if (!AstralTransport.IsJoining && !AstralSettings.EnableLan)
+            {
+                return true;
+            }
+
+            AstralLog.Info("skip ConnectingBox timeout");
+            return false;
         }
     }
 

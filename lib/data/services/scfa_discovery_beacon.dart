@@ -18,7 +18,7 @@ class ScfaLanAnnounce {
   final int lobbyPort;
   final String? mapName;
   final String? hostedBy;
-  /// EasyTier 虚拟 IP；15000 回包从此地址发出，游戏用这个 IP 连大厅。
+  /// 回包源 / KV Address：本机房主用虚拟 IP；远端房间留空（用 15000 听口来源 IP + 随机转发口）。
   final String? ipv4;
 }
 
@@ -28,12 +28,12 @@ class ScfaDiscoveryBeacon {
   static final ScfaDiscoveryBeacon instance = ScfaDiscoveryBeacon._();
 
   RawDatagramSocket? _socket;
-  RawDatagramSocket? _replySocket;
   StreamSubscription<RawSocketEvent>? _sub;
   int _port = 0;
-  String _replyBind = '';
   List<ScfaLanAnnounce> _ads = const [];
   final Map<int, DateTime> _localProbePorts = {};
+  /// 按回包源 IP 缓存 socket（本机 VIP / 127.0.0.1 可并存）。
+  final Map<String, RawDatagramSocket> _replyByIp = {};
 
   bool get isRunning => _socket != null;
   int get port => _port;
@@ -69,13 +69,11 @@ class ScfaDiscoveryBeacon {
       for (final a in ads)
         if (a.lobbyPort > 0 && a.lobbyPort <= 65535) a,
     ];
-    final ip = stripIpv4Host(
-      _ads.map((a) => a.ipv4).firstWhere(
-            (s) => (s ?? '').trim().isNotEmpty,
-            orElse: () => null,
-          ),
-    );
-    unawaited(_ensureReplySocket(ip));
+    final ips = <String>{
+      for (final a in _ads)
+        if ((stripIpv4Host(a.ipv4) ?? '').isNotEmpty) stripIpv4Host(a.ipv4)!,
+    };
+    unawaited(_syncReplySockets(ips));
   }
 
   Future<void> stop() async {
@@ -83,47 +81,41 @@ class ScfaDiscoveryBeacon {
     _sub = null;
     _socket?.close();
     _socket = null;
-    _replySocket?.close();
-    _replySocket = null;
+    for (final s in _replyByIp.values) {
+      s.close();
+    }
+    _replyByIp.clear();
     _port = 0;
-    _replyBind = '';
     _ads = const [];
     _localProbePorts.clear();
   }
 
-  Future<void> _ensureReplySocket(String? ipv4) async {
-    final ip = (ipv4 ?? '').trim();
-    if (ip.isEmpty) {
-      _replySocket?.close();
-      _replySocket = null;
-      _replyBind = '';
-      return;
+  Future<void> _syncReplySockets(Set<String> ips) async {
+    final stale = _replyByIp.keys.where((k) => !ips.contains(k)).toList();
+    for (final k in stale) {
+      _replyByIp.remove(k)?.close();
     }
-    if (_replyBind == ip && _replySocket != null) return;
-    _replySocket?.close();
-    _replySocket = null;
-    _replyBind = '';
-    try {
-      // 尽量绑虚拟 IP:15000，让游戏看到来源就是大厅发现口。
-      RawDatagramSocket? sock;
-      if (_port > 0) {
-        try {
-          sock = await RawDatagramSocket.bind(
-            InternetAddress(ip),
-            _port,
-            reuseAddress: true,
-          );
-        } catch (_) {
-          sock = null;
+    for (final ip in ips) {
+      if (_replyByIp.containsKey(ip)) continue;
+      try {
+        RawDatagramSocket? sock;
+        if (_port > 0) {
+          try {
+            sock = await RawDatagramSocket.bind(
+              InternetAddress(ip),
+              _port,
+            );
+          } catch (_) {
+            sock = null;
+          }
         }
+        sock ??= await RawDatagramSocket.bind(InternetAddress(ip), 0);
+        sock.broadcastEnabled = true;
+        _replyByIp[ip] = sock;
+        appLogger.i('[ScfaBeacon] 回包源 $ip:${sock.port}');
+      } catch (e) {
+        appLogger.d('[ScfaBeacon] 绑定回包源 $ip 失败: $e');
       }
-      sock ??= await RawDatagramSocket.bind(InternetAddress(ip), 0);
-      sock.broadcastEnabled = true;
-      _replySocket = sock;
-      _replyBind = ip;
-      appLogger.i('[ScfaBeacon] 回包源 $ip:${sock.port}');
-    } catch (e) {
-      appLogger.d('[ScfaBeacon] 绑定回包源 $ip 失败: $e');
     }
   }
 
@@ -151,15 +143,16 @@ class ScfaDiscoveryBeacon {
     }
     if (_ads.isEmpty) return;
     final kind = dg.data[0];
-    final out = _replySocket ?? listen;
     for (final ad in _ads) {
+      final bindIp = stripIpv4Host(ad.ipv4) ?? '';
+      final out = (bindIp.isNotEmpty ? _replyByIp[bindIp] : null) ?? listen;
       final reply = buildScfaLanReply(
         requestKind: kind,
         title: ad.title,
         lobbyPort: ad.lobbyPort,
         hostedBy: ad.hostedBy ?? '',
         mapName: ad.mapName ?? '',
-        address: (ad.ipv4 ?? _replyBind).trim(),
+        address: bindIp.isNotEmpty ? bindIp : (ad.ipv4 ?? '').trim(),
       );
       if (reply == null || reply.isEmpty) continue;
       try {

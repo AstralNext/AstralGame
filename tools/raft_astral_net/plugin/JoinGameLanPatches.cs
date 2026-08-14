@@ -274,7 +274,6 @@ namespace AstralRaftNet
             if (connecting != null)
             {
                 connecting.gameObject.SetActive(true);
-                connecting.StartConnectTimeoutTimer(selected.session.steamID);
             }
 
             return true;
@@ -423,7 +422,6 @@ namespace AstralRaftNet
             if (box.connectingBox != null)
             {
                 box.connectingBox.gameObject.SetActive(true);
-                box.connectingBox.StartConnectTimeoutTimer(selected.steamID);
             }
 
             return true;

@@ -41,7 +41,7 @@
 
 可选：`title`（`{player}` `{game}` `{label}` `{motd}`）、`id`、`label`、`port`（probe 回退端口）。
 
-有 `parser` 且能重建载荷 → 默认本机组播 + 同伴回环注入 / `0.0.0.0` 随机端口 TCP。不必再写 inject/forward 开关。
+有 `parser` 且能重建载荷 → 默认本机组播 + 同伴回环注入 / `0.0.0.0` 随机端口 TCP。不必再写 inject/forward 开关。`scfa_lan` 无 MOTD 重建器时仍开 TCP 转发，发现代答由 15000 beacon 负责。
 
 ### Minecraft
 
@@ -93,6 +93,8 @@
 ```
 
 建议同时开 `network.enable_udp_broadcast_relay`，让 15000 探测能穿过 EasyTier。
+
+远端加入（与 MC 同思路）：同伴侧开 `0.0.0.0:随机口` TCP 转发到房主虚拟 IP:大厅口，并在本机 15000 代答（大厅口写成随机口；不用 127.0.0.1，游戏连回包来源 IP）。只发现不转发则游戏列表能刷但点不进去。
 
 ### Raft
 

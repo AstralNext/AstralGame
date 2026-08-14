@@ -222,25 +222,85 @@ class OpenGamesService {
     final ads = [
       for (final ad in raw) _rewriteLocalAdTitle(ad, player: player),
     ];
-    _publishScfaBeacon(ads, player: player);
     return ads;
   }
 
-  void _publishScfaBeacon(List<LocalOpenGameAd> ads, {required String player}) {
+  void _publishScfaBeacons() {
     if (!lanAssistEnabled) return;
+    final cfg = _config;
+    if (cfg == null) {
+      ScfaDiscoveryBeacon.instance.publish(const []);
+      return;
+    }
+    final player = _settings.getUsername().trim();
     final host = player.isEmpty ? 'Player' : player;
-    ScfaDiscoveryBeacon.instance.publish([
-      for (final ad in ads)
-        if (ad.entry.type == 'process_udp' ||
-            (ad.entry.parser ?? '').trim().toLowerCase() == 'scfa_lan')
-          ScfaLanAnnounce(
-            title: ad.label,
-            lobbyPort: ad.port,
-            mapName: ad.motd,
-            hostedBy: host,
-            ipv4: ad.ipv4,
-          ),
-    ]);
+    final out = <ScfaLanAnnounce>[];
+
+    for (final ad in _lastLocalAds) {
+      if (!_isScfaEntry(ad.entry)) continue;
+      out.add(
+        ScfaLanAnnounce(
+          title: ad.label,
+          lobbyPort: ad.port,
+          mapName: ad.motd,
+          hostedBy: host,
+          ipv4: ad.ipv4,
+        ),
+      );
+    }
+
+    final relays = _localRelay.statuses.value;
+    for (final listing in listings.value) {
+      if (listing.isSelf || listing.isExpired) continue;
+      final entry = _scfaEntryForListing(listing, cfg.entries);
+      if (entry == null) continue;
+      final st = relays[listing.key];
+      if (st == null || !st.forward) continue;
+      final localPort = _portFromEndpoint(st.localEndpoint);
+      if (localPort == null) continue;
+      out.add(
+        ScfaLanAnnounce(
+          title: listing.label,
+          lobbyPort: localPort,
+          mapName: listing.motd,
+          hostedBy: listing.ownerName.trim().isEmpty
+              ? host
+              : listing.ownerName.trim(),
+          // 不用 127：回包走本机 15000 听口来源 IP，大厅口写成随机转发口。
+          ipv4: null,
+        ),
+      );
+    }
+
+    ScfaDiscoveryBeacon.instance.publish(out);
+  }
+
+  bool _isScfaEntry(GameAssistLanGameDiscoverEntry entry) {
+    return entry.type == 'process_udp' ||
+        (entry.parser ?? '').trim().toLowerCase() == 'scfa_lan';
+  }
+
+  GameAssistLanGameDiscoverEntry? _scfaEntryForListing(
+    OpenGameListing listing,
+    List<GameAssistLanGameDiscoverEntry> entries,
+  ) {
+    final adId = listing.adId.trim();
+    for (final e in entries) {
+      if (!_isScfaEntry(e)) continue;
+      if (adId == e.id || adId.startsWith('${e.id}:')) return e;
+    }
+    for (final e in entries) {
+      if (_isScfaEntry(e)) return e;
+    }
+    return null;
+  }
+
+  int? _portFromEndpoint(String endpoint) {
+    final i = endpoint.lastIndexOf(':');
+    if (i < 0 || i >= endpoint.length - 1) return null;
+    final p = int.tryParse(endpoint.substring(i + 1));
+    if (p == null || p <= 0 || p > 65535) return null;
+    return p;
   }
 
   LocalOpenGameAd _rewriteLocalAdTitle(
@@ -283,6 +343,7 @@ class OpenGamesService {
   Future<void> _syncLocalRelay() async {
     if (!lanAssistEnabled) {
       await _localRelay.stop();
+      ScfaDiscoveryBeacon.instance.publish(const []);
       return;
     }
     final cfg = _config;
@@ -292,12 +353,13 @@ class OpenGamesService {
     try {
       if (cfg == null || remotes.isEmpty) {
         await _localRelay.stop();
-        return;
+      } else {
+        await _localRelay.sync(remotes: remotes, entries: cfg.entries);
       }
-      await _localRelay.sync(remotes: remotes, entries: cfg.entries);
     } catch (e) {
       appLogger.d('[OpenGames] 本机注入同步失败: $e');
     }
+    _publishScfaBeacons();
   }
 
   void _ingestAds({
@@ -341,26 +403,43 @@ class OpenGamesService {
       );
       if (item == null) continue;
       if (item.roomGameId.isNotEmpty && item.roomGameId != roomGameId) continue;
+      final trustedIp = _trustedPeerIpv4(fromPeerId);
+      if (trustedIp == null) {
+        appLogger.d('[OpenGames] 无 peer 虚拟 IP，丢弃宣告 peer=$fromPeerId');
+        continue;
+      }
+      if (trustedIp != item.ipv4) {
+        appLogger.d(
+          '[OpenGames] 纠正宣告 IP peer=$fromPeerId ${item.ipv4} → $trustedIp',
+        );
+      }
       parsed.add(
-        item.roomGameId.isEmpty
-            ? OpenGameListing(
-                key: item.key,
-                fromPeerId: item.fromPeerId,
-                ownerName: item.ownerName,
-                roomGameId: roomGameId,
-                adId: item.adId,
-                label: item.label,
-                ipv4: item.ipv4,
-                port: item.port,
-                motd: item.motd,
-                expiresAt: item.expiresAt,
-                isSelf: false,
-                isRoomHost: item.isRoomHost,
-              )
-            : item,
+        OpenGameListing(
+          key: item.key,
+          fromPeerId: item.fromPeerId,
+          ownerName: item.ownerName,
+          roomGameId: item.roomGameId.isEmpty ? roomGameId : item.roomGameId,
+          adId: item.adId,
+          label: item.label,
+          ipv4: trustedIp,
+          port: item.port,
+          motd: item.motd,
+          expiresAt: item.expiresAt,
+          isSelf: false,
+          isRoomHost: item.isRoomHost,
+        ),
       );
     }
     _replacePeerListings(fromPeerId, parsed);
+  }
+
+  /// 只接受该 peer 当前虚拟 IPv4，避免房间内任意 IP 诱骗本机转发。
+  String? _trustedPeerIpv4(int peerId) {
+    for (final n in _nodes.userNodes.value) {
+      if (n.peerId != peerId) continue;
+      return stripIpv4Host(n.ipv4);
+    }
+    return null;
   }
 
   /// 用本机最新探测结果整表替换 self 条目（空则立即消失）。

@@ -25,7 +25,7 @@ copy bin\plugin\AstralRaftNet.dll dist\AstralRaftNet.dll
 2. 启动 `Raft.exe`，Astral 自动检测并注入
 3. 游戏首页右上角出现 **Astral已注入**
 4. **新世界 / 载入世界**：勾选 **启用Astral局域网**（Steam 离线也能建房），联机权限不要选「不允许」
-5. **加入世界**：新版 UI 会去掉「离线不可用」，标题 **加入astral房间**，列表 **lan发现**，点刷新即可
+5. **加入世界**：新版 UI 会去掉「离线不可用」，标题 **加入astral房间**，列表 **lan发现**，点刷新即可。第一次加入会等场景加载完再向房主要世界，不再被 ConnectingBox 超时踢回主页。
 
 两边必须是不同 Steam 账号。TCP `6488`，发现 UDP `6489` 广播。
 

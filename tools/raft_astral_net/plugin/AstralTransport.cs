@@ -47,6 +47,7 @@ namespace AstralRaftNet
         private static ulong _joinHostSteam;
         private static bool _sceneLoadStarted;
         private static bool _astralWorldReceived;
+        private static float _lastWorldRequest;
 
         public static int Port
         {
@@ -91,6 +92,7 @@ namespace AstralRaftNet
             }
 
             DeliverMessages();
+            TryRequestWorldAsClient();
             TickWorldInit();
         }
 
@@ -110,6 +112,7 @@ namespace AstralRaftNet
             _joinHostSteam = 0UL;
             _sceneLoadStarted = false;
             _astralWorldReceived = false;
+            _lastWorldRequest = 0f;
         }
 
         public static void BindLocalSteamId(Raft_Network network = null)
@@ -635,6 +638,7 @@ namespace AstralRaftNet
             AstralSettings.EnableLan = true;
             _connecting = true;
             _status = "connecting " + host + ":" + port;
+            StopConnectingBox();
             ThreadPool.QueueUserWorkItem(_ => ConnectWorker(host, port, password ?? string.Empty));
         }
 
@@ -747,19 +751,7 @@ namespace AstralRaftNet
             if (_sceneLoadStarted || LoadSceneManager.IsLoadingScene || LoadSceneManager.IsGameSceneLoaded)
             {
                 AstralLog.Info("tcp ready, skip duplicate LoadScene host=" + hostId.m_SteamID);
-                if (!_astralWorldReceived && !Raft_Network.WorldHasBeenRecieved)
-                {
-                    try
-                    {
-                        AccessTools.Method(typeof(Raft_Network), "Platform_RequestWorldAsClient").Invoke(network, null);
-                        AstralLog.Info("re-request world after tcp reconnect");
-                    }
-                    catch (Exception ex)
-                    {
-                        AstralLog.Error("re-request world: " + ex.Message);
-                    }
-                }
-
+                TryRequestWorldAsClient();
                 _status = "reconnected " + hostId.m_SteamID;
                 return;
             }
@@ -775,6 +767,52 @@ namespace AstralRaftNet
             AccessTools.Method(typeof(Raft_Network), "LoadScene").Invoke(network, new object[] { Raft_Network.GameSceneName });
             _status = "joining " + hostId.m_SteamID;
             AstralLog.Info("Astral join load scene host=" + hostId.m_SteamID + " localSteam=" + network.LocalSteamID.Id + " mode=" + GameManager.GameMode);
+        }
+
+        internal static void TryRequestWorldAsClient()
+        {
+            if (_joinHostSteam == 0UL)
+            {
+                return;
+            }
+
+            if (_astralWorldReceived)
+            {
+                return;
+            }
+
+            try
+            {
+                if (Raft_Network.WorldHasBeenRecieved)
+                {
+                    _astralWorldReceived = true;
+                    return;
+                }
+
+                if (!LoadSceneManager.IsGameSceneLoaded || LoadSceneManager.IsLoadingScene)
+                {
+                    return;
+                }
+
+                if (Time.realtimeSinceStartup - _lastWorldRequest < 1.5f)
+                {
+                    return;
+                }
+
+                Raft_Network network = UnityEngine.Object.FindObjectOfType<Raft_Network>();
+                if (network == null || Raft_Network.IsHost)
+                {
+                    return;
+                }
+
+                _lastWorldRequest = Time.realtimeSinceStartup;
+                AccessTools.Method(typeof(Raft_Network), "Platform_RequestWorldAsClient").Invoke(network, null);
+                AstralLog.Info("request world as client host=" + _joinHostSteam);
+            }
+            catch (Exception ex)
+            {
+                AstralLog.Error("request world: " + ex.Message);
+            }
         }
 
         private static void ApplyHostGameMode(GameMode hostMode, bool friendlyFire, bool crossplay)
