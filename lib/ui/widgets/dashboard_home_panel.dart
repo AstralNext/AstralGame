@@ -738,15 +738,29 @@ class _RoomTrafficLines extends StatelessWidget {
           children: [
             Icon(Icons.arrow_downward_rounded, size: 14, color: palette.accent),
             const SizedBox(width: 2),
-            Text(TrafficFormat.rate(traffic.rxRateBps), style: rateStyle),
-            const SizedBox(width: 12),
+            Flexible(
+              child: Text(
+                TrafficFormat.rate(traffic.rxRateBps),
+                style: rateStyle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 8),
             Icon(
               Icons.arrow_upward_rounded,
               size: 14,
               color: palette.textSecondary,
             ),
             const SizedBox(width: 2),
-            Text(TrafficFormat.rate(traffic.txRateBps), style: rateStyle),
+            Flexible(
+              child: Text(
+                TrafficFormat.rate(traffic.txRateBps),
+                style: rateStyle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 2),
@@ -754,6 +768,8 @@ class _RoomTrafficLines extends StatelessWidget {
           '累计 ↓ ${TrafficFormat.bytes(traffic.rxTotalBytes)}'
           ' · ↑ ${TrafficFormat.bytes(traffic.txTotalBytes)}',
           style: totalStyle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
       ],
     );

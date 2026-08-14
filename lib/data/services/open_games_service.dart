@@ -48,6 +48,8 @@ class OpenGamesService {
   Timer? _tick;
   EffectCleanup? _nodesEffect;
   final Set<int> _pulledPeers = {};
+  Future<void> _relaySync = Future.value();
+  final Map<int, int> _emptyAdsStrikes = {};
   bool _listening = false;
   List<LocalOpenGameAd> _lastLocalAds = const [];
   String _roomGameName = '';
@@ -165,13 +167,16 @@ class OpenGamesService {
     if (!lanAssistEnabled) return;
 
     final ads = await _buildLocalAdsAsync();
-    _lastLocalAds = ads;
+    // 加入方搜 LAN 时 game.exe 也会占一个 UDP 口，不能当成自己在开房。
+    _lastLocalAds = _isHost
+        ? ads
+        : [for (final ad in ads) if (!_isScfaEntry(ad.entry)) ad];
 
     final myName = _settings.getUsername().trim().isEmpty
         ? '我'
         : _settings.getUsername().trim();
     final selfListings = [
-      for (final ad in ads)
+      for (final ad in _lastLocalAds)
         OpenGameListing(
           key: 'self:${ad.entry.id}:${ad.port}',
           fromPeerId: 0,
@@ -194,7 +199,7 @@ class OpenGamesService {
     if (!_rpc.isBound) return;
     final payload = {
       'gameId': gameId,
-      'ads': ads.map((e) => e.toWire()).toList(),
+      'ads': _lastLocalAds.map((e) => e.toWire()).toList(),
     };
     final peers = _nodes.userNodes.value;
     for (final n in peers) {
@@ -236,17 +241,19 @@ class OpenGamesService {
     final host = player.isEmpty ? 'Player' : player;
     final out = <ScfaLanAnnounce>[];
 
-    for (final ad in _lastLocalAds) {
-      if (!_isScfaEntry(ad.entry)) continue;
-      out.add(
-        ScfaLanAnnounce(
-          title: ad.label,
-          lobbyPort: ad.port,
-          mapName: ad.motd,
-          hostedBy: host,
-          ipv4: ad.ipv4,
-        ),
-      );
+    if (_isHost) {
+      for (final ad in _lastLocalAds) {
+        if (!_isScfaEntry(ad.entry)) continue;
+        out.add(
+          ScfaLanAnnounce(
+            title: ad.label,
+            lobbyPort: ad.port,
+            mapName: ad.motd,
+            hostedBy: host,
+            ipv4: ad.ipv4,
+          ),
+        );
+      }
     }
 
     final relays = _localRelay.statuses.value;
@@ -340,22 +347,33 @@ class OpenGamesService {
     );
   }
 
-  Future<void> _syncLocalRelay() async {
+  Future<void> _syncLocalRelay() {
+    _relaySync = _relaySync
+        .then((_) => _syncLocalRelayLocked())
+        .catchError((Object e) {
+      appLogger.d('[OpenGames] 本机注入同步失败: $e');
+    });
+    return _relaySync;
+  }
+
+  Future<void> _syncLocalRelayLocked() async {
     if (!lanAssistEnabled) {
       await _localRelay.stop();
       ScfaDiscoveryBeacon.instance.publish(const []);
       return;
     }
     final cfg = _config;
-    final remotes = cfg == null
-        ? const <OpenGameListing>[]
-        : listings.value.where((e) => !e.isExpired).toList();
+    if (cfg == null) {
+      await _localRelay.stop();
+      ScfaDiscoveryBeacon.instance.publish(const []);
+      return;
+    }
+    final remotes = [
+      for (final e in listings.value)
+        if (!e.isSelf && !e.isExpired) e,
+    ];
     try {
-      if (cfg == null || remotes.isEmpty) {
-        await _localRelay.stop();
-      } else {
-        await _localRelay.sync(remotes: remotes, entries: cfg.entries);
-      }
+      await _localRelay.sync(remotes: remotes, entries: cfg.entries);
     } catch (e) {
       appLogger.d('[OpenGames] 本机注入同步失败: $e');
     }
@@ -385,9 +403,13 @@ class OpenGamesService {
       list.add(map);
     }
     if (list.isEmpty) {
-      _clearPeerListings(fromPeerId);
+      // 探测偶发空列表不能清掉同伴房间，否则「开放游戏」和本机转发会闪。
+      final n = (_emptyAdsStrikes[fromPeerId] ?? 0) + 1;
+      _emptyAdsStrikes[fromPeerId] = n;
+      if (n >= 3) _clearPeerListings(fromPeerId);
       return;
     }
+    _emptyAdsStrikes[fromPeerId] = 0;
 
     const isHostPeer = false;
 
@@ -471,9 +493,13 @@ class OpenGamesService {
     }
   }
 
-  /// 开放游戏列表是唯一真相：出现 → 开组播/转发；消失/退房 → 立刻关。
+  /// 开放游戏列表是唯一真相：出现 → 开组播/转发；真正换目标才重建中转。
+  /// 仅刷新 TTL 时不拆中转，否则卡片会按宣告周期闪。
   void _setListings(List<OpenGameListing> next) {
-    if (_sameListings(listings.value, next)) return;
+    if (_sameListings(listings.value, next)) {
+      listings.value = next;
+      return;
+    }
     listings.value = next;
     unawaited(_syncLocalRelay());
   }

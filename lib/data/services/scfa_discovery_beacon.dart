@@ -5,6 +5,10 @@ import 'package:astral_game/data/services/scfa_lan_codec.dart';
 import 'package:astral_game/utils/logger.dart';
 import 'package:astral_game/utils/net_addr.dart';
 
+/// 加入方代答只用这一个源 IP。从 `192.168.x` 回给本机游戏口会被系统丢掉；
+/// `127.0.0.1:15000` → 游戏探测源 能进列表，且 Join 打到本机 UDP 转发口。
+const scfaLanProxyReplyIp = '127.0.0.1';
+
 class ScfaLanAnnounce {
   const ScfaLanAnnounce({
     required this.title,
@@ -18,12 +22,12 @@ class ScfaLanAnnounce {
   final int lobbyPort;
   final String? mapName;
   final String? hostedBy;
-  /// 回包源 / KV Address：本机房主用虚拟 IP。
-  /// 加入方 UDP 转发口留空（回包走 15000 听口来源 IP，引擎用来源 IP 连大厅）。
+  /// 回包源 / KV Address。本机房主用虚拟 IP；加入方用 [scfaLanProxyReplyIp]。
   final String? ipv4;
 }
 
-/// 加入方：有本机 UDP 转发口就代答该口；否则直接宣告房主 VIP:真实大厅口。
+/// 加入方：有本机 UDP 转发口就宣告该口，回包只从 127.0.0.1 发出（一行房间）。
+/// 否则直接宣告房主 VIP:真实大厅口。
 ScfaLanAnnounce scfaAnnounceForRemote({
   required String title,
   required String hostedBy,
@@ -39,6 +43,7 @@ ScfaLanAnnounce scfaAnnounceForRemote({
       lobbyPort: local,
       mapName: mapName,
       hostedBy: hostedBy,
+      ipv4: scfaLanProxyReplyIp,
     );
   }
   return ScfaLanAnnounce(
@@ -51,6 +56,9 @@ ScfaLanAnnounce scfaAnnounceForRemote({
 }
 
 /// 本机 UDP 15000：替 FA 主机回答 LAN 搜索（驭空开房不听此口）。
+///
+/// 只占这一个发现口。游戏本身不绑定 15000，只往这里广播 `8c`/`6e`。
+/// 每个房间只从一个源 IP 回包，避免列表出现重复行。
 class ScfaDiscoveryBeacon {
   ScfaDiscoveryBeacon._();
   static final ScfaDiscoveryBeacon instance = ScfaDiscoveryBeacon._();
@@ -194,6 +202,11 @@ class ScfaDiscoveryBeacon {
       if (reply == null || reply.isEmpty) continue;
       try {
         out.send(reply, dg.address, dg.port);
+        // 本机游戏口在 0.0.0.0；顺带打到环回，避免以太网同地址回环被丢掉。
+        if (bindIp == scfaLanProxyReplyIp &&
+            dg.address.address != scfaLanProxyReplyIp) {
+          out.send(reply, InternetAddress.loopbackIPv4, dg.port);
+        }
       } catch (e) {
         appLogger.d('[ScfaBeacon] 回包失败 ${dg.address.address}:${dg.port}: $e');
       }

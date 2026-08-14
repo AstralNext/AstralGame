@@ -15,7 +15,8 @@ import 'package:signals/signals_core.dart';
 
 const _forwardListenHost = '0.0.0.0';
 
-/// 只跟「开放游戏」通道走：listing 出现 → 本机组播/代答 + 转发；消失立刻关。
+/// 只跟「开放游戏」通道走：listing 出现 → 本机组播/代答 + 转发。
+/// UDP 中转在目标短暂消失时保留约 45 秒，避免列表/绿点闪烁。
 ///
 /// 仅 Windows。不监听本机组播；发现仍由房主侧 discoverer 负责，本类只消费通道目标。
 /// Minecraft：组播注入 MOTD，[AD] 写成随机口 + TCP 转发。
@@ -49,24 +50,41 @@ class LanLocalRelay {
     }
 
     final stale = _active.keys.where((k) => !wanted.containsKey(k)).toList();
+    final now = DateTime.now();
+    const hold = Duration(seconds: 45);
     for (final k in stale) {
+      final prev = _active[k];
+      if (prev != null && prev.udpRelay != null) {
+        prev.staleSince ??= now;
+        if (now.difference(prev.staleSince!) < hold) {
+          continue;
+        }
+      }
       await _stopOne(_active.remove(k));
     }
 
     for (final spec in wanted.values) {
-      final prev = _active[spec.key];
+      final prev = _active[spec.key] ?? _findUdpByTarget(spec);
       if (prev != null && prev.spec.sameRuntime(spec)) {
+        prev.staleSince = null;
+        if (!identical(prev.spec, spec) && _active[spec.key] != prev) {
+          _active.removeWhere((_, v) => identical(v, prev));
+          _active[spec.key] = prev;
+        }
         prev.spec = _keepListen(prev.spec, spec);
         continue;
       }
-      if (prev != null) await _stopOne(_active.remove(spec.key));
+      if (prev != null) {
+        _active.removeWhere((_, v) => identical(v, prev));
+        await _stopOne(prev);
+      }
       final next = await _startOne(spec);
       if (next != null) {
         _active[spec.key] = next;
         appLogger.i(
           '[LanRelay] 通道触发 ${spec.key} '
           'inject=${next.spec.inject} forward=${next.spec.forward} '
-          'mcast=${next.spec.injectMulticast} loop=${next.spec.injectLoopback} '
+          'udp=${next.spec.udpForward} '
           '${next.spec.listenHost}:${next.spec.listenPort} → '
           '${next.spec.targetHost}:${next.spec.targetPort}',
         );
@@ -79,10 +97,10 @@ class LanLocalRelay {
     if (_active.values.any((e) => e.spec.injectLoopback)) {
       unawaited(_beaconOnce());
     } else if (_active.values.any((e) => e.mcastIndex != null)) {
-      final now = DateTime.now();
+      final logNow = DateTime.now();
       if (_lastMcastLogAt == null ||
-          now.difference(_lastMcastLogAt!) > const Duration(seconds: 8)) {
-        _lastMcastLogAt = now;
+          logNow.difference(_lastMcastLogAt!) > const Duration(seconds: 8)) {
+        _lastMcastLogAt = logNow;
         final n = _active.values.where((e) => e.mcastIndex != null).length;
         appLogger.i('[LanRelay] 组播发送中 $n 条 → 224.0.2.60:4445');
       }
@@ -108,11 +126,23 @@ class LanLocalRelay {
     }
     _uniSocket?.close();
     _uniSocket = null;
-    if (all.isNotEmpty) {
+    if (all.any((e) => e.mcastIndex != null)) {
       try {
         await stopAllMulticastSenders();
       } catch (_) {}
     }
+  }
+
+  _ActiveRelay? _findUdpByTarget(_RelaySpec spec) {
+    if (!spec.udpForward) return null;
+    for (final e in _active.values) {
+      if (e.udpRelay != null &&
+          e.spec.targetHost == spec.targetHost &&
+          e.spec.targetPort == spec.targetPort) {
+        return e;
+      }
+    }
+    return null;
   }
 
   _RelaySpec? _specFor(
@@ -516,4 +546,5 @@ class _ActiveRelay {
   final BigInt? mcastIndex;
   final ScfaUdpRelay? udpRelay;
   final bool forwardOk;
+  DateTime? staleSince;
 }

@@ -50,7 +50,9 @@ void main() {
     expect(parsed.gameName, 'a * Astral');
     expect(parsed.hostedBy, 'a');
     expect(parsed.mapName, 'Four-Corners');
+    expect(parsed.scenarioFile, '/maps/scmp_039/scmp_039_scenario.lua');
     expect(parsed.address, '10.126.126.1');
+    expect(String.fromCharCodes(bytes), contains('AllowObservers'));
     final hit = parseScfaLanPayload(bytes, fallbackPort: 0);
     expect(hit?.port, 58336);
     expect(hit?.motd, 'Four-Corners');
@@ -66,7 +68,7 @@ void main() {
       localUdpPort: 54321,
     );
     expect(proxied.lobbyPort, 54321);
-    expect(proxied.ipv4, isNull);
+    expect(proxied.ipv4, scfaLanProxyReplyIp);
 
     final direct = scfaAnnounceForRemote(
       title: 'a * Astral',

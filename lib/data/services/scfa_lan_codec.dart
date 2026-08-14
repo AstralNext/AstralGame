@@ -62,16 +62,34 @@ Uint8List? buildScfaLanReply({
       : _scenarioForMap(mapName);
   final ip = address.trim();
 
+  final scenarioOrDefault = scenario.isNotEmpty
+      ? scenario
+      : '/maps/scmp_039/scmp_039_scenario.lua';
+  final options = BytesBuilder(copy: false)
+    ..add(_kvStr('TeamLock', 'locked'))
+    ..add(_kvStr('CheatsEnabled', 'false'))
+    ..add(_kvBool('AllowObservers', true))
+    ..add(_kvStr('Victory', 'demoralization'))
+    ..add(_kvStr('PrebuiltUnits', 'Off'))
+    ..add(_kvStr('CivilianAlliance', 'enemy'))
+    ..add(_kvStr('Timeouts', '3'))
+    ..add(_kvStr('NoRushOption', 'Off'))
+    ..add(_kvStr('TeamSpawn', 'random'))
+    ..add(_kvStr('ScenarioFile', scenarioOrDefault))
+    ..add(_kvStr('UnitCap', '500'))
+    ..add(_kvStr('GameSpeed', 'normal'))
+    ..add(_kvStr('FogOfWar', 'explored'));
+
   final body = BytesBuilder(copy: false)
     ..add(_kvStr('HostedBy', host))
+    ..add(_kvBlock('Options', options.takeBytes()))
     ..add(_kvStr('GameName', name))
     ..add(_kvStr('ProductCode', productCode.trim().isEmpty ? 'SC1' : productCode));
   if (ip.isNotEmpty) {
     body.add(_kvStr('Address', ip));
   }
-  if (scenario.isNotEmpty) {
-    body.add(_kvStr('ScenarioFile', scenario));
-  }
+  body.add(_kvFloat('PlayerCount', 1));
+  body.add([0x05]);
 
   final extra = Uint8List(7)
     ..[0] = 0x0B
@@ -152,6 +170,22 @@ Uint8List _kvStr(String key, String value) {
   final k = utf8.encode(key);
   final v = utf8.encode(value);
   return Uint8List.fromList([0x01, ...k, 0x00, 0x01, ...v, 0x00]);
+}
+
+Uint8List _kvBool(String key, bool value) {
+  final k = utf8.encode(key);
+  return Uint8List.fromList([0x01, ...k, 0x00, 0x03, value ? 1 : 0]);
+}
+
+Uint8List _kvFloat(String key, double value) {
+  final k = utf8.encode(key);
+  final n = ByteData(4)..setFloat32(0, value, Endian.little);
+  return Uint8List.fromList([0x01, ...k, 0x00, 0x00, ...n.buffer.asUint8List()]);
+}
+
+Uint8List _kvBlock(String key, Uint8List inner) {
+  final k = utf8.encode(key);
+  return Uint8List.fromList([0x01, ...k, 0x00, 0x04, ...inner, 0x05]);
 }
 
 Map<String, String> _parseKv(Uint8List data) {
