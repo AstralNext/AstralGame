@@ -189,7 +189,16 @@ quark_retry() {
 }
 
 echo "==> whoami"
-quark_retry get-user-info | ndjson_last
+set +e
+whoami_out="$(quark_retry get-user-info | ndjson_last)"
+whoami_rc=$?
+set -e
+if [ "$whoami_rc" -ne 0 ]; then
+  echo "==> official CLI failed (rc=$whoami_rc); fallback HTTP upload"
+  python3 "$ROOT/tools/quark_release/quark_http.py" upload "$VERSION" "$RELEASE_DIR"
+  exit $?
+fi
+echo "$whoami_out"
 
 echo "==> ensure parent folder"
 PARENT_FID="${QUARK_PARENT_FID:-}"
