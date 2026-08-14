@@ -89,11 +89,6 @@ jobs:
             TARGET="${{ github.event.workflow_run.head_sha }}"
             RUN_ID="${{ github.event.workflow_run.id }}"
             SEARCH=false
-            if gh release view "$TAG" >/dev/null 2>&1; then
-              echo "skip=true" >> "$GITHUB_OUTPUT"
-              echo "Release $TAG 已存在，跳过"
-              exit 0
-            fi
           else
             TAG="${{ inputs.tag_name }}"
             BASE="${{ inputs.base_ref }}"
@@ -103,7 +98,14 @@ jobs:
             TARGET="${{ inputs.head_ref }}"
             RUN_ID=""
             SEARCH=true
-            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+          # Release 已存在时仍继续（可补传夸克）；仅创建步骤会跳过
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "release_exists=true" >> "$GITHUB_OUTPUT"
+            echo "Release $TAG 已存在，将跳过创建并继续夸克上传"
+          else
+            echo "release_exists=false" >> "$GITHUB_OUTPUT"
           fi
 
           PV="${{ inputs.package_version }}"
@@ -253,11 +255,16 @@ jobs:
           DRAFT: ${{ steps.cfg.outputs.draft }}
           PRE: ${{ steps.cfg.outputs.prerelease }}
           BODY: ${{ steps.changelog.outputs.body }}
+          RELEASE_EXISTS: ${{ steps.cfg.outputs.release_exists }}
         run: |
-          set -euxo pipefail
+          set -euo pipefail
           if [ ! -d release ] || [ -z "$(ls -A release 2>/dev/null || true)" ]; then
             echo "release/ 为空，无法创建 Release" >&2
             exit 1
+          fi
+          if [ "$RELEASE_EXISTS" = "true" ] || gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG 已存在，跳过 create"
+            exit 0
           fi
           printf '%s\n' "$BODY" > /tmp/release-body.md
           args=(release create "$TAG" --title "Astral Game $TAG" --notes-file /tmp/release-body.md --target "$TARGET")
