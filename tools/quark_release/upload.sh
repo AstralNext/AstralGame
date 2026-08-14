@@ -227,7 +227,21 @@ fi
 echo "VER_FID=$VER_FID"
 
 echo "==> upload ${#FILES[@]} files with official CLI"
-quark_retry upload "${FILES[@]}" --parent-fid "$VER_FID" | tee /tmp/quark-upload.log | tail -n 20
+quark_retry upload "${FILES[@]}" --parent-fid "$VER_FID" > /tmp/quark-upload.log
+tail -n 30 /tmp/quark-upload.log
+# 确认有成功 result
+python3 - <<'PY'
+import json
+last=None
+for line in open("/tmp/quark-upload.log", encoding="utf-8", errors="replace"):
+    line=line.strip()
+    if not line: continue
+    try: last=json.loads(line)
+    except Exception: pass
+if not last or last.get("type") != "result" or last.get("code") not in (0, "0"):
+    raise SystemExit(f"upload did not succeed: {last}")
+print("upload ok", last.get("data", {}).get("successCount"), "files")
+PY
 
 SHARE_URL=""
 if [ "${QUARK_SHARE:-1}" != "0" ]; then
