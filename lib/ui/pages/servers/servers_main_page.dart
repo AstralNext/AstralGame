@@ -61,7 +61,7 @@ class _ServersMainPageState extends State<ServersMainPage> {
           if (!mounted) return;
           _serverStatusState.startPeriodicCheck(
             _serverState.servers.value,
-            const Duration(seconds: 30),
+            AppConstants.serverPingInterval,
           );
         });
       }

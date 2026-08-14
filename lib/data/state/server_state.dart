@@ -100,13 +100,14 @@ class ServerStatusState {
   final serverLatencies = signal<Map<int, int?>>({});
   final activeServerIds = signal<Set<int>>({});
   Timer? _checkTimer;
+  bool _checking = false;
 
   void startPeriodicCheck(List<ServerMod> servers, Duration interval) {
     _checkTimer?.cancel();
     _checkTimer = Timer.periodic(interval, (_) {
-      checkServersStatus(servers);
+      unawaited(checkServersStatus(servers));
     });
-    checkServersStatus(servers);
+    unawaited(checkServersStatus(servers));
   }
 
   void stopPeriodicCheck() {
@@ -115,27 +116,32 @@ class ServerStatusState {
   }
 
   Future<void> checkServersStatus(List<ServerMod> servers) async {
-    final activeIds = activeServerIds.value;
-    final Map<int, ServerStatus> newStatuses = {};
-    final Map<int, int?> newLatencies = {};
+    if (_checking) return;
+    _checking = true;
+    try {
+      final activeIds = activeServerIds.value;
+      final Map<int, ServerStatus> newStatuses = {};
+      final Map<int, int?> newLatencies = {};
 
-    // 并行 ping 所有服务器
-    final futures = servers.map((server) async {
-      if (activeIds.contains(server.id)) {
-        newStatuses[server.id] = ServerStatus.inUse;
-        newLatencies[server.id] = null;
-        return;
-      }
+      final futures = servers.map((server) async {
+        if (activeIds.contains(server.id)) {
+          newStatuses[server.id] = ServerStatus.inUse;
+          newLatencies[server.id] = null;
+          return;
+        }
 
-      final latency = await _checkServerLatency(server);
-      newLatencies[server.id] = latency;
-      newStatuses[server.id] =
-          latency != null ? ServerStatus.online : ServerStatus.offline;
-    });
+        final latency = await _checkServerLatency(server);
+        newLatencies[server.id] = latency;
+        newStatuses[server.id] =
+            latency != null ? ServerStatus.online : ServerStatus.offline;
+      });
 
-    await Future.wait(futures);
-    serverStatuses.value = newStatuses;
-    serverLatencies.value = newLatencies;
+      await Future.wait(futures);
+      serverStatuses.value = newStatuses;
+      serverLatencies.value = newLatencies;
+    } finally {
+      _checking = false;
+    }
   }
 
   Future<int?> _checkServerLatency(ServerMod server) async {
