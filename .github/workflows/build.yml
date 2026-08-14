@@ -181,19 +181,17 @@ jobs:
         run: flutter pub upgrade astral_rust_core vpn_service_plugin
         shell: bash
 
-      - name: 🧊 Cache cargo and cargokit
+      # 只缓存 crates 源码（registry/git），不缓存 cargokit/target 编译产物。
+      # 三端 target 会撑爆 GitHub 10GB 限额；key 换前缀以免 restore 到旧的大包。
+      - name: 🧊 Cache cargo crates
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            android/app/build/cargokit
-            **/cargokit_build
-          key: cargo-${{ runner.os }}-${{ matrix.platform }}-${{ matrix.rust_target }}-fl${{ env.FLUTTER_VERSION }}-ndk${{ env.NDK_VERSION }}-${{ hashFiles('pubspec.lock') }}
+          key: cargo-crates-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
           restore-keys: |
-            cargo-${{ runner.os }}-${{ matrix.platform }}-${{ matrix.rust_target }}-fl${{ env.FLUTTER_VERSION }}-ndk${{ env.NDK_VERSION }}-
-            cargo-${{ runner.os }}-${{ matrix.platform }}-${{ matrix.rust_target }}-
-            cargo-${{ runner.os }}-${{ matrix.platform }}-
+            cargo-crates-${{ runner.os }}-
 
       - name: 🔐 Setup Android release signing
         if: matrix.flutter_platform == 'android'
