@@ -279,6 +279,7 @@ jobs:
         continue-on-error: true
         env:
           OPENCLAW_CLI: '1'
+          NODE_OPTIONS: '--dns-result-order=ipv4first'
           QUARK_DRIVE_CONFIG_JSON: ${{ secrets.QUARK_DRIVE_CONFIG_JSON }}
           QUARK_USER_ID: ${{ secrets.QUARK_USER_ID }}
           QUARK_DEVICE_ID: ${{ secrets.QUARK_DEVICE_ID }}
@@ -287,11 +288,13 @@ jobs:
           QUARK_PARENT_FID: ${{ secrets.QUARK_PARENT_FID }}
           ASTRAL_SITE_TOKEN: ${{ secrets.ASTRAL_SITE_TOKEN }}
         run: |
-          set -euxo pipefail
+          set -euo pipefail
+          # 不要 set -x：会把 QUARK_DRIVE_CONFIG_JSON 打进日志
           if [ -z "${QUARK_DRIVE_CONFIG_JSON:-}" ] && [ -z "${QUARK_ACCESS_TOKEN:-}" ]; then
             echo "Quark secrets 未配置，跳过网盘上传"
             exit 0
           fi
+          echo "Quark secrets present; parent_fid set=$([ -n "${QUARK_PARENT_FID:-}" ] && echo yes || echo no)"
           chmod +x tools/quark_release/upload.sh
           tools/quark_release/upload.sh "${{ steps.cfg.outputs.version }}" release
 

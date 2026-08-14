@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 用夸克官方 CLI（skill zip 里的 quark-drive.cjs）上传 Release 包。
-# 设 OPENCLAW_CLI=1 即可通过 Agent 环境检测，读取 openclaw/config.json。
+# OPENCLAW_CLI=1 通过 Agent 检测；GHA 上强制 IPv4，避免 AggregateError。
 set -euo pipefail
 
 VERSION="${1:-}"
@@ -24,6 +24,8 @@ fi
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 export OPENCLAW_CLI="${OPENCLAW_CLI:-1}"
+# GitHub Actions 上 IPv6 常导致 Node fetch AggregateError
+export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--dns-result-order=ipv4first"
 
 write_config() {
   local dest="$1"
@@ -57,6 +59,39 @@ PY
   exit 2
 }
 
+probe_api() {
+  echo "==> probe open-api-drive.quark.cn"
+  python3 - <<'PY'
+import socket, ssl, sys, urllib.request
+host = "open-api-drive.quark.cn"
+try:
+    infos = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
+    addrs = sorted({i[4][0] for i in infos})
+    print("dns:", ", ".join(addrs[:8]))
+except Exception as e:
+    print("dns failed:", e)
+    sys.exit(1)
+# prefer IPv4
+ipv4 = [a for a in addrs if ":" not in a]
+target = ipv4[0] if ipv4 else addrs[0]
+ctx = ssl.create_default_context()
+try:
+    with socket.create_connection((target, 443), timeout=20) as raw:
+        with ctx.wrap_socket(raw, server_hostname=host) as sock:
+            print(f"tls ok via {target}")
+except Exception as e:
+    print(f"tls failed via {target}: {e}")
+    sys.exit(1)
+url = f"https://{host}/agent/v1/skill_config?req_id=probe"
+try:
+    with urllib.request.urlopen(url, timeout=30) as r:
+        print("http", r.status, "skill_config ok")
+except Exception as e:
+    print("http skill_config failed:", e)
+    sys.exit(1)
+PY
+}
+
 SKILL_DIR="${QUARK_SKILL_DIR:-}"
 if [ -z "$SKILL_DIR" ]; then
   if [ -f "$HOME/.cursor/skills/quarkclouddrive/scripts/quark-drive.cjs" ]; then
@@ -88,8 +123,7 @@ extract = work / "extract"
 extract.mkdir(exist_ok=True)
 with zipfile.ZipFile(zip_path) as zf:
     zf.extractall(extract)
-cjs = next(extract.rglob("quark-drive.cjs"))
-print(str(cjs.parent.parent))
+print(str(next(extract.rglob("quark-drive.cjs")).parent.parent))
 PY
   SKILL_DIR="$(python3 - "$WORK" <<'PY'
 from pathlib import Path
@@ -102,47 +136,103 @@ fi
 
 CLI="$SKILL_DIR/scripts/quark-drive.cjs"
 write_config "$SKILL_DIR/openclaw/config.json"
+write_config "$HOME/.quarkclouddrive/config.json"
+write_config "$HOME/.quarkclouddrive/openclaw/config.json"
 
-quark() {
-  node "$CLI" "$@" --session-input "Astral Game release $TAG" --session-id "gha-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-0}"
+probe_api
+
+quark_raw() {
+  # 合并 stdout/stderr，方便解析；失败时把全文打出
+  node "$CLI" "$@" --session-input "Astral Game release $TAG" --session-id "gha-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-0}" 2>&1
 }
 
 ndjson_last() {
   python3 -c '
 import json,sys
+text=sys.stdin.read()
 last=None
-for line in sys.stdin.read().splitlines():
+for line in text.splitlines():
     line=line.strip()
     if not line: continue
     try: last=json.loads(line)
     except Exception: pass
-if not last: raise SystemExit("empty quark output")
+if not last:
+    sys.stderr.write(text[-4000:] + "\n")
+    raise SystemExit("empty quark output")
 print(json.dumps(last, ensure_ascii=False))
 '
 }
 
+quark_retry() {
+  local attempt=1
+  local max=5
+  local out=""
+  local rc=0
+  while [ "$attempt" -le "$max" ]; do
+    echo "==> quark $* (try $attempt/$max)"
+    set +e
+    out="$(quark_raw "$@")"
+    rc=$?
+    set -e
+    if [ "$rc" -eq 0 ]; then
+      printf '%s\n' "$out"
+      return 0
+    fi
+    echo "$out" | tail -n 40 >&2
+    echo "quark failed rc=$rc, sleep $((attempt * 3))s" >&2
+    sleep $((attempt * 3))
+    attempt=$((attempt + 1))
+  done
+  echo "quark gave up: $*" >&2
+  printf '%s\n' "$out"
+  return "$rc"
+}
+
+echo "==> whoami"
+quark_retry get-user-info | ndjson_last
+
 echo "==> ensure parent folder"
 PARENT_FID="${QUARK_PARENT_FID:-}"
 if [ -z "$PARENT_FID" ]; then
-  out="$(quark create-folder --dir-path "AstralGame" --parent-fid "0" | ndjson_last)"
+  out="$(quark_retry create-folder --dir-path "AstralGame" --parent-fid "0" | ndjson_last)"
   echo "$out"
   PARENT_FID="$(python3 -c 'import json,sys; print((json.loads(sys.argv[1]).get("data") or {}).get("fid",""))' "$out")"
 fi
-out="$(quark create-folder --dir-path "$TAG" --parent-fid "$PARENT_FID" | ndjson_last)"
+if [ -z "$PARENT_FID" ]; then
+  echo "QUARK_PARENT_FID empty and create AstralGame failed" >&2
+  exit 1
+fi
+
+out="$(quark_retry create-folder --dir-path "$TAG" --parent-fid "$PARENT_FID" | ndjson_last)"
 echo "$out"
 VER_FID="$(python3 -c 'import json,sys; print((json.loads(sys.argv[1]).get("data") or {}).get("fid",""))' "$out")"
+if [ -z "$VER_FID" ]; then
+  echo "failed to create version folder; fallback HTTP create_dir" >&2
+  VER_FID="$(
+    ROOT="$ROOT" QUARK_PARENT_FID="$PARENT_FID" python3 - "$TAG" <<'PY'
+import os, sys
+from pathlib import Path
+sys.path.insert(0, str(Path(os.environ["ROOT"]) / "tools" / "quark_release"))
+import quark_http
+client = quark_http.QuarkDrive(quark_http._load_config())
+client.ensure_auth()
+print(client.create_dir(sys.argv[1], os.environ["QUARK_PARENT_FID"]))
+PY
+  )" || true
+fi
 if [ -z "$VER_FID" ]; then
   echo "failed to create version folder" >&2
   exit 1
 fi
+echo "VER_FID=$VER_FID"
 
 echo "==> upload ${#FILES[@]} files with official CLI"
-quark upload "${FILES[@]}" --parent-fid "$VER_FID"
+quark_retry upload "${FILES[@]}" --parent-fid "$VER_FID" | tee /tmp/quark-upload.log | tail -n 20
 
 SHARE_URL=""
 if [ "${QUARK_SHARE:-1}" != "0" ]; then
   echo "==> create public share"
-  out="$(quark share "$VER_FID" --title "Astral Game $TAG" --url-type 1 --expired-type 1 | ndjson_last)"
+  out="$(quark_retry share "$VER_FID" --title "Astral Game $TAG" --url-type 1 --expired-type 1 | ndjson_last)"
   echo "$out"
   SHARE_URL="$(python3 -c 'import json,sys; print((json.loads(sys.argv[1]).get("data") or {}).get("share_url",""))' "$out")"
 fi
