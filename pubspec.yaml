@@ -2,7 +2,7 @@ name: astral_game
 description: "Astral Game Client"
 publish_to: 'none'
 
-version: 1.0.26
+version: 1.0.27
 
 environment:
   sdk: ^3.8.0
