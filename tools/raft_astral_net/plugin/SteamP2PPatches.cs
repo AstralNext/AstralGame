@@ -8,7 +8,7 @@ namespace AstralRaftNet
     {
         private static bool Prefix(CSteamID steamIDRemote, byte[] pubData, uint cubData, EP2PSend eP2PSendType, int nChannel, ref bool __result)
         {
-            if (!AstralTransport.TrySend(steamIDRemote, pubData, cubData, nChannel))
+            if (!AstralTransport.TrySend(steamIDRemote, pubData, cubData, nChannel, eP2PSendType))
             {
                 return true;
             }

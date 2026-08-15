@@ -1,6 +1,6 @@
 # Astral Raft IP
 
-把新版 Raft（PlayFab `SendP2P`）换成 TCP `IP:端口`，并由 Astral 进房后自动注入。编译时用最新 `Managed`（本机可放 `C:\Users\baika\Downloads\cs`）。
+把新版 Raft（PlayFab `SendP2P`）换成 UDP：位移走不可靠包，世界/RPC 走 KCP 可靠通道。Astral 进房后自动注入。编译时用最新 `Managed`（本机可放 `C:\Users\baika\Downloads\cs`）。
 
 ## 编译
 
@@ -25,9 +25,9 @@ copy bin\plugin\AstralRaftNet.dll dist\AstralRaftNet.dll
 2. 启动 `Raft.exe`，Astral 自动检测并注入
 3. 游戏首页右上角出现 **Astral已注入**
 4. **新世界 / 载入世界**：勾选 **启用Astral局域网**（Steam 离线也能建房），联机权限不要选「不允许」
-5. **加入世界**：新版 UI 会去掉「离线不可用」，标题 **加入astral房间**，列表 **lan发现**，点刷新即可。第一次加入会等场景加载完再向房主要世界，不再被 ConnectingBox 超时踢回主页。
+5. **加入世界**：新版 UI 会去掉「离线不可用」，标题 **加入astral房间**，列表 **lan发现**，点刷新即可。进房走原版 `RequestWorldAsClient`（等 `IsAllLandmarksLoaded`）；房主 `SendWorld` 改为立即 `GetWorld` 下发，不再空等 `initialized`。主菜单/返回可用。
 
-两边必须是不同 Steam 账号。TCP `6488`，发现 UDP `6489` 广播。
+两边必须是不同 Steam 账号。游戏口 UDP `6488`（KCP+不可靠），发现 UDP `6489` 广播。
 
 ## 手动注入（备用）
 
@@ -45,4 +45,4 @@ tools\raft_astral_net\bin\injector\AstralRaftInject.exe --watch Raft --dll tools
 
 日志：exe 旁 / DLL 旁 / `%TEMP%\AstralRaftInject.log`。成功行含 `injected pid=`。
 
-F7 仍可开备用 IP 面板。
+F7 打开 **Astral Raft IP / 连接日志**：可拖选文本，或点 **复制全部** 到剪贴板（约保留 300 行）。

@@ -9,25 +9,19 @@ namespace AstralRaftNet
     })]
     internal static class Patch_SendP2P
     {
-        private static bool Prefix(Raft_Network __instance, Network_UserId steamID, Message message, NetworkChannel channel)
+        private static bool Prefix(Raft_Network __instance, Network_UserId steamID, Message message, EP2PSend sendType, NetworkChannel channel)
         {
-            if (message == null)
+            if (message == null || !AstralTransport.IsActive)
             {
                 return true;
             }
 
-            AstralTransport.BindLocalSteamId(__instance);
             if (steamID == __instance.LocalSteamID)
             {
                 return true;
             }
 
-            if (!AstralTransport.IsActive)
-            {
-                return true;
-            }
-
-            if (!AstralTransport.TrySendMessageOrHost(steamID.Id, message, (int)channel))
+            if (!AstralTransport.TrySendMessageOrHost(steamID.Id, message, (int)channel, sendType))
             {
                 AstralLog.Error("send drop not peer type=" + message.Type + " to=" + steamID.Id + " peers=" + AstralTransport.PeerCount);
             }
@@ -42,7 +36,9 @@ namespace AstralRaftNet
     })]
     internal static class Patch_RPC
     {
-        private static bool Prefix(Raft_Network __instance, Message message, Target target, NetworkChannel channel)
+        private static FastInvokeHandler _parseLocal;
+
+        private static bool Prefix(Raft_Network __instance, Message message, Target target, EP2PSend sendType, NetworkChannel channel)
         {
             if (AstralTransport.PeerCount == 0 || message == null)
             {
@@ -51,11 +47,16 @@ namespace AstralRaftNet
 
             if (target == Target.All)
             {
-                AccessTools.Method(typeof(Raft_Network), "ParseLocalMessage")
-                    .Invoke(__instance, new object[] { message, __instance.LocalSteamID });
+                if (_parseLocal == null)
+                {
+                    _parseLocal = MethodInvoker.GetHandler(
+                        AccessTools.Method(typeof(Raft_Network), "ParseLocalMessage"));
+                }
+
+                _parseLocal(__instance, new object[] { message, __instance.LocalSteamID });
             }
 
-            AstralTransport.BroadcastMessage(message, (int)channel, 0UL);
+            AstralTransport.BroadcastMessage(message, (int)channel, 0UL, sendType);
             return false;
         }
     }
@@ -63,14 +64,14 @@ namespace AstralRaftNet
     [HarmonyPatch(typeof(Raft_Network), nameof(Raft_Network.RPCExclude))]
     internal static class Patch_RPCExclude
     {
-        private static bool Prefix(Message message, Network_UserId excludeID, NetworkChannel channel)
+        private static bool Prefix(Message message, Network_UserId excludeID, EP2PSend sendType, NetworkChannel channel)
         {
             if (AstralTransport.PeerCount == 0 || message == null)
             {
                 return true;
             }
 
-            AstralTransport.BroadcastMessage(message, (int)channel, excludeID.Id);
+            AstralTransport.BroadcastMessage(message, (int)channel, excludeID.Id, sendType);
             return false;
         }
     }
