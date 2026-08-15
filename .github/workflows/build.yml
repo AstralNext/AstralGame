@@ -152,6 +152,18 @@ jobs:
         with:
           targets: ${{ matrix.rust_target }}
 
+      # Chocolatey 社区源经常 504 且失败仍 exit 0，当前会话也刷新不到 PATH。
+      # 改为直接从 GitHub Release 装，并写入 GITHUB_PATH 给后续步骤用。
+      - name: 📥 Install protoc
+        if: runner.os == 'Windows'
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 📥 Install NASM
+        if: runner.os == 'Windows'
+        uses: ilammy/setup-nasm@v1
+
       - name: 🪟 Windows native build prerequisites
         if: runner.os == 'Windows'
         shell: pwsh
@@ -160,21 +172,14 @@ jobs:
           Add-Content -Path $env:GITHUB_ENV -Value "CARGO_BUILD_JOBS=2"
           New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' `
             -Name 'LongPathsEnabled' -Value 1 -PropertyType DWORD -Force | Out-Null
-          choco install protoc nasm --yes --no-progress
-          $machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
-          $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-          $env:Path = "$machinePath;$userPath"
-          $nasmDir = 'C:\Program Files\NASM'
-          if (Test-Path $nasmDir) {
-            Add-Content -Path $env:GITHUB_PATH -Value $nasmDir
-            $env:Path = "$nasmDir;$env:Path"
-          }
+          $protoc = (Get-Command protoc).Source
+          Add-Content -Path $env:GITHUB_ENV -Value "PROTOC=$protoc"
           Write-Host '--- toolchain ---'
           rustc -V
           rustup show
           Write-Host '--- protoc / nasm ---'
           & protoc --version
-          Get-Command nasm -ErrorAction SilentlyContinue | Out-String | Write-Host
+          & nasm -v
 
       - name: 📚 Get dependencies
         # git 包（astral_rust_core / vpn_service_plugin）始终跟远端 main tip，不钉 lock 里的旧 resolved-ref。
