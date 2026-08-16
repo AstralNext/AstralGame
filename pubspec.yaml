@@ -52,7 +52,7 @@ flutter_launcher_icons:
   ios: true
   remove_alpha_ios: true
   image_path: assets/logo.png
-  adaptive_icon_background: "#C27803"
+  adaptive_icon_background: "#14201C"
   adaptive_icon_foreground: assets/logo.png
   windows:
     generate: true
@@ -64,8 +64,8 @@ flutter_launcher_icons:
   web:
     generate: true
     image_path: assets/logo.png
-    background_color: "#C27803"
-    theme_color: "#C27803"
+    background_color: "#14201C"
+    theme_color: "#14201C"
 
 flutter:
   uses-material-design: true
