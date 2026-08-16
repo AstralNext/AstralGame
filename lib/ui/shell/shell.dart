@@ -132,13 +132,13 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
       iconPath = await _ensureTrayIconFile(
         preferredAssetPath: 'assets/icon.ico',
         fallbackAssetPath: 'assets/logo.png',
-        outputFileName: 'astral_game_tray_icon',
+        outputFileName: 'astral_game_tray_icon_bw',
       );
     } else {
       iconPath = await _ensureTrayIconFile(
         preferredAssetPath: 'assets/logo.png',
         fallbackAssetPath: 'assets/logo.png',
-        outputFileName: 'astral_game_tray_icon',
+        outputFileName: 'astral_game_tray_icon_bw',
       );
     }
 
