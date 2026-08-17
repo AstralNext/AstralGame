@@ -97,6 +97,23 @@ void main() {
     expect(hit?.label, '二哈 · World');
   });
 
+  test('valheim_lan announce', () {
+    final name = utf8.encode('二哈 · Meadows');
+    final bytes = Uint8List(19 + name.length);
+    final bd = ByteData.sublistView(bytes);
+    bd.setUint32(0, 0x41535648, Endian.little);
+    bytes[4] = 1;
+    bytes[5] = 10;
+    bd.setUint64(6, 76561198000000000, Endian.little);
+    bd.setUint16(14, 2456, Endian.little);
+    bytes[16] = 1;
+    bd.setUint16(17, name.length, Endian.little);
+    bytes.setRange(19, 19 + name.length, name);
+    final hit = parseValheimLanPayload(bytes, fallbackPort: 2460);
+    expect(hit?.port, 2456);
+    expect(hit?.label, '二哈 · Meadows');
+  });
+
   test('minecraft_motd rebuild', () {
     final bytes = buildMinecraftMotdPayload(title: '二哈 · Minecraft', port: 25565);
     expect(bytes, isNotNull);

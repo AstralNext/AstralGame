@@ -124,6 +124,30 @@ class GameAssistGameRules {
       platforms: platforms,
     );
   }
+
+  /// 远程覆盖元数据；本机独有的 `inject` / 发现 / 广播标志保留。
+  GameAssistGameRules mergeFromRemote(GameAssistGameRules remote) {
+    final merged = <String, GameAssistPlatformRules>{...platforms};
+    remote.platforms.forEach((os, remotePlat) {
+      final localPlat = merged[os];
+      merged[os] = localPlat == null
+          ? remotePlat
+          : localPlat.mergePreferRemote(remotePlat);
+    });
+    return GameAssistGameRules(
+      id: remote.id,
+      name: remote.name,
+      colorHex: remote.colorHex,
+      iconName: remote.iconName,
+      steamAppId: remote.steamAppId ?? steamAppId,
+      sgdbGameId: remote.sgdbGameId ?? sgdbGameId,
+      iconAsset: remote.iconAsset ?? iconAsset,
+      gridAsset: remote.gridAsset ?? gridAsset,
+      showInPicker: remote.showInPicker,
+      sort: remote.sort,
+      platforms: merged,
+    );
+  }
 }
 
 /// 发现本机开放游戏，并经 EasyTier 隧道向房间同伴宣告。
@@ -299,6 +323,20 @@ class GameAssistPlatformRules {
           : null,
     );
   }
+
+  /// 远程优先；缺项回退本地（CDN 尚未带 inject 时仍能注入）。
+  GameAssistPlatformRules mergePreferRemote(GameAssistPlatformRules remote) {
+    return GameAssistPlatformRules(
+      network: GameAssistNetworkConfig(
+        enableUdpBroadcastRelay: remote.network.enableUdpBroadcastRelay ||
+            network.enableUdpBroadcastRelay,
+      ),
+      magicWall: remote.magicWall.enabled ? remote.magicWall : magicWall,
+      forwards: remote.forwards.isNotEmpty ? remote.forwards : forwards,
+      lanGameDiscover: remote.lanGameDiscover ?? lanGameDiscover,
+      inject: remote.inject ?? inject,
+    );
+  }
 }
 
 /// `platforms.<os>.inject`：自动找游戏进程并注入插件。
@@ -318,7 +356,7 @@ class GameAssistInjectConfig {
   final String type;
   final List<String> process;
   final List<String> window;
-  /// 相对 `native/raft/` 或文件名，如 `AstralRaftNet.dll`。
+  /// 文件名，如 `AstralRaftNet.dll`。安装后在 `native/<gameId>/`。
   final String dll;
   final String namespace;
   final String className;

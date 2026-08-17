@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "games": [
     {
       "id": "raft",
@@ -62,6 +62,41 @@
             "window": ["Forged Alliance", "Supreme Commander"],
             "title": "{player} * Astral",
             "label": "Forged Alliance"
+          }
+        }
+      }
+    },
+    {
+      "id": "valheim",
+      "name": "Valheim",
+      "color": "#4A6FA5",
+      "icon": "ac_unit",
+      "steam_app_id": 892970,
+      "icon_asset": "assets/games/valheim/icon.png",
+      "grid_asset": "assets/games/valheim/grid.png",
+      "show_in_picker": true,
+      "sort": 50,
+      "platforms": {
+        "windows": {
+          "network": {
+            "enable_udp_broadcast_relay": true
+          },
+          "lan_game_discover": {
+            "id": "valheim_lan",
+            "type": "udp_broadcast",
+            "port": 2460,
+            "parser": "valheim_lan",
+            "title": "{player} * Astral",
+            "label": "Valheim"
+          },
+          "inject": {
+            "type": "mono",
+            "process": ["valheim.exe"],
+            "dll": "AstralValheimNet.dll",
+            "namespace": "AstralValheimNet",
+            "class": "Loader",
+            "method": "Init",
+            "delay_seconds": 8
           }
         }
       }

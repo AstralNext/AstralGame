@@ -29,6 +29,8 @@ on:
       - 'assets/**'
       - 'installer/**'
       - 'tools/raft_astral_net/**'
+      - 'tools/valheim_astral_net/**'
+      - 'tools/mono_inject/**'
       - 'pubspec.yaml'
       - 'pubspec.lock'
       - '.github/workflows/build.yml'
@@ -243,7 +245,7 @@ jobs:
           fi
           ls -la dlls/
 
-      - name: 🛶 Build Raft rust injector
+      - name: 🛶 Build shared Mono injector
         if: matrix.flutter_platform == 'windows'
         shell: pwsh
         run: |
@@ -251,12 +253,16 @@ jobs:
           if (-not (Test-Path tools\raft_astral_net\dist\AstralRaftNet.dll)) {
             throw 'tools/raft_astral_net/dist/AstralRaftNet.dll missing'
           }
-          cargo build --release --manifest-path tools\raft_astral_net\injector_rs\Cargo.toml
-          New-Item -ItemType Directory -Force -Path tools\raft_astral_net\bin\injector_rs | Out-Null
-          Copy-Item tools\raft_astral_net\injector_rs\target\release\astral_mono_inject.exe `
-            tools\raft_astral_net\bin\injector_rs\astral_mono_inject.exe -Force
+          if (-not (Test-Path tools\valheim_astral_net\dist\AstralValheimNet.dll)) {
+            throw 'tools/valheim_astral_net/dist/AstralValheimNet.dll missing'
+          }
+          cargo build --release --manifest-path tools\mono_inject\Cargo.toml
+          New-Item -ItemType Directory -Force -Path tools\mono_inject\bin | Out-Null
+          Copy-Item tools\mono_inject\target\release\astral_mono_inject.exe `
+            tools\mono_inject\bin\astral_mono_inject.exe -Force
           Get-Item tools\raft_astral_net\dist\AstralRaftNet.dll,
-                   tools\raft_astral_net\bin\injector_rs\astral_mono_inject.exe
+                   tools\valheim_astral_net\dist\AstralValheimNet.dll,
+                   tools\mono_inject\bin\astral_mono_inject.exe
 
       - name: 🛠️ Build for ${{ matrix.platform }}
         run: ${{ matrix.build_cmd }}

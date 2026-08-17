@@ -11,8 +11,8 @@ use std::time::Duration;
 
 fn usage() -> ! {
     eprintln!(
-        "astral_mono_inject --dll <AstralRaftNet.dll> [--pid N | --process Raft | --watch Raft] \
-         [--namespace AstralRaftNet] [--class Loader] [--method Init]"
+        "astral_mono_inject --dll <plugin.dll> [--pid N | --process Name | --watch Name] \
+         [--namespace Ns] [--class Loader] [--method Init]"
     );
     std::process::exit(2);
 }

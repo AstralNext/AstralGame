@@ -26,6 +26,7 @@ final Map<String, LanPayloadParser> _lanPayloadParsers = {
   'mindustry_server': parseMindustryServerPayload,
   'scfa_lan': parseScfaLanPayload,
   'raft_lan': parseRaftLanPayload,
+  'valheim_lan': parseValheimLanPayload,
 };
 
 LanPayloadParser? lanPayloadParserOf(String name) {
@@ -101,6 +102,30 @@ LanPayloadHit? parseRaftLanPayload(
   return LanPayloadHit(
     port: tcpPort != 0 ? tcpPort : fallbackPort,
     label: name.isEmpty ? 'Raft' : name,
+  );
+}
+
+/// Valheim Astral 插件 UDP 2460 宣告：`ASVH` + steamId + gamePort + name。
+LanPayloadHit? parseValheimLanPayload(
+  Uint8List data, {
+  required int fallbackPort,
+}) {
+  if (data.length < 19) return null;
+  final bd = ByteData.sublistView(data);
+  if (bd.getUint32(0, Endian.little) != 0x41535648) return null;
+  if (data[4] != 1 || data[5] != 10) return null;
+  final steamId = bd.getUint64(6, Endian.little);
+  final gamePort = bd.getUint16(14, Endian.little);
+  final nameLen = bd.getUint16(17, Endian.little);
+  if (steamId == 0 || gamePort <= 0 || gamePort > 65535) return null;
+  if (nameLen < 0 || 19 + nameLen > data.length) return null;
+  final name = utf8.decode(
+    data.sublist(19, 19 + nameLen),
+    allowMalformed: true,
+  ).trim();
+  return LanPayloadHit(
+    port: gamePort != 0 ? gamePort : fallbackPort,
+    label: name.isEmpty ? 'Valheim' : name,
   );
 }
 

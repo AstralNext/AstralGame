@@ -75,6 +75,67 @@ void main() {
     expect(platform.inject?.className, 'Loader');
   });
 
+  test('udp_broadcast valheim + mono inject', () {
+    final cfg = GameAssistLanGameDiscoverConfig.tryParse({
+      'id': 'valheim_lan',
+      'type': 'udp_broadcast',
+      'port': 2460,
+      'parser': 'valheim_lan',
+      'title': '{player} * Astral',
+      'label': 'Valheim',
+    });
+    expect(cfg!.entries.single.port, 2460);
+    expect(cfg.entries.single.parser, 'valheim_lan');
+
+    final platform = GameAssistPlatformRules.fromJson({
+      'inject': {
+        'type': 'mono',
+        'process': ['valheim.exe'],
+        'dll': 'AstralValheimNet.dll',
+        'namespace': 'AstralValheimNet',
+        'class': 'Loader',
+        'method': 'Init',
+        'delay_seconds': 8,
+      },
+    });
+    expect(platform.inject?.isMono, isTrue);
+    expect(platform.inject?.process, ['valheim.exe']);
+    expect(platform.inject?.delaySeconds, 8);
+  });
+
+  test('remote catalog keeps local valheim inject', () {
+    const local = GameAssistGameRules(
+      id: 'valheim',
+      name: 'Valheim',
+      colorHex: '#4A6FA5',
+      iconName: 'ac_unit',
+      sort: 50,
+      platforms: {
+        'windows': GameAssistPlatformRules(
+          magicWall: GameAssistMagicWallConfig(enabled: false, rules: []),
+          forwards: [],
+          inject: GameAssistInjectConfig(
+            type: 'mono',
+            process: ['valheim.exe'],
+            dll: 'AstralValheimNet.dll',
+            namespace: 'AstralValheimNet',
+            className: 'Loader',
+          ),
+        ),
+      },
+    );
+    const remote = GameAssistGameRules(
+      id: 'valheim',
+      name: 'Valheim',
+      colorHex: '#4A6FA5',
+      iconName: 'ac_unit',
+      sort: 50,
+      platforms: {},
+    );
+    final merged = local.mergeFromRemote(remote);
+    expect(merged.platforms['windows']?.inject?.dll, 'AstralValheimNet.dll');
+  });
+
   test('process_udp forged alliance', () {
     final cfg = GameAssistLanGameDiscoverConfig.tryParse({
       'id': 'scfa',

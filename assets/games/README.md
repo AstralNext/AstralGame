@@ -121,4 +121,31 @@
 
 `delay_seconds`：首次发现进程后等待再注入（默认 5），避免游戏刚起来就注入导致启动失败。
 
+### Valheim
+
+```json
+{
+  "type": "udp_broadcast",
+  "port": 2460,
+  "parser": "valheim_lan",
+  "title": "{player} * Astral"
+}
+```
+
+```json
+"inject": {
+  "type": "mono",
+  "process": ["valheim.exe"],
+  "dll": "AstralValheimNet.dll",
+  "namespace": "AstralValheimNet",
+  "class": "Loader",
+  "method": "Init",
+  "delay_seconds": 8
+}
+```
+
+听服额外开 Steam IP listen（UDP 2456）；发现口 2460。开房不要开跨平台。
+
+安装布局：共用 `native/inject/astral_mono_inject.exe`，游戏插件 `native/<gameId>/`（Raft 为 `native/raft/AstralRaftNet.dll`，Valheim 为 `native/valheim/AstralValheimNet.dll`）。注入器在 `tools/mono_inject/`。
+
 ET：`game.advertiseOpen` / `game.listOpen`。

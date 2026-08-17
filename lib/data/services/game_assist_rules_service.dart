@@ -93,7 +93,8 @@ class GameAssistRulesService {
       for (final g in local.games) g.id: g,
     };
     for (final g in remote.games) {
-      byId[g.id] = g;
+      final existing = byId[g.id];
+      byId[g.id] = existing == null ? g : existing.mergeFromRemote(g);
     }
     final games = byId.values.toList()
       ..sort((a, b) => a.sort.compareTo(b.sort));

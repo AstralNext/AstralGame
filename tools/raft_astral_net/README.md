@@ -7,10 +7,10 @@
 ```bat
 cd tools\raft_astral_net
 dotnet build -c Release AstralRaftNet.sln
-cargo build --release --manifest-path injector_rs\Cargo.toml
+cargo build --release --manifest-path ..\mono_inject\Cargo.toml
 ```
 
-Windows 安装包 / `flutter build windows` 会把 `AstralRaftNet.dll` 与 `astral_mono_inject.exe` 拷到 `native/raft/`。
+Windows 安装包会把共用注入器放到 `native/inject/astral_mono_inject.exe`，Raft 插件放到 `native/raft/AstralRaftNet.dll`。
 
 插件预编译副本在 `dist/AstralRaftNet.dll`（CI 无 Raft 游戏程序集，不现场编 Harmony）。本地改插件后请：
 
@@ -32,7 +32,7 @@ copy bin\plugin\AstralRaftNet.dll dist\AstralRaftNet.dll
 ## 手动注入（备用）
 
 ```bat
-tools\raft_astral_net\bin\injector_rs\astral_mono_inject.exe --watch Raft --dll tools\raft_astral_net\dist\AstralRaftNet.dll
+tools\mono_inject\target\release\astral_mono_inject.exe --watch Raft --dll tools\raft_astral_net\dist\AstralRaftNet.dll
 ```
 
 注入日志（控制台即时输出，同时写文件）：exe 旁 / DLL 旁 / `%TEMP%\astral_mono_inject.log`。成功行含 `injected pid=`。

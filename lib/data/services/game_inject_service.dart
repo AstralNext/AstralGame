@@ -7,7 +7,7 @@ import 'package:astral_game/data/services/windows_game_process.dart';
 import 'package:astral_game/utils/logger.dart';
 import 'package:path/path.dart' as p;
 
-/// Windows：进 Raft 房间后自动找进程并用 Rust mono 注入器注入插件。
+/// Windows：进房后按游戏找进程，用共用 Mono 注入器注入该游戏的插件 DLL。
 class GameInjectService {
   GameInjectService(this._rules);
 
@@ -15,6 +15,7 @@ class GameInjectService {
 
   Timer? _timer;
   GameAssistInjectConfig? _config;
+  String _gameId = '';
   final Set<int> _injected = {};
   final Set<int> _inflight = {};
   final Map<int, DateTime> _retryAfter = {};
@@ -38,6 +39,7 @@ class GameInjectService {
       appLogger.w('[GameInject] 未配置 process，拒绝按窗口标题注入');
       return;
     }
+    _gameId = gameId;
     _config = inject;
     _timer = Timer.periodic(const Duration(seconds: 2), (_) {
       unawaited(_tick());
@@ -53,6 +55,7 @@ class GameInjectService {
     _timer?.cancel();
     _timer = null;
     _config = null;
+    _gameId = '';
     _injected.clear();
     _inflight.clear();
     _retryAfter.clear();
@@ -116,7 +119,7 @@ class GameInjectService {
   ) async {
     try {
       final injector = _findInjector();
-      final dll = _findDll(cfg.dll);
+      final dll = _findDll(cfg.dll, _gameId);
       if (injector == null || dll == null) {
         appLogger.w(
           '[GameInject] 缺少注入文件 injector=$injector dll=$dll',
@@ -197,69 +200,50 @@ class GameInjectService {
   }
 
   String? _findInjector() {
-    for (final dir in _searchDirs()) {
+    for (final dir in _injectorDirs()) {
       final exe = File(p.join(dir, 'astral_mono_inject.exe'));
       if (exe.existsSync()) return exe.path;
     }
     return null;
   }
 
-  String? _findDll(String relative) {
+  String? _findDll(String relative, String gameId) {
     final name = p.basename(relative);
-    for (final dir in _searchDirs()) {
+    final nested = relative.replaceAll('\\', '/');
+    for (final dir in _dllDirs(gameId)) {
       final direct = File(p.join(dir, name));
       if (direct.existsSync()) return direct.path;
-      final nested = File(p.join(dir, relative.replaceAll('\\', '/')));
-      if (nested.existsSync()) return nested.path;
+      final nestedFile = File(p.join(dir, nested));
+      if (nestedFile.existsSync()) return nestedFile.path;
     }
-    final plugin = File(
-      p.join(
-        Directory.current.path,
-        'tools',
-        'raft_astral_net',
-        'bin',
-        'plugin',
-        name,
-      ),
-    );
-    if (plugin.existsSync()) return plugin.path;
     return null;
   }
 
-  List<String> _searchDirs() {
+  List<String> _injectorDirs() {
     final exeDir = File(Platform.resolvedExecutable).parent.path;
+    final root = Directory.current.path;
     return [
-      p.join(exeDir, 'native', 'raft'),
-      p.join(exeDir, 'raft'),
+      p.join(exeDir, 'native', 'inject'),
       exeDir,
-      p.join(
-        Directory.current.path,
-        'tools',
-        'raft_astral_net',
-        'bin',
-        'injector_rs',
-      ),
-      p.join(
-        Directory.current.path,
-        'tools',
-        'raft_astral_net',
-        'bin',
-        'plugin',
-      ),
-      p.join(
-        Directory.current.path,
-        'tools',
-        'raft_astral_net',
-        'dist',
-      ),
-      p.join(
-        Directory.current.path,
-        'tools',
-        'raft_astral_net',
-        'injector_rs',
-        'target',
-        'release',
-      ),
+      p.join(root, 'tools', 'mono_inject', 'target', 'release'),
+      p.join(root, 'tools', 'mono_inject', 'bin'),
+      // 旧包：注入器和 Raft 插件曾放在一起。
+      p.join(exeDir, 'native', 'raft'),
+    ];
+  }
+
+  List<String> _dllDirs(String gameId) {
+    final exeDir = File(Platform.resolvedExecutable).parent.path;
+    final root = Directory.current.path;
+    final id = gameId.trim().toLowerCase();
+    return [
+      if (id.isNotEmpty) p.join(exeDir, 'native', id),
+      p.join(exeDir, 'native', 'raft'),
+      exeDir,
+      if (id.isNotEmpty) p.join(root, 'tools', '${id}_astral_net', 'dist'),
+      if (id.isNotEmpty) p.join(root, 'tools', '${id}_astral_net', 'bin', 'plugin'),
+      p.join(root, 'tools', 'raft_astral_net', 'dist'),
+      p.join(root, 'tools', 'raft_astral_net', 'bin', 'plugin'),
     ];
   }
 }
