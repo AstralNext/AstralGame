@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
@@ -11,6 +12,7 @@ namespace AstralValheimNet
 {
     internal sealed class LanRoom
     {
+        public ulong InstanceId;
         public ulong SteamId;
         public string Ip;
         public int GamePort;
@@ -41,6 +43,7 @@ namespace AstralValheimNet
         private const byte KindAnnounce = 10;
         private const int RoomTtlMs = 8000;
 
+        private static readonly ulong InstanceId = MakeInstanceId();
         private static readonly object Sync = new object();
         private static readonly Dictionary<ulong, LanRoom> Rooms = new Dictionary<ulong, LanRoom>();
 
@@ -53,6 +56,9 @@ namespace AstralValheimNet
         private static bool _password;
         private static string _name = "Astral";
         private static int _roomsVersion;
+        private static DateTime _lastSkipLogUtc = DateTime.MinValue;
+        private static DateTime _lastBadLogUtc = DateTime.MinValue;
+        private static DateTime _lastSendLogUtc = DateTime.MinValue;
 
         public static int RoomsVersion
         {
@@ -77,6 +83,7 @@ namespace AstralValheimNet
                 try
                 {
                     Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+                    socket.ExclusiveAddressUse = false;
                     socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
                     socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.Broadcast, true);
                     socket.Bind(new IPEndPoint(IPAddress.Any, DiscoveryPort));
@@ -89,7 +96,7 @@ namespace AstralValheimNet
                         Name = "AstralValheimRecv"
                     };
                     _recvThread.Start();
-                    AstralLog.Info("LAN discovery listen UDP " + DiscoveryPort);
+                    AstralLog.Info("LAN discovery listen UDP " + DiscoveryPort + " instance=" + InstanceId);
                 }
                 catch (Exception ex)
                 {
@@ -152,7 +159,6 @@ namespace AstralValheimNet
         {
             DateTime now = DateTime.UtcNow;
             List<LanRoom> list = new List<LanRoom>();
-            ulong local = LocalSteamId();
             lock (Sync)
             {
                 List<ulong> expired = new List<ulong>();
@@ -164,7 +170,7 @@ namespace AstralValheimNet
                         continue;
                     }
 
-                    if (local != 0 && pair.Key == local)
+                    if (pair.Key == InstanceId)
                     {
                         continue;
                     }
@@ -210,6 +216,11 @@ namespace AstralValheimNet
                 {
                     byte[] packet = BuildAnnounce();
                     SendBroadcast(packet);
+                    LogThrottled(
+                        ref _lastSendLogUtc,
+                        4000,
+                        "LAN send announce " + _name + " udp=255.255.255.255:" + DiscoveryPort +
+                        " game=" + _gamePort);
                 }
                 catch (Exception ex)
                 {
@@ -235,7 +246,14 @@ namespace AstralValheimNet
                 {
                     int read = _socket.ReceiveFrom(buffer, ref remote);
                     IPEndPoint ep = remote as IPEndPoint;
-                    if (ep == null || read < 19)
+                    if (ep == null)
+                    {
+                        continue;
+                    }
+
+                    string from = ep.Address + ":" + ep.Port;
+                    AstralLog.Info("LAN recv " + read + "B from " + from);
+                    if (read < 19)
                     {
                         continue;
                     }
@@ -243,23 +261,38 @@ namespace AstralValheimNet
                     LanRoom room;
                     if (!TryParseAnnounce(buffer, read, ep.Address, out room))
                     {
+                        AstralLog.Info(
+                            "LAN recv ignore magic=" + ReadU32(buffer, 0).ToString("X8"));
                         continue;
                     }
 
-                    ulong local = LocalSteamId();
-                    if (local != 0 && room.SteamId == local)
+                    ulong localSteam = LocalSteamId();
+                    bool self = room.InstanceId != 0
+                        ? room.InstanceId == InstanceId
+                        : (localSteam != 0 && room.SteamId == localSteam);
+                    AstralLog.Info(
+                        "LAN recv announce " + room.DisplayName +
+                        (self ? " (self, skip list)" : ""));
+                    if (self)
                     {
                         continue;
                     }
 
+                    ulong key = room.InstanceId != 0 ? room.InstanceId : room.SteamId;
                     lock (Sync)
                     {
-                        Rooms[room.SteamId] = room;
+                        Rooms[key] = room;
                         _roomsVersion++;
                     }
                 }
-                catch (SocketException)
+                catch (SocketException ex)
                 {
+                    if (_recvRunning &&
+                        ex.SocketErrorCode != SocketError.TimedOut &&
+                        ex.SocketErrorCode != SocketError.Interrupted)
+                    {
+                        AstralLog.Error("LAN recv socket: " + ex.SocketErrorCode + " " + ex.Message);
+                    }
                 }
                 catch (ObjectDisposedException)
                 {
@@ -275,6 +308,18 @@ namespace AstralValheimNet
             }
         }
 
+        private static void LogThrottled(ref DateTime lastUtc, int intervalMs, string message)
+        {
+            DateTime now = DateTime.UtcNow;
+            if ((now - lastUtc).TotalMilliseconds < intervalMs)
+            {
+                return;
+            }
+
+            lastUtc = now;
+            AstralLog.Info(message);
+        }
+
         private static void SendBroadcast(byte[] packet)
         {
             Socket socket = _socket;
@@ -286,6 +331,14 @@ namespace AstralValheimNet
             try
             {
                 socket.SendTo(packet, new IPEndPoint(IPAddress.Broadcast, DiscoveryPort));
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                socket.SendTo(packet, new IPEndPoint(IPAddress.Loopback, DiscoveryPort));
             }
             catch
             {
@@ -339,7 +392,7 @@ namespace AstralValheimNet
                 Array.Resize(ref nameBytes, 80);
             }
 
-            byte[] packet = new byte[19 + nameBytes.Length];
+            byte[] packet = new byte[19 + nameBytes.Length + 8];
             WriteU32(packet, 0, Magic);
             packet[4] = Version;
             packet[5] = KindAnnounce;
@@ -348,6 +401,7 @@ namespace AstralValheimNet
             packet[16] = (byte)(_password ? 1 : 0);
             WriteU16(packet, 17, (ushort)nameBytes.Length);
             Buffer.BlockCopy(nameBytes, 0, packet, 19, nameBytes.Length);
+            WriteU64(packet, 19 + nameBytes.Length, InstanceId);
             return packet;
         }
 
@@ -371,8 +425,16 @@ namespace AstralValheimNet
                 ipv4 = ipv4.MapToIPv4();
             }
 
+            ulong instanceId = 0;
+            int instanceAt = 19 + nameLen;
+            if (instanceAt + 8 <= length)
+            {
+                instanceId = ReadU64(buffer, instanceAt);
+            }
+
             room = new LanRoom
             {
+                InstanceId = instanceId,
                 SteamId = ReadU64(buffer, 6),
                 Ip = ipv4.ToString(),
                 GamePort = ReadU16(buffer, 14),
@@ -381,6 +443,21 @@ namespace AstralValheimNet
                 LastSeenUtc = DateTime.UtcNow
             };
             return room.SteamId != 0 && room.GamePort > 0;
+        }
+
+        private static ulong MakeInstanceId()
+        {
+            uint pid = 0;
+            try
+            {
+                pid = (uint)Process.GetCurrentProcess().Id;
+            }
+            catch
+            {
+            }
+
+            ulong id = ((ulong)pid << 32) | (uint)Environment.TickCount;
+            return id == 0 ? 1UL : id;
         }
 
         private static ulong LocalSteamId()

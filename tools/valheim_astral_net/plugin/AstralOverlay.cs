@@ -144,7 +144,7 @@ namespace AstralValheimNet
             GUI.Box(
                 rect,
                 "Astral开房：已关闭跨平台，走 Steam IP " + AstralValheim.GamePort +
-                "。加入方打开服务器列表「Astral局域网」。",
+                "。加入方打开服务器列表「astral局域网」。",
                 _hostHintStyle);
             GUI.color = prev;
         }

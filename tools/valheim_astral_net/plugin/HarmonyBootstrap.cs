@@ -20,6 +20,13 @@ namespace AstralValheimNet
             _harmony.PatchAll(typeof(HarmonyBootstrap).Assembly);
             AstralLanDiscovery.EnsureReceiver();
             EnsureOverlay();
+            string pluginFile = typeof(HarmonyBootstrap).Assembly.Location;
+            if (string.IsNullOrEmpty(pluginFile))
+            {
+                pluginFile = "(memory)";
+            }
+
+            AstralLog.Info("plugin file " + pluginFile);
             AstralLog.Info("Harmony patches applied");
         }
 

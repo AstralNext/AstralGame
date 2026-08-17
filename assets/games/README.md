@@ -145,6 +145,7 @@
 ```
 
 听服额外开 Steam IP listen（UDP 2456）；发现口 2460。开房不要开跨平台。
+发现同 Raft：插件自己广播 `255.255.255.255:2460` 并自己收列表，进房用 UDP 来源 IP。Astral 不代播。
 
 安装布局：共用 `native/inject/astral_mono_inject.exe`，游戏插件 `native/<gameId>/`（Raft 为 `native/raft/AstralRaftNet.dll`，Valheim 为 `native/valheim/AstralValheimNet.dll`）。注入器在 `tools/mono_inject/`。
 

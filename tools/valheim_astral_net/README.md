@@ -1,6 +1,6 @@
 # Valheim Astral 局域网
 
-在听服 `ZSteamSocket.StartHost` 之外再开 Steam Networking **IP listen（UDP 2456）**，用自管 UDP **2460** 广播发现房间，并在加入列表加 **Astral局域网** 页。走原版 `SetServerHost(ip, port, Steamworks)`，不要用 `Connect(host, port)`。
+在听服 `ZSteamSocket.StartHost` 之外再开 Steam Networking **IP listen（UDP 2456）**，用自管 UDP **2460** 广播发现房间，并在加入列表单独加 **astral局域网** 页（不混进原版社区列表）。走原版 `SetServerHost(ip, port, Steamworks)`，不要用 `Connect(host, port)`。
 
 开房请保持 **跨平台关闭**（插件会强制关掉），否则会走 PlayFab，听服不绑 IP。
 
@@ -23,6 +23,10 @@ dotnet build -c Release AstralValheimNet.sln
 2. 启动 `valheim.exe`，进房后 Astral 自动注入（约 8 秒）
 3. 主菜单右上角出现 **Astral已注入 · F7**
 4. **开房**：开始游戏面板会关掉跨平台，并提示走 Steam IP 2456
-5. **加入**：服务器列表最左侧 **Astral局域网**，点选后加入；或 F7 填 `IP:2456`
+5. **加入**：服务器列表最左侧 **astral局域网**，点选后加入；或 F7 填 `IP:2456`
 
-两边必须是不同 Steam 账号。发现口 UDP `2460`，游戏口 UDP `2456`。
+页签是我们自己加的。打开后不会走原版社区刷新，插件每 0.5 秒把收到的房间画进这个页签（和 Raft 自己 Populate 一样）。
+
+两边必须是不同 Steam 账号。游戏口 UDP `2456`，发现 UDP `2460`。
+
+发现和 Raft 一样：插件自己打 `255.255.255.255:2460` 并自己收；Astral 也听 `2460`，只收本机包填「开放游戏」。房间游戏请选 Valheim（会开 EasyTier UDP 广播转发）。

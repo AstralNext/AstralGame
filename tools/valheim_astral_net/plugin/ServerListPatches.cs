@@ -5,6 +5,16 @@ using Splatform;
 
 namespace AstralValheimNet
 {
+    [HarmonyPatch(typeof(ServerListGui), "Initialize")]
+    internal static class Patch_ServerListInitialize
+    {
+        private static void Postfix(ServerListGui __instance)
+        {
+            AstralLanDiscovery.EnsureReceiver();
+            AstralLanServerList.TryInsert(__instance, false);
+        }
+    }
+
     [HarmonyPatch(typeof(ServerListGui), "OnEnable")]
     internal static class Patch_ServerListOnEnable
     {
@@ -15,12 +25,45 @@ namespace AstralValheimNet
         }
     }
 
+    // 不能靠原版社区刷新：它不会去填我们的房间。和 Raft 一样自己按 Snapshot 画。
+    [HarmonyPatch(typeof(ServerListGui), "Update")]
+    internal static class Patch_ServerListUpdate
+    {
+        private static void Postfix(ServerListGui __instance)
+        {
+            AstralLanServerList.PumpGui(__instance);
+        }
+    }
+
+    [HarmonyPatch(typeof(ServerListGui), nameof(ServerListGui.RequestServerList))]
+    internal static class Patch_RequestServerList
+    {
+        private static bool Prefix(ServerListGui __instance)
+        {
+            if (!AstralLanServerList.IsCurrent(__instance))
+            {
+                return true;
+            }
+
+            AstralLanDiscovery.EnsureReceiver();
+            AstralLanServerList current = AstralLanServerList.Current(__instance);
+            if (current != null)
+            {
+                current.Refresh();
+            }
+
+            AstralLanServerList.RedrawNow(__instance);
+            return false;
+        }
+    }
+
     internal sealed class AstralLanServerList : IServerList
     {
-        private const string ListDisplayName = "Astral局域网";
+        private const string ListDisplayName = "astral局域网";
         private string _filter = string.Empty;
         private DateTime _lastRefreshUtc = DateTime.MinValue;
-        private int _emittedVersion = -1;
+        private DateTime _lastPaintUtc = DateTime.MinValue;
+        private int _paintedVersion = -1;
 
         public event ServerListUpdatedHandler ServerListUpdated;
 
@@ -78,23 +121,96 @@ namespace AstralValheimNet
         public void OnOpen()
         {
             AstralLanDiscovery.EnsureReceiver();
+            _paintedVersion = -1;
+            _lastPaintUtc = DateTime.MinValue;
             Refresh();
         }
 
         public void Tick()
         {
-            int version = AstralLanDiscovery.RoomsVersion;
-            if (version == _emittedVersion)
-            {
-                return;
-            }
-
-            _emittedVersion = version;
-            RaiseUpdated();
+            AstralLanDiscovery.EnsureReceiver();
         }
 
         public void OnClose()
         {
+        }
+
+        public static bool IsCurrent(ServerListGui gui)
+        {
+            return Current(gui) != null;
+        }
+
+        public static AstralLanServerList Current(ServerListGui gui)
+        {
+            if (gui == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                object rawLists = AccessTools.Field(typeof(ServerListGui), "m_serverLists").GetValue(gui);
+                object rawIndex = AccessTools.Field(typeof(ServerListGui), "m_currentServerList").GetValue(gui);
+                List<IServerList> lists = rawLists as List<IServerList>;
+                if (lists == null || !(rawIndex is int))
+                {
+                    return null;
+                }
+
+                int index = (int)rawIndex;
+                if (index < 0 || index >= lists.Count)
+                {
+                    return null;
+                }
+
+                return lists[index] as AstralLanServerList;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        public static void PumpGui(ServerListGui gui)
+        {
+            AstralLanServerList list = Current(gui);
+            if (list == null)
+            {
+                return;
+            }
+
+            AstralLanDiscovery.EnsureReceiver();
+            int version = AstralLanDiscovery.RoomsVersion;
+            bool stale = (DateTime.UtcNow - list._lastPaintUtc).TotalSeconds >= 0.5;
+            if (version == list._paintedVersion && !stale)
+            {
+                return;
+            }
+
+            list._paintedVersion = version;
+            list._lastPaintUtc = DateTime.UtcNow;
+            RedrawNow(gui);
+        }
+
+        public static void RedrawNow(ServerListGui gui)
+        {
+            if (gui == null)
+            {
+                return;
+            }
+
+            try
+            {
+                AccessTools.Field(typeof(ServerListGui), "m_filteredListOutdated").SetValue(gui, true);
+                AccessTools.Method(typeof(ServerListGui), "UpdateServerListGuiInternal").Invoke(
+                    gui,
+                    new object[] { false });
+                AccessTools.Method(typeof(ServerListGui), "UpdateServerCount").Invoke(gui, null);
+            }
+            catch (Exception ex)
+            {
+                AstralLog.Error("RedrawNow: " + ex.Message);
+            }
         }
 
         public static void TryInsert(ServerListGui gui, bool recreateIfAlreadyEnabled)

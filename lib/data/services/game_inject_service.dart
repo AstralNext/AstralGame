@@ -237,11 +237,11 @@ class GameInjectService {
     final root = Directory.current.path;
     final id = gameId.trim().toLowerCase();
     return [
+      if (id.isNotEmpty) p.join(root, 'tools', '${id}_astral_net', 'dist'),
+      if (id.isNotEmpty) p.join(root, 'tools', '${id}_astral_net', 'bin', 'plugin'),
       if (id.isNotEmpty) p.join(exeDir, 'native', id),
       p.join(exeDir, 'native', 'raft'),
       exeDir,
-      if (id.isNotEmpty) p.join(root, 'tools', '${id}_astral_net', 'dist'),
-      if (id.isNotEmpty) p.join(root, 'tools', '${id}_astral_net', 'bin', 'plugin'),
       p.join(root, 'tools', 'raft_astral_net', 'dist'),
       p.join(root, 'tools', 'raft_astral_net', 'bin', 'plugin'),
     ];
