@@ -1,6 +1,6 @@
 # 游戏规则 JSON
 
-调试：把 JSON 放到仓库根目录 `gamerules/`（`flutter run`），或可执行文件旁的 `gamerules/`。文件名 `gamerules.json` 或任意 `.json`。改完重启客户端。可从 `assets/games/rules.json` 复制再改。
+调试：在仓库根或可执行文件旁自己建 `gamerules/`（已 gitignore，不要提交）。放入 `gamerules.json` 或任意 `.json` 后重启客户端；有文件则不再拉线上。可从 `assets/games/rules.json` 复制再改。
 
 ```json
 {

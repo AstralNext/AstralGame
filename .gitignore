@@ -39,6 +39,9 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
+# Local game-rules overlay for debugging (never commit)
+/gamerules/
+
 # Android release signing (never commit)
 /android/key.properties
 /android/*.jks
