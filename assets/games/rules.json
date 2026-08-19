@@ -1,6 +1,30 @@
 {
-  "version": 4,
+  "version": 5,
   "games": [
+    {
+      "id": "minecraft",
+      "name": "Minecraft",
+      "color": "#5D9C3E",
+      "icon": "terrain",
+      "sgdb_game_id": 38365,
+      "icon_asset": "assets/games/minecraft/icon.png",
+      "grid_asset": "assets/games/minecraft/grid.png",
+      "show_in_picker": true,
+      "sort": 10,
+      "platforms": {
+        "windows": {
+          "network": {
+            "protocol": "tcp"
+          },
+          "lan_game_discover": {
+            "type": "udp_multicast",
+            "multicast": "224.0.2.60:4445",
+            "parser": "minecraft_motd",
+            "title": "{player} · {game}"
+          }
+        }
+      }
+    },
     {
       "id": "raft",
       "name": "Raft",

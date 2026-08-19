@@ -13,8 +13,9 @@ CI：`.github/workflows/build.yml`（含 Windows 安装包）。
 
 ## 游戏规则 / 封面
 
-运行时从 `https://astral.fan/gamerules.json` 拉取完整目录与封面 URL。  
-本地 `assets/games/rules.json` 作离线回退（含尚未上 CDN 的游戏）。
+规则 JSON 写法见 [docs/gamerules.md](docs/gamerules.md)。
+
+运行时先读本地 `assets/games/rules.json`，再读仓库/程序旁 `gamerules/`（有 JSON 则不拉线上），否则拉 `https://astral.fan/gamerules.json`。
 
 可选：用 `tool/fetch_steamgriddb_covers.dart` 拉封面后上传到 CDN，并在线上 JSON 里写网络路径。
 

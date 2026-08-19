@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:astral_game/data/models/active_room_session.dart';
+import 'package:astral_game/data/models/game_assist_rules.dart';
 import 'package:astral_game/data/models/server_mod.dart';
 import 'package:astral_game/data/services/app_settings_service.dart';
 import 'package:astral_game/data/services/game_assist_rules_service.dart';
@@ -454,12 +455,17 @@ class ConnectionService {
       if (epoch != _linkEpoch) return false;
       final fromUser = _appSettings.isEnableUdpBroadcastRelay();
       final udpRelay = fromGame || fromUser;
+      final protocol = gameId != null && gameId.isNotEmpty
+          ? await _gameRules.networkProtocol(gameId)
+          : GameAssistNetworkProtocol.udp;
+      if (epoch != _linkEpoch) return false;
 
       final configToml = _p2pConfig.buildTomlConfig(
         networkName,
         secret,
         peersOverride: peersOverride,
         enableUdpBroadcastRelay: udpRelay,
+        protocol: protocol,
       );
       appLogger.i(
         '[ConnectionService] $purpose 启动实例 network=$networkName '

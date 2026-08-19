@@ -110,7 +110,7 @@ Future<void> setupDI() async {
       getIt<AppSettingsService>(),
     ),
   );
-  // 不阻塞启动：本地 asset 先填目录，远程 gamerules 后台拉取。
+  // 不阻塞启动：本地 asset → 测试目录 gamerules/ → 远程。
   unawaited(getIt<GameAssistRulesService>().ensureLoaded());
   getIt.registerLazySingleton<HitokotoService>(() => HitokotoService());
   getIt.registerLazySingleton<AlcyWallpaperService>(() => AlcyWallpaperService());

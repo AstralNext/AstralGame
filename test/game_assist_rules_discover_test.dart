@@ -112,7 +112,7 @@ void main() {
       sort: 50,
       platforms: {
         'windows': GameAssistPlatformRules(
-          magicWall: GameAssistMagicWallConfig(enabled: false, rules: []),
+          magicWall: GameAssistMagicWallConfig.disabled,
           forwards: [],
           inject: GameAssistInjectConfig(
             type: 'mono',
@@ -202,5 +202,115 @@ void main() {
   test('missing discover is null', () {
     expect(GameAssistLanGameDiscoverConfig.tryParse(null), isNull);
     expect(GameAssistLanGameDiscoverConfig.tryParse(<String, dynamic>{}), isNull);
+  });
+
+  test('magic_wall is per exe with independent rules', () {
+    expect(GameAssistMagicWallConfig.parse(null).isActive, isFalse);
+    expect(GameAssistMagicWallConfig.parse(false).isActive, isFalse);
+
+    final fromTrue = GameAssistMagicWallConfig.parse(true);
+    expect(fromTrue.isActive, isFalse);
+    expect(fromTrue.targets, isEmpty);
+
+    final fromList = GameAssistMagicWallConfig.parse(['Raft.exe', 'valheim.exe']);
+    expect(fromList.targets.map((e) => e.process).toList(), [
+      'Raft.exe',
+      'valheim.exe',
+    ]);
+    expect(fromList.targets.every((e) => e.rules.isEmpty), isTrue);
+
+    final perExe = GameAssistMagicWallConfig.parse({
+      'valheim.exe': [
+        {
+          'action': 'allow',
+          'protocol': 'udp',
+          'local_port': '2456',
+        },
+      ],
+      'game.exe': [
+        {
+          'action': 'allow',
+          'protocol': 'udp',
+          'local_port': '15000',
+        },
+      ],
+      'Raft.exe': true,
+    });
+    expect(perExe.isActive, isTrue);
+    expect(perExe.targets, hasLength(2));
+    final byName = {for (final t in perExe.targets) t.process: t};
+    expect(byName['valheim.exe']!.rules.single.localPort, '2456');
+    expect(byName['game.exe']!.rules.single.localPort, '15000');
+    expect(byName.containsKey('Raft.exe'), isFalse);
+
+    final listed = GameAssistMagicWallConfig.parse([
+      {
+        'process': 'valheim.exe',
+        'rules': [
+          {'protocol': 'udp', 'local_port': '2456'},
+        ],
+      },
+      {
+        'process': ['game.exe', 'ForgedAlliance.exe'],
+        'rules': [
+          {'protocol': 'udp', 'local_port': '15000'},
+        ],
+      },
+    ]);
+    expect(listed.targets, hasLength(3));
+    expect(
+      listed.targets.singleWhere((e) => e.process == 'ForgedAlliance.exe').rules.single.localPort,
+      '15000',
+    );
+
+    final off = GameAssistMagicWallConfig.parse({
+      'enabled': false,
+      'valheim.exe': true,
+    });
+    expect(off.isActive, isFalse);
+
+    final platform = GameAssistPlatformRules.fromJson({
+      'magic_wall': {
+        'valheim.exe': [
+          {'protocol': 'udp', 'local_port': '2456'},
+        ],
+      },
+      'inject': {
+        'type': 'mono',
+        'process': ['other.exe'],
+        'dll': 'AstralValheimNet.dll',
+        'namespace': 'AstralValheimNet',
+        'class': 'Loader',
+      },
+    });
+    expect(platform.magicWall.isActive, isTrue);
+    expect(platform.magicWallProcessNames, ['valheim.exe']);
+    expect(platform.inject?.process, ['other.exe']);
+  });
+
+  test('network protocol defaults to udp', () {
+    expect(GameAssistNetworkProtocol.parse(null), GameAssistNetworkProtocol.udp);
+    expect(GameAssistNetworkProtocol.parse(''), GameAssistNetworkProtocol.udp);
+    expect(GameAssistNetworkProtocol.parse('UDP'), GameAssistNetworkProtocol.udp);
+    expect(GameAssistNetworkProtocol.parse('tcp'), GameAssistNetworkProtocol.tcp);
+    expect(GameAssistNetworkProtocol.parse('TCP'), GameAssistNetworkProtocol.tcp);
+
+    final omitted = GameAssistNetworkConfig.fromJson({});
+    expect(omitted.protocol, GameAssistNetworkProtocol.udp);
+    expect(omitted.protocolSpecified, isFalse);
+
+    final tcp = GameAssistNetworkConfig.fromJson({'protocol': 'tcp'});
+    expect(tcp.protocol, GameAssistNetworkProtocol.tcp);
+    expect(tcp.protocolSpecified, isTrue);
+
+    final localTcp = GameAssistPlatformRules.fromJson({
+      'network': {'protocol': 'tcp'},
+    });
+    final remotePlain = GameAssistPlatformRules.fromJson({
+      'network': {'enable_udp_broadcast_relay': true},
+    });
+    final merged = localTcp.mergePreferRemote(remotePlain);
+    expect(merged.network.protocol, GameAssistNetworkProtocol.tcp);
+    expect(merged.network.enableUdpBroadcastRelay, isTrue);
   });
 }

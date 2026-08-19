@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:astral_game/utils/net_addr.dart';
 
 /// 本地游戏规则目录（UI 元数据 / 网络标志 / 魔法墙 / TCP 转发 / 局域网发现）。
-/// 数据源：`https://astral.fan/gamerules.json`（失败回退本地 asset）。
+/// 数据源：测试目录 `gamerules/` → 否则 `https://astral.fan/gamerules.json`（失败回退本地 asset）。
 class GameAssistRulesCatalog {
   const GameAssistRulesCatalog({
     required this.version,
@@ -266,18 +266,40 @@ List<String> _stringList(Object? raw) {
   return [s];
 }
 
+/// EasyTier 传输档：对应客户端 UDP / TCP 两套 `[flags]`。缺省为 UDP。
+enum GameAssistNetworkProtocol {
+  udp,
+  tcp;
+
+  static GameAssistNetworkProtocol parse(Object? raw) {
+    final s = '${raw ?? ''}'.trim().toLowerCase();
+    if (s == 'tcp') return tcp;
+    return udp;
+  }
+}
+
 /// EasyTier / 虚拟网相关开关（按平台）。
 class GameAssistNetworkConfig {
   const GameAssistNetworkConfig({
     this.enableUdpBroadcastRelay = false,
+    this.protocol = GameAssistNetworkProtocol.udp,
+    this.protocolSpecified = false,
   });
 
   /// 写入 TOML `[flags] enable_udp_broadcast_relay`（Windows）。
   final bool enableUdpBroadcastRelay;
 
+  /// `tcp` / `udp`；未写则 UDP。
+  final GameAssistNetworkProtocol protocol;
+
+  /// JSON 是否显式写了 `protocol`（合并远程时避免把未写当成 UDP 覆盖本地）。
+  final bool protocolSpecified;
+
   factory GameAssistNetworkConfig.fromJson(Map<String, dynamic> json) {
     return GameAssistNetworkConfig(
       enableUdpBroadcastRelay: json['enable_udp_broadcast_relay'] == true,
+      protocol: GameAssistNetworkProtocol.parse(json['protocol']),
+      protocolSpecified: json.containsKey('protocol'),
     );
   }
 }
@@ -299,6 +321,13 @@ class GameAssistPlatformRules {
   /// 进房后自动检测进程并注入（Windows / Unity Mono）。
   final GameAssistInjectConfig? inject;
 
+  /// 魔法墙：按 exe 各自套规则。
+  List<GameAssistMagicWallExe> get magicWallTargets => magicWall.targets;
+
+  List<String> get magicWallProcessNames => [
+        for (final t in magicWallTargets) t.process,
+      ];
+
   factory GameAssistPlatformRules.fromJson(Map<String, dynamic> json) {
     final mw = json['magic_wall'];
     final discover = json['lan_game_discover'];
@@ -308,9 +337,7 @@ class GameAssistPlatformRules {
       network: net is Map
           ? GameAssistNetworkConfig.fromJson(Map<String, dynamic>.from(net))
           : const GameAssistNetworkConfig(),
-      magicWall: mw is Map
-          ? GameAssistMagicWallConfig.fromJson(Map<String, dynamic>.from(mw))
-          : const GameAssistMagicWallConfig(enabled: false, rules: []),
+      magicWall: GameAssistMagicWallConfig.parse(mw),
       forwards: [
         if (json['forwards'] is List)
           for (final e in json['forwards'] as List)
@@ -330,8 +357,13 @@ class GameAssistPlatformRules {
       network: GameAssistNetworkConfig(
         enableUdpBroadcastRelay: remote.network.enableUdpBroadcastRelay ||
             network.enableUdpBroadcastRelay,
+        protocol: remote.network.protocolSpecified
+            ? remote.network.protocol
+            : network.protocol,
+        protocolSpecified:
+            remote.network.protocolSpecified || network.protocolSpecified,
       ),
-      magicWall: remote.magicWall.enabled ? remote.magicWall : magicWall,
+      magicWall: remote.magicWall.isActive ? remote.magicWall : magicWall,
       forwards: remote.forwards.isNotEmpty ? remote.forwards : forwards,
       lanGameDiscover: remote.lanGameDiscover ?? lanGameDiscover,
       inject: remote.inject ?? inject,
@@ -386,37 +418,146 @@ class GameAssistInjectConfig {
   }
 }
 
+/// `platforms.<os>.magic_wall`：按 exe 各自写防火墙规则。
 class GameAssistMagicWallConfig {
   const GameAssistMagicWallConfig({
-    required this.enabled,
-    required this.rules,
+    this.enabled = false,
+    this.targets = const [],
   });
 
+  static const disabled = GameAssistMagicWallConfig();
+  static const _reservedKeys = {'enabled', 'process', 'rules'};
+
   final bool enabled;
-  final List<GameAssistMagicWallRule> rules;
+  /// 每个 exe 一套规则。
+  final List<GameAssistMagicWallExe> targets;
+
+  bool get isActive => enabled && targets.isNotEmpty;
+
+  factory GameAssistMagicWallConfig.parse(Object? raw) {
+    if (raw == null || raw == false || raw == true) return disabled;
+    if (raw is String) {
+      final name = raw.trim();
+      if (name.isEmpty) return disabled;
+      return GameAssistMagicWallConfig(
+        enabled: true,
+        targets: [GameAssistMagicWallExe(process: name)],
+      );
+    }
+    if (raw is List) {
+      return GameAssistMagicWallConfig._fromList(raw);
+    }
+    if (raw is Map) {
+      return GameAssistMagicWallConfig.fromJson(
+        Map<String, dynamic>.from(raw),
+      );
+    }
+    return disabled;
+  }
+
+  factory GameAssistMagicWallConfig._fromList(List<dynamic> raw) {
+    final targets = <GameAssistMagicWallExe>[];
+    for (final e in raw) {
+      if (e is String) {
+        final name = e.trim();
+        if (name.isEmpty) continue;
+        targets.add(GameAssistMagicWallExe(process: name));
+        continue;
+      }
+      if (e is Map) {
+        targets.addAll(
+          GameAssistMagicWallExe.parseMany(Map<String, dynamic>.from(e)),
+        );
+      }
+    }
+    if (targets.isEmpty) return disabled;
+    return GameAssistMagicWallConfig(enabled: true, targets: targets);
+  }
 
   factory GameAssistMagicWallConfig.fromJson(Map<String, dynamic> json) {
+    if (json['enabled'] == false) return disabled;
+
+    final keyed = <GameAssistMagicWallExe>[];
+    json.forEach((key, value) {
+      if (_reservedKeys.contains(key)) return;
+      final exe = GameAssistMagicWallExe.parseKeyed(key, value);
+      if (exe != null) keyed.add(exe);
+    });
+    if (keyed.isNotEmpty) {
+      return GameAssistMagicWallConfig(enabled: true, targets: keyed);
+    }
+
+    final process = _stringList(json['process']);
+    final rules = GameAssistMagicWallRule.parseList(json['rules']);
+    if (process.isEmpty) return disabled;
     return GameAssistMagicWallConfig(
-      enabled: json['enabled'] == true,
-      rules: [
-        if (json['rules'] is List)
-          for (final e in json['rules'] as List)
-            if (e is Map)
-              GameAssistMagicWallRule.fromJson(Map<String, dynamic>.from(e)),
+      enabled: true,
+      targets: [
+        for (final name in process)
+          GameAssistMagicWallExe(process: name, rules: rules),
       ],
     );
   }
 }
 
+/// 单个 exe 的魔法墙。规则只作用在这个进程上。
+class GameAssistMagicWallExe {
+  const GameAssistMagicWallExe({
+    required this.process,
+    this.rules = const [],
+  });
+
+  final String process;
+  final List<GameAssistMagicWallRule> rules;
+
+  List<GameAssistMagicWallRule> get effectiveRules {
+    final enabled = [for (final r in rules) if (r.enabled) r];
+    if (enabled.isEmpty) return const [GameAssistMagicWallRule.defaultAllow];
+    return enabled;
+  }
+
+  static List<GameAssistMagicWallExe> parseMany(Map<String, dynamic> json) {
+    if (json['enabled'] == false) return const [];
+    final names = _stringList(json['process']);
+    if (names.isEmpty) return const [];
+    final rules = GameAssistMagicWallRule.parseList(json['rules']);
+    return [
+      for (final name in names)
+        GameAssistMagicWallExe(process: name, rules: rules),
+    ];
+  }
+
+  static GameAssistMagicWallExe? parseKeyed(String exe, Object? value) {
+    final name = exe.trim();
+    if (name.isEmpty || value == true || value == false || value == null) {
+      return null;
+    }
+    if (value is List) {
+      final rules = GameAssistMagicWallRule.parseList(value);
+      if (rules.isEmpty) return null;
+      return GameAssistMagicWallExe(process: name, rules: rules);
+    }
+    if (value is Map) {
+      final map = Map<String, dynamic>.from(value);
+      if (map['enabled'] == false) return null;
+      final rules = map.containsKey('rules')
+          ? GameAssistMagicWallRule.parseList(map['rules'])
+          : GameAssistMagicWallRule.parseList(map);
+      if (rules.isEmpty) return null;
+      return GameAssistMagicWallExe(process: name, rules: rules);
+    }
+    return null;
+  }
+}
+
 class GameAssistMagicWallRule {
   const GameAssistMagicWallRule({
-    required this.id,
-    required this.name,
-    required this.enabled,
-    required this.action,
-    required this.protocol,
-    required this.direction,
-    this.appPath,
+    this.id = '',
+    this.name = 'allow',
+    this.enabled = true,
+    this.action = 'allow',
+    this.protocol = 'both',
+    this.direction = 'both',
     this.remoteIp,
     this.localIp,
     this.remotePort,
@@ -424,33 +565,49 @@ class GameAssistMagicWallRule {
     this.description,
   });
 
+  static const defaultAllow = GameAssistMagicWallRule();
+
   final String id;
   final String name;
   final bool enabled;
   final String action;
   final String protocol;
   final String direction;
-  final String? appPath;
   final String? remoteIp;
   final String? localIp;
   final String? remotePort;
   final String? localPort;
   final String? description;
 
+  static List<GameAssistMagicWallRule> parseList(Object? raw) {
+    final maps = <Map<String, dynamic>>[];
+    if (raw is List) {
+      for (final e in raw) {
+        if (e is Map) maps.add(Map<String, dynamic>.from(e));
+      }
+    } else if (raw is Map) {
+      maps.add(Map<String, dynamic>.from(raw));
+    }
+    return [
+      for (final m in maps) GameAssistMagicWallRule.fromJson(m),
+    ];
+  }
+
   factory GameAssistMagicWallRule.fromJson(Map<String, dynamic> json) {
     return GameAssistMagicWallRule(
-      id: '${json['id'] ?? ''}',
-      name: '${json['name'] ?? 'rule'}',
+      id: '${json['id'] ?? ''}'.trim(),
+      name: '${json['name'] ?? 'allow'}'.trim().isEmpty
+          ? 'allow'
+          : '${json['name'] ?? 'allow'}'.trim(),
       enabled: json['enabled'] != false,
-      action: '${json['action'] ?? 'allow'}',
-      protocol: '${json['protocol'] ?? 'both'}',
-      direction: '${json['direction'] ?? 'inbound'}',
-      appPath: json['app_path']?.toString(),
-      remoteIp: json['remote_ip']?.toString(),
-      localIp: json['local_ip']?.toString(),
-      remotePort: json['remote_port']?.toString(),
-      localPort: json['local_port']?.toString(),
-      description: json['description']?.toString(),
+      action: '${json['action'] ?? 'allow'}'.trim().toLowerCase(),
+      protocol: '${json['protocol'] ?? 'both'}'.trim().toLowerCase(),
+      direction: '${json['direction'] ?? 'both'}'.trim().toLowerCase(),
+      remoteIp: _optionalString(json['remote_ip']),
+      localIp: _optionalString(json['local_ip']),
+      remotePort: _optionalString(json['remote_port']),
+      localPort: _optionalString(json['local_port']),
+      description: _optionalString(json['description']),
     );
   }
 }

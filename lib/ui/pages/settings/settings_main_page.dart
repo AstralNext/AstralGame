@@ -30,6 +30,8 @@ class SettingsMainPage extends StatefulWidget {
 }
 
 class _SettingsMainPageState extends State<SettingsMainPage> {
+  static const _tilePadding = EdgeInsets.symmetric(horizontal: 16);
+
   static bool get _isDesktop {
     final os = RuntimePlatform.operatingSystem;
     return os != 'android' && os != 'ios';
@@ -106,61 +108,53 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
         const SizedBox(height: AppDimensions.sectionGap),
         FadeInSection(
           order: 1,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          child: AstralSettingsFormCard(
+            title: '应用',
             children: [
-              _sectionTitle(context, '应用'),
-              AstralCard(
-                padding: EdgeInsets.zero,
-                child: Column(
-                  children: [
-                    if (_isDesktop) ...[
-                      Watch((context) {
-                        return SwitchListTile(
-                          title: const Text('关闭时最小化到托盘'),
-                          subtitle: const Text('点击关闭时最小化到托盘区'),
-                          value: settingsState.closeMinimize.value,
-                          onChanged: (v) {
-                            settingsState.closeMinimize.value = v;
-                            settingsState.saveToPersistence();
-                          },
-                        );
-                      }),
-                      const Divider(height: 1),
-                    ],
-                    Watch((context) {
-                      return SwitchListTile(
-                        title: const Text('自动检查更新'),
-                        value: updateState.autoCheckUpdate.value,
-                        onChanged: updateState.setAutoCheckUpdate,
-                      );
-                    }),
-                    const Divider(height: 1),
-                    Watch((context) {
-                      return SwitchListTile(
-                        title: const Text('测试版频道'),
-                        value: updateState.beta.value,
-                        onChanged: updateState.setBeta,
-                      );
-                    }),
-                    if (_isAndroid) ...[
-                      const Divider(height: 1),
-                      Watch((context) {
-                        return SwitchListTile(
-                          title: const Text('在线用户悬浮窗'),
-                          subtitle: const Text('透明 HUD，不挡触摸；显示头像、IP、延迟列表'),
-                          value: settingsState.floatingOverlayEnabled.value,
-                          onChanged: (v) => _onFloatingOverlayChanged(
-                            context,
-                            settingsState,
-                            v,
-                          ),
-                        );
-                      }),
-                    ],
-                  ],
-                ),
-              ),
+              if (_isDesktop) ...[
+                Watch((context) {
+                  return _buildSwitchTile(
+                    title: '关闭时最小化到托盘',
+                    subtitle: '点击关闭时最小化到托盘区',
+                    value: settingsState.closeMinimize.value,
+                    onChanged: (v) {
+                      settingsState.closeMinimize.value = v;
+                      settingsState.saveToPersistence();
+                    },
+                  );
+                }),
+                const Divider(height: 1),
+              ],
+              Watch((context) {
+                return _buildSwitchTile(
+                  title: '自动检查更新',
+                  value: updateState.autoCheckUpdate.value,
+                  onChanged: updateState.setAutoCheckUpdate,
+                );
+              }),
+              const Divider(height: 1),
+              Watch((context) {
+                return _buildSwitchTile(
+                  title: '测试版频道',
+                  value: updateState.beta.value,
+                  onChanged: updateState.setBeta,
+                );
+              }),
+              if (_isAndroid) ...[
+                const Divider(height: 1),
+                Watch((context) {
+                  return _buildSwitchTile(
+                    title: '在线用户悬浮窗',
+                    subtitle: '透明 HUD，不挡触摸；显示头像、IP、延迟列表',
+                    value: settingsState.floatingOverlayEnabled.value,
+                    onChanged: (v) => _onFloatingOverlayChanged(
+                      context,
+                      settingsState,
+                      v,
+                    ),
+                  );
+                }),
+              ],
             ],
           ),
         ),
@@ -236,134 +230,111 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
     await overlay.show();
   }
 
-  Widget _sectionTitle(BuildContext context, String title) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4, bottom: 8),
-      child: Text(
-        title,
-        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              color: context.astralPalette.textSecondary,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.2,
+  Widget _buildNetworkSection(SettingsState settingsState) {
+    final textTheme = Theme.of(context).textTheme;
+    return AstralSettingsFormCard(
+      title: '网络',
+      children: [
+        _buildSwitchTile(
+          title: '自动分配虚拟网络 IP',
+          subtitle: _isDhcp ? 'DHCP 已开启' : '关闭后可手动填写固定 IP',
+          value: _isDhcp,
+          onChanged: (value) {
+            setState(() {
+              _isDhcp = value;
+              if (value) _isValidIP = true;
+            });
+            getIt<AppSettingsService>().setIsDhcp(value);
+          },
+        ),
+        const Divider(height: 1),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+          child: TextField(
+            controller: _virtualIpController,
+            enabled: !_isDhcp,
+            onChanged: (value) {
+              if (!_isDhcp) {
+                setState(() {
+                  _isValidIP = InputValidator.validateIPv4(value) == null;
+                });
+                if (_isValidIP) {
+                  getIt<AppSettingsService>().setVirtualIp(value);
+                }
+              }
+            },
+            decoration: InputDecoration(
+              labelText: '虚拟网络 IP',
+              hintText: '10.147.xxx.xxx',
+              prefixIcon: const Icon(Icons.lan_outlined),
+              helperText: _isDhcp ? '开启 DHCP 时会自动分配' : null,
+              errorText: (!_isDhcp && !_isValidIP) ? '无效的 IPv4 地址' : null,
             ),
-      ),
+          ),
+        ),
+        if (_isDhcp)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Text(
+              '当前为自动分配模式。',
+              style: textTheme.bodySmall,
+            ),
+          ),
+        const Divider(height: 1),
+        Watch((context) {
+          return _buildSwitchTile(
+            title: '禁用 P2P',
+            subtitle: '仅通过中继通信',
+            value: settingsState.disableP2p.value,
+            onChanged: (v) {
+              settingsState.disableP2p.value = v;
+              settingsState.saveToPersistence();
+            },
+          );
+        }),
+        if (RuntimePlatform.operatingSystem == 'windows') ...[
+          const Divider(height: 1),
+          Watch((context) {
+            return _buildSwitchTile(
+              title: '强制 UDP 广播转发',
+              subtitle: '覆盖游戏规则；多数游戏由线上规则自动开启，重连后生效',
+              value: settingsState.enableUdpBroadcastRelay.value,
+              onChanged: (v) {
+                settingsState.enableUdpBroadcastRelay.value = v;
+                settingsState.saveToPersistence();
+              },
+            );
+          }),
+        ],
+        if (_isAndroid) ...[
+          const Divider(height: 1),
+          ListTile(
+            contentPadding: _tilePadding,
+            leading: const Icon(Icons.route_outlined),
+            title: const Text('自定义 VPN 路由'),
+            subtitle: const Text('额外 CIDR；默认含虚拟网段、组播、广播'),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () => Navigator.of(context).push<void>(
+              astralPageRoute(const VpnRoutesPage()),
+            ),
+          ),
+        ],
+      ],
     );
   }
 
-  Widget _buildNetworkSection(SettingsState settingsState) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _sectionTitle(context, '网络'),
-        AstralCard(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _virtualIpController,
-                      enabled: !_isDhcp,
-                      onChanged: (value) {
-                        if (!_isDhcp) {
-                          setState(() {
-                            _isValidIP =
-                                InputValidator.validateIPv4(value) == null;
-                          });
-                          if (_isValidIP) {
-                            getIt<AppSettingsService>().setVirtualIp(value);
-                          }
-                        }
-                      },
-                      decoration: InputDecoration(
-                        labelText: '虚拟网络 IP',
-                        hintText: '10.147.xxx.xxx',
-                        prefixIcon: Icon(
-                          Icons.lan_outlined,
-                          color: colorScheme.primary,
-                        ),
-                        errorText: (!_isDhcp && !_isValidIP)
-                            ? '无效的 IPv4 地址'
-                            : null,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Column(
-                    children: [
-                      Switch(
-                        value: _isDhcp,
-                        onChanged: (value) {
-                          setState(() => _isDhcp = value);
-                          getIt<AppSettingsService>().setIsDhcp(value);
-                        },
-                      ),
-                      Text(_isDhcp ? '自动' : '手动', style: textTheme.bodySmall),
-                    ],
-                  ),
-                ],
-              ),
-              if (_isDhcp)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    'IP 将由网络自动分配（DHCP）',
-                    style: textTheme.bodySmall,
-                  ),
-                ),
-              const Divider(height: 24),
-              Watch((context) {
-                return SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('禁用 P2P'),
-                  subtitle: const Text('仅通过中继通信'),
-                  value: settingsState.disableP2p.value,
-                  onChanged: (v) {
-                    settingsState.disableP2p.value = v;
-                    settingsState.saveToPersistence();
-                  },
-                );
-              }),
-              if (RuntimePlatform.operatingSystem == 'windows')
-                Watch((context) {
-                  return SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('强制 UDP 广播转发'),
-                    subtitle: const Text(
-                      '覆盖游戏规则；多数游戏由线上规则自动开启，重连后生效',
-                    ),
-                    value: settingsState.enableUdpBroadcastRelay.value,
-                    onChanged: (v) {
-                      settingsState.enableUdpBroadcastRelay.value = v;
-                      settingsState.saveToPersistence();
-                    },
-                  );
-                }),
-              if (_isAndroid) ...[
-                const Divider(height: 24),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(
-                    Icons.route_outlined,
-                    color: colorScheme.primary,
-                  ),
-                  title: const Text('自定义 VPN 路由'),
-                  subtitle: const Text('额外 CIDR；默认含虚拟网段、组播、广播'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.of(context).push<void>(
-                    astralPageRoute(const VpnRoutesPage()),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ],
+  Widget _buildSwitchTile({
+    required String title,
+    String? subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return SwitchListTile.adaptive(
+      contentPadding: _tilePadding,
+      title: Text(title),
+      subtitle: subtitle == null ? null : Text(subtitle),
+      value: value,
+      onChanged: onChanged,
     );
   }
 }

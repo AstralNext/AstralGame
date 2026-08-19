@@ -6,13 +6,19 @@ import 'package:astral_game/data/models/game_catalog.dart';
 import 'package:astral_game/utils/logger.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
+import 'package:path/path.dart' as p;
 import 'package:signals/signals_core.dart';
 
 /// 从远程加载游戏规则（目录 + 平台辅助）；失败时回退本地 asset。
+/// 仓库根或程序旁的 [testDirName] 里若有 JSON，优先用测试文件，不再拉线上。
 ///
-/// 启动时异步加载：先本地、再远程，不阻塞 [runApp]。
+/// 启动时异步加载：先本地、再测试目录 / 远程，不阻塞 [runApp]。
 class GameAssistRulesService {
-  GameAssistRulesService({http.Client? client}) : _client = client ?? http.Client();
+  GameAssistRulesService({
+    http.Client? client,
+    List<Directory>? testRuleDirs,
+  })  : _client = client ?? http.Client(),
+        _testRuleDirs = testRuleDirs;
 
   /// 线上规则。
   static const remoteUrl = kAstralGameRulesUrl;
@@ -20,10 +26,14 @@ class GameAssistRulesService {
   /// 离线回退。
   static const assetPath = 'assets/games/rules.json';
 
+  /// 测试覆盖目录名（工作目录或可执行文件旁）。
+  static const testDirName = 'gamerules';
+
   /// 相对路径图片的解析基准。
   static const mediaBaseUrl = kAstralGameMediaBaseUrl;
 
   final http.Client _client;
+  final List<Directory>? _testRuleDirs;
 
   GameAssistRulesCatalog? _catalog;
   Future<GameAssistRulesCatalog>? _loadFuture;
@@ -44,7 +54,12 @@ class GameAssistRulesService {
       _applyRaw(assetRaw, source: 'asset');
     }
 
-    // 2) 远程覆盖（后台；失败则保留 asset）。
+    // 2) 测试目录有 JSON 则覆盖并跳过远程。
+    if (await _applyTestDir()) {
+      return _catalog!;
+    }
+
+    // 3) 远程覆盖（后台；失败则保留 asset）。
     final remoteRaw = await _fetchRemote();
     if (remoteRaw != null) {
       _applyRaw(remoteRaw, source: 'remote');
@@ -67,7 +82,7 @@ class GameAssistRulesService {
       final incoming = GameAssistRulesCatalog.fromJson(
         Map<String, dynamic>.from(decoded),
       );
-      final catalog = source == 'remote' && _catalog != null
+      final catalog = source != 'asset' && _catalog != null
           ? _mergeCatalogs(local: _catalog!, remote: incoming)
           : incoming;
       _applyCatalog(catalog);
@@ -84,7 +99,7 @@ class GameAssistRulesService {
     }
   }
 
-  /// 远程覆盖同 id；本地独有（如尚未上 CDN 的 FA）保留。
+  /// 远程 / 测试覆盖同 id；本地独有（如尚未上 CDN 的 inject）保留。
   GameAssistRulesCatalog _mergeCatalogs({
     required GameAssistRulesCatalog local,
     required GameAssistRulesCatalog remote,
@@ -105,6 +120,80 @@ class GameAssistRulesService {
     _catalog = catalog;
     GameCatalog.applyFromRules(catalog);
     catalogRevision.value = catalogRevision.value + 1;
+  }
+
+  Future<bool> _applyTestDir() async {
+    final files = listTestRuleFiles(_testRuleDirs ?? defaultTestRuleDirs());
+    if (files.isEmpty) return false;
+    final revisionBefore = catalogRevision.value;
+    for (final file in files) {
+      try {
+        _applyRaw(await file.readAsString(), source: 'test:${file.path}');
+      } catch (e) {
+        appLogger.w('[GameAssistRules] 读取测试规则失败 ${file.path}: $e');
+      }
+    }
+    if (catalogRevision.value == revisionBefore) {
+      appLogger.w('[GameAssistRules] 测试目录有 JSON 但都未解析成功，继续远程');
+      return false;
+    }
+    appLogger.i(
+      '[GameAssistRules] 已用测试目录，跳过远程 ${files.map((f) => f.path).join(', ')}',
+    );
+    return true;
+  }
+
+  /// 工作目录 `gamerules/`，以及可执行文件旁 `gamerules/`。
+  static List<Directory> defaultTestRuleDirs() {
+    final dirs = <Directory>[];
+    try {
+      dirs.add(Directory(p.join(Directory.current.path, testDirName)));
+    } catch (_) {}
+    try {
+      if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+        final exeDir = File(Platform.resolvedExecutable).parent.path;
+        dirs.add(Directory(p.join(exeDir, testDirName)));
+      }
+    } catch (_) {}
+    return dirs;
+  }
+
+  /// 测试目录里的 JSON：`gamerules.json`、`rules.json` 优先，其余按文件名。
+  static List<File> listTestRuleFiles(Iterable<Directory> dirs) {
+    final out = <File>[];
+    final seen = <String>{};
+    for (final dir in dirs) {
+      try {
+        if (!dir.existsSync()) continue;
+        final files = dir
+            .listSync()
+            .whereType<File>()
+            .where((f) => p.extension(f.path).toLowerCase() == '.json')
+            .toList()
+          ..sort((a, b) {
+            final ra = _testJsonRank(p.basename(a.path));
+            final rb = _testJsonRank(p.basename(b.path));
+            if (ra != rb) return ra.compareTo(rb);
+            return p.basename(a.path).toLowerCase().compareTo(
+                  p.basename(b.path).toLowerCase(),
+                );
+          });
+        for (final file in files) {
+          final key = p.normalize(file.absolute.path).toLowerCase();
+          if (seen.add(key)) out.add(file);
+        }
+      } catch (e) {
+        appLogger.w('[GameAssistRules] 扫描测试目录失败 ${dir.path}: $e');
+      }
+    }
+    return out;
+  }
+
+  static int _testJsonRank(String name) {
+    final n = name.toLowerCase();
+    if (n == 'gamerules.json') return 0;
+    if (n == 'rules.json') return 1;
+    return 2;
   }
 
   Future<String?> _fetchRemote() async {
@@ -154,6 +243,13 @@ class GameAssistRulesService {
   Future<bool> wantsUdpBroadcastRelay(String gameId) async {
     final rules = await gameRules(gameId);
     return rules?.networkFor(_platformKey).enableUdpBroadcastRelay == true;
+  }
+
+  /// EasyTier 传输档；未写 `network.protocol` 时为 UDP。
+  Future<GameAssistNetworkProtocol> networkProtocol(String gameId) async {
+    final rules = await gameRules(gameId);
+    return rules?.networkFor(_platformKey).protocol ??
+        GameAssistNetworkProtocol.udp;
   }
 
   /// 与 JSON `platforms` 键一致（如 `windows`）。

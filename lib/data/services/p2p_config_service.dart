@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:astral_game/data/models/game_assist_rules.dart';
 import 'package:astral_game/data/models/server_mod.dart';
 import 'package:astral_game/data/services/app_settings_service.dart';
 import 'package:astral_game/data/state/server_state.dart';
@@ -28,6 +29,7 @@ class P2PConfigService {
     String roomPassword, {
     List<PeerEndpoint>? peersOverride,
     bool? enableUdpBroadcastRelay,
+    GameAssistNetworkProtocol protocol = GameAssistNetworkProtocol.udp,
   }) {
     final disableP2p = _appSettings.isDisableP2p();
     final rawUsername = _appSettings.getUsername().trim();
@@ -63,7 +65,8 @@ network_secret = "${_escapeString(roomPassword)}"
     appLogger.i(
       '[P2PConfigService] buildTomlConfig room=$roomName '
       'shared_secret=true dhcp=true disable_p2p=$disableP2p '
-      'udp_broadcast_relay=$udpRelay peers=${peers.length}',
+      'protocol=${protocol.name} udp_broadcast_relay=$udpRelay '
+      'peers=${peers.length}',
     );
 
     return '''
@@ -76,10 +79,42 @@ listeners = [
 ]
 
 $identityBlock
-${peerBlock.isNotEmpty ? '$peerBlock\n\n' : ''}[flags]
-disable_p2p = $disableP2p
-$udpBroadcastFlag
+${peerBlock.isNotEmpty ? '$peerBlock\n\n' : ''}${_flagsBlock(
+      disableP2p: disableP2p,
+      udpBroadcastFlag: udpBroadcastFlag,
+      protocol: protocol,
+    )}
 ''';
+  }
+
+  /// UDP / TCP 两套 EasyTier `[flags]`（与 Astral-Client-UDP/TCP.toml 对齐）。
+  static String _flagsBlock({
+    required bool disableP2p,
+    required String udpBroadcastFlag,
+    required GameAssistNetworkProtocol protocol,
+  }) {
+    final quic = protocol == GameAssistNetworkProtocol.tcp
+        ? '''
+disable_quic_input = false
+disable_relay_quic = false
+enable_quic_proxy = true
+enable_relay_foreign_network_quic = true
+'''
+        : '''
+disable_quic_input = true
+disable_relay_quic = true
+enable_relay_foreign_network_quic = false
+''';
+    return '''
+[flags]
+disable_p2p = $disableP2p
+${udpBroadcastFlag}data_compress_algo = 2
+default_protocol = "tcp"
+dev_name = "Astral"
+disable_kcp_input = true
+disable_relay_kcp = true
+enable_relay_foreign_network_kcp = false
+$quic''';
   }
 
   String _peerTomlBlock(PeerEndpoint peer) {
