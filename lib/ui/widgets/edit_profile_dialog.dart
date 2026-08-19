@@ -33,7 +33,7 @@ Future<void> showEditProfileDialog(BuildContext context) async {
                     borderWidth: 1,
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 20),
                 TextField(
                   controller: nameController,
                   decoration: const InputDecoration(

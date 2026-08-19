@@ -185,19 +185,26 @@ abstract final class AstralGameTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: palette.canvas,
+        // 透明描边保留 outline 缺口，避免浮动标签被填充色裁掉汉字上半截。
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
-          borderSide: BorderSide.none,
+          borderSide: const BorderSide(color: Colors.transparent, width: 1),
+          gapPadding: 6,
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
-          borderSide: BorderSide.none,
+          borderSide: const BorderSide(color: Colors.transparent, width: 1),
+          gapPadding: 6,
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
           borderSide: BorderSide(color: palette.accent, width: 1.5),
+          gapPadding: 6,
         ),
-        labelStyle: TextStyle(color: palette.textSecondary),
+        contentPadding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+        floatingLabelAlignment: FloatingLabelAlignment.start,
+        labelStyle: TextStyle(color: palette.textSecondary, height: 1.3),
+        floatingLabelStyle: TextStyle(color: palette.textSecondary, height: 1.3),
         hintStyle: TextStyle(color: palette.textTertiary),
       ),
       switchTheme: SwitchThemeData(

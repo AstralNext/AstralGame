@@ -63,14 +63,20 @@ Future<void> main() async {
 bool get _crashlyticsSupported =>
     Platform.isAndroid || Platform.isIOS || Platform.isMacOS;
 
+bool get _analyticsSupported =>
+    Platform.isAndroid || Platform.isIOS || Platform.isMacOS;
+
 Future<void> _initFirebase() async {
   if (Platform.isLinux) return;
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  final analytics = FirebaseAnalytics.instance;
-  await analytics.setAnalyticsCollectionEnabled(true);
-  await analytics.logAppOpen();
+
+  if (_analyticsSupported) {
+    final analytics = FirebaseAnalytics.instance;
+    await analytics.setAnalyticsCollectionEnabled(true);
+    await analytics.logAppOpen();
+  }
 
   if (!_crashlyticsSupported) return;
   await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(true);

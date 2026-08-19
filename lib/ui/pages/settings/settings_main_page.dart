@@ -249,7 +249,7 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
         ),
         const Divider(height: 1),
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
           child: TextField(
             controller: _virtualIpController,
             enabled: !_isDhcp,
