@@ -13,7 +13,7 @@ on:
           - linux-x64
           - windows-x64
         default: 'all'
-  # 不在 main/develop 推送时编译；发版靠打 v* 标签，或手动 Run workflow。
+  # 推送 v* 只编译产物；GitHub Release / 夸克上传须在 Actions 里手动跑「发布」。
   push:
     tags:
       - 'v*'

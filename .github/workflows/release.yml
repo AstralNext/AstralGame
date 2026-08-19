@@ -1,7 +1,7 @@
 # 发布 Astral Game
 #
-# 自动：推送 v* 标签 → Build 成功后创建正式 Release（非 draft / 非 prerelease）
-# 手动：Actions 里 Run workflow，先跑完 Build（platform: all）
+# 仅手动：Actions → 发布 → Run workflow。须先有对应 tag 的 Build 产物。
+# 推送 v* 标签只会触发编译，不会创建 GitHub Release / 夸克上传。
 #
 # Secret：
 # - GOOGLE 或 GOOGLE_API_KEY（Gemini，可选；无则回退为提交列表）
@@ -46,9 +46,6 @@ on:
         required: false
         default: true
         type: boolean
-  workflow_run:
-    workflows: ['🚀 Build Astral Game']
-    types: [completed]
 
 permissions:
   contents: write
@@ -58,18 +55,11 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    if: |
-      github.event_name == 'workflow_dispatch' ||
-      (
-        github.event.workflow_run.conclusion == 'success' &&
-        github.event.workflow_run.event == 'push' &&
-        startsWith(github.event.workflow_run.head_branch, 'v')
-      )
     steps:
       - name: 检出
         uses: actions/checkout@v5
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.head_ref || github.event.workflow_run.head_sha }}
+          ref: ${{ inputs.head_ref }}
           fetch-depth: 0
 
       - name: 解析发布参数
@@ -78,28 +68,13 @@ jobs:
           GH_TOKEN: ${{ secrets.ASTRAL_SITE_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           set -euxo pipefail
-          AUTO="${{ github.event_name == 'workflow_run' && '1' || '0' }}"
+          TAG="${{ inputs.tag_name }}"
+          BASE="${{ inputs.base_ref }}"
+          HEAD="${{ inputs.head_ref }}"
+          DRAFT="${{ inputs.draft }}"
+          PRE="${{ inputs.prerelease }}"
+          TARGET="${{ inputs.head_ref }}"
 
-          if [ "$AUTO" = "1" ]; then
-            TAG="${{ github.event.workflow_run.head_branch }}"
-            BASE=$(git fetch --tags --force 2>/dev/null; git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || git rev-list --max-parents=0 HEAD | tail -1)
-            HEAD="$TAG"
-            DRAFT=false
-            PRE=false
-            TARGET="${{ github.event.workflow_run.head_sha }}"
-            RUN_ID="${{ github.event.workflow_run.id }}"
-            SEARCH=false
-          else
-            TAG="${{ inputs.tag_name }}"
-            BASE="${{ inputs.base_ref }}"
-            HEAD="${{ inputs.head_ref }}"
-            DRAFT="${{ inputs.draft }}"
-            PRE="${{ inputs.prerelease }}"
-            TARGET="${{ inputs.head_ref }}"
-            RUN_ID=""
-            SEARCH=true
-          fi
-          # Release 已存在时仍继续（可补传夸克）；仅创建步骤会跳过
           echo "skip=false" >> "$GITHUB_OUTPUT"
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "release_exists=true" >> "$GITHUB_OUTPUT"
@@ -119,8 +94,8 @@ jobs:
             echo "draft=$DRAFT"
             echo "prerelease=$PRE"
             echo "target=$TARGET"
-            echo "run_id=$RUN_ID"
-            echo "search=$SEARCH"
+            echo "run_id="
+            echo "search=true"
           } >> "$GITHUB_OUTPUT"
 
           echo "PKG_VER=$VER" >> "$GITHUB_ENV"
