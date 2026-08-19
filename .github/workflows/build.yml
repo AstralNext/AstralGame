@@ -83,6 +83,7 @@ jobs:
     name: 🏗️ ${{ matrix.platform }}
     needs: matrix-prep
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
 
     strategy:
       fail-fast: false
@@ -120,9 +121,13 @@ jobs:
           echo "✅ Configured bindgen for Android NDK"
 
       - name: 📦 Install Linux dependencies
-        if: runner.os == 'Linux'
+        # Android 跑在 Ubuntu 上，但不需要 GTK/CJK 字体；整包 apt 曾卡死数小时。
+        if: matrix.flutter_platform == 'linux'
+        timeout-minutes: 8
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo apt-get update
+          sudo apt-get update -y
           sudo apt-get install -y \
             build-essential \
             ninja-build \
@@ -134,8 +139,6 @@ jobs:
             protobuf-compiler \
             libayatana-appindicator3-dev \
             libnotify-dev \
-            fonts-noto-cjk \
-            fonts-wqy-zenhei \
             fontconfig
 
       - name: 🐦 Setup Flutter
