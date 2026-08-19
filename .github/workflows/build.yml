@@ -157,10 +157,8 @@ jobs:
         with:
           targets: ${{ matrix.rust_target }}
 
-      # Chocolatey 社区源经常 504 且失败仍 exit 0，当前会话也刷新不到 PATH。
-      # 改为直接从 GitHub Release 装，并写入 GITHUB_PATH 给后续步骤用。
+      # Windows 不能靠 Chocolatey；Android 跑在 Ubuntu 上也需要 protoc（cargokit/prost）。
       - name: 📥 Install protoc
-        if: runner.os == 'Windows'
         uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
