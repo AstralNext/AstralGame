@@ -7,6 +7,18 @@ import 'package:flutter/services.dart';
 export 'app_theme_id.dart';
 export 'app_theme_palette.dart';
 
+/// 优先系统 Noto Sans，中文回退微软雅黑。
+abstract final class AppFonts {
+  static const String family = 'Noto Sans';
+
+  static const List<String> fallback = [
+    'Noto Sans SC',
+    'Microsoft YaHei',
+    'Microsoft YaHei UI',
+    '微软雅黑',
+  ];
+}
+
 /// 主题切换与水滴揭示动画参数。
 abstract final class AppThemeAnimation {
   static const revealDuration = Duration(milliseconds: 580);
@@ -76,6 +88,8 @@ abstract final class AstralGameTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: brightness,
+      fontFamily: AppFonts.family,
+      fontFamilyFallback: AppFonts.fallback,
       colorScheme: colorScheme,
       scaffoldBackgroundColor: page,
       canvasColor: page,
@@ -102,6 +116,8 @@ abstract final class AstralGameTheme {
         foregroundColor: palette.textPrimary,
         systemOverlayStyle: overlayStyle,
         titleTextStyle: TextStyle(
+          fontFamily: AppFonts.family,
+          fontFamilyFallback: AppFonts.fallback,
           fontSize: 17,
           fontWeight: FontWeight.w500,
           letterSpacing: 0.2,
@@ -126,6 +142,8 @@ abstract final class AstralGameTheme {
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           final selected = states.contains(WidgetState.selected);
           return TextStyle(
+            fontFamily: AppFonts.family,
+            fontFamilyFallback: AppFonts.fallback,
             fontSize: 11,
             fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
             color: selected ? palette.accent : palette.textSecondary,
@@ -203,9 +221,23 @@ abstract final class AstralGameTheme {
         ),
         contentPadding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
         floatingLabelAlignment: FloatingLabelAlignment.start,
-        labelStyle: TextStyle(color: palette.textSecondary, height: 1.3),
-        floatingLabelStyle: TextStyle(color: palette.textSecondary, height: 1.3),
-        hintStyle: TextStyle(color: palette.textTertiary),
+        labelStyle: TextStyle(
+          fontFamily: AppFonts.family,
+          fontFamilyFallback: AppFonts.fallback,
+          color: palette.textSecondary,
+          height: 1.3,
+        ),
+        floatingLabelStyle: TextStyle(
+          fontFamily: AppFonts.family,
+          fontFamilyFallback: AppFonts.fallback,
+          color: palette.textSecondary,
+          height: 1.3,
+        ),
+        hintStyle: TextStyle(
+          fontFamily: AppFonts.family,
+          fontFamilyFallback: AppFonts.fallback,
+          color: palette.textTertiary,
+        ),
       ),
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith((states) {
