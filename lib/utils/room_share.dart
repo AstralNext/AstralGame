@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:astral_game/data/models/active_room_session.dart';
 
-/// 离线邀请前缀（Base64url 载荷），与 9 位短码互斥。
+/// 离线邀请前缀（Base64url 载荷），与短码互斥。
 const String kOfflineInvitePrefix = 'AG1.';
 
 const String kJoinHttpsHost = 'next.astral.fan';
@@ -10,8 +10,44 @@ const String kJoinLegacyHttpsHost = 'astral.fan';
 const String kJoinHttpsPath = '/j';
 const String kJoinAppScheme = 'astralgame';
 
-bool looksLikeShortCode(String raw) =>
-    RegExp(r'^\d{9}$').hasMatch(raw.trim());
+/// Crockford Base32，与 astral-share 一致（无 I/L/O/U）。
+const String kShareCodeAlphabet = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+const int kShareCodeLength = 6;
+
+final RegExp _legacyNineDigit = RegExp(r'^\d{9}$');
+
+/// 短码规范化：去空白/连字符、大写，并把 I/L→1、O→0。
+String normalizeShareCode(String raw) {
+  final b = StringBuffer();
+  for (final unit in raw.trim().toUpperCase().codeUnits) {
+    final ch = String.fromCharCode(unit);
+    if (ch == '-' || ch == ' ' || ch == '_') continue;
+    switch (ch) {
+      case 'I':
+      case 'L':
+        b.write('1');
+      case 'O':
+        b.write('0');
+      default:
+        b.write(ch);
+    }
+  }
+  return b.toString();
+}
+
+bool looksLikeLegacyNineDigit(String raw) =>
+    _legacyNineDigit.hasMatch(raw.trim());
+
+bool looksLikeShortCode(String raw) {
+  final t = normalizeShareCode(raw);
+  if (t.length == kShareCodeLength) {
+    for (var i = 0; i < t.length; i++) {
+      if (!kShareCodeAlphabet.contains(t[i])) return false;
+    }
+    return true;
+  }
+  return looksLikeLegacyNineDigit(raw);
+}
 
 bool looksLikeOfflineInvite(String raw) {
   final t = raw.trim();
@@ -54,7 +90,7 @@ String joinShareUrlFromCode(String code) {
 
 String? preferredJoinToken({String? shortCode, String? offlineInvite}) {
   final code = (shortCode ?? '').trim();
-  if (looksLikeShortCode(code)) return code;
+  if (looksLikeShortCode(code)) return normalizeShareCode(code);
   final offline = (offlineInvite ?? '').trim();
   if (offline.isNotEmpty) return offline;
   if (code.isNotEmpty) return code;

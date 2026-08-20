@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:astral_game/data/models/active_room_session.dart';
+import 'package:astral_game/utils/room_share.dart';
 import 'package:http/http.dart' as http;
 
 class ShareCodeException implements Exception {
@@ -55,9 +56,9 @@ class ShareCodeService {
   }
 
   Future<RoomInvitePayload> fetch(String code) async {
-    final normalized = code.trim();
-    if (!RegExp(r'^\d{9}$').hasMatch(normalized)) {
-      throw ShareCodeException('请输入 9 位数字短码');
+    final normalized = normalizeShareCode(code);
+    if (!looksLikeShortCode(normalized)) {
+      throw ShareCodeException('请输入 6 位短码');
     }
     final url = _base().resolve('/v1/codes/$normalized');
     final res = await _client.get(url);
@@ -85,7 +86,7 @@ class ShareCodeService {
   }
 
   Future<void> revoke(String code, String adminToken) async {
-    final url = _base().resolve('/v1/codes/${code.trim()}');
+    final url = _base().resolve('/v1/codes/${normalizeShareCode(code)}');
     final res = await _client.delete(
       url,
       headers: {'X-Admin-Token': adminToken},

@@ -4,8 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('buildJoinShareUrl prefers short code', () {
     expect(
-      buildJoinShareUrl(shortCode: '123456789', offlineInvite: 'AG1.abc'),
-      'https://next.astral.fan/j?c=123456789',
+      buildJoinShareUrl(shortCode: 'JHJM8Z', offlineInvite: 'AG1.abc'),
+      'https://next.astral.fan/j?c=JHJM8Z',
     );
   });
 
@@ -18,8 +18,12 @@ void main() {
 
   test('joinShareUrlFromCode accepts short or offline', () {
     expect(
-      joinShareUrlFromCode('123456789'),
-      'https://next.astral.fan/j?c=123456789',
+      joinShareUrlFromCode('JHJM8Z'),
+      'https://next.astral.fan/j?c=JHJM8Z',
+    );
+    expect(
+      joinShareUrlFromCode('jhjm8z'),
+      'https://next.astral.fan/j?c=JHJM8Z',
     );
     expect(
       joinShareUrlFromCode('AG1.offlineToken'),
@@ -29,37 +33,39 @@ void main() {
 
   test('extractJoinToken from next.astral.fan', () {
     expect(
-      extractJoinToken('https://next.astral.fan/j?c=123456789'),
-      '123456789',
+      extractJoinToken('https://next.astral.fan/j?c=JHJM8Z'),
+      'JHJM8Z',
     );
   });
 
   test('extractJoinToken from astralgame://', () {
     expect(
-      extractJoinToken('astralgame://join?c=123456789'),
-      '123456789',
+      extractJoinToken('astralgame://join?c=JHJM8Z'),
+      'JHJM8Z',
     );
     expect(
-      extractJoinToken('astralgame://j/123456789'),
-      '123456789',
+      extractJoinToken('astralgame://j/JHJM8Z'),
+      'JHJM8Z',
     );
   });
 
   test('extractJoinToken from legacy astral.fan', () {
     expect(
-      extractJoinToken('https://astral.fan/j?c=123456789'),
-      '123456789',
+      extractJoinToken('https://astral.fan/j?c=JHJM8Z'),
+      'JHJM8Z',
     );
   });
 
   test('extractJoinToken from message with embedded url', () {
     expect(
-      extractJoinToken('一起来玩 Minecraft\nhttps://next.astral.fan/j?c=123456789'),
-      '123456789',
+      extractJoinToken('一起来玩 Minecraft\nhttps://next.astral.fan/j?c=JHJM8Z'),
+      'JHJM8Z',
     );
   });
 
   test('extractJoinToken short code and offline', () {
+    expect(extractJoinToken('JHJM8Z'), 'JHJM8Z');
+    expect(extractJoinToken('jhjm8z'), 'jhjm8z');
     expect(extractJoinToken('123456789'), '123456789');
     expect(extractJoinToken('AG1.offlineToken'), 'AG1.offlineToken');
   });
@@ -71,14 +77,21 @@ void main() {
 
   test('extractJoinToken from www and fragment', () {
     expect(
-      extractJoinToken('https://www.next.astral.fan/j#123456789'),
-      '123456789',
+      extractJoinToken('https://www.next.astral.fan/j#JHJM8Z'),
+      'JHJM8Z',
     );
   });
 
   test('looksLikeJoinToken', () {
+    expect(looksLikeJoinToken('JHJM8Z'), isTrue);
+    expect(looksLikeJoinToken('jhjm8z'), isTrue);
     expect(looksLikeJoinToken('123456789'), isTrue);
     expect(looksLikeJoinToken('AG1.offlineToken'), isTrue);
     expect(looksLikeJoinToken('hello'), isFalse);
+  });
+
+  test('normalizeShareCode crockford aliases', () {
+    expect(normalizeShareCode('jh j-m8z'), 'JHJM8Z');
+    expect(normalizeShareCode('oil'), '011');
   });
 }

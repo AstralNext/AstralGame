@@ -23,7 +23,7 @@ import 'package:astral_rust_core/p2p_service.dart';
 import 'package:get_it/get_it.dart';
 import 'package:signals/signals_core.dart';
 
-/// 连接服务：建房 / 进房（9 位短码或离线 Base64）/ 会话，不落盘房间历史。
+/// 连接服务：建房 / 进房（6 位 32 进制短码或离线 Base64）/ 会话，不落盘房间历史。
 ///
 /// 进网方式：双方共享随机 [network_name] + [network_secret]（旧版密码进房）。
 class ConnectionService {
@@ -180,10 +180,11 @@ class ConnectionService {
     return url.isEmpty ? null : url;
   }
 
-  /// 加入房间：9 位短码。
+  /// 加入房间：6 位 32 进制短码（也接受旧 9 位数字）。
   Future<ActiveRoomSession> joinWithShortCode(String code) async {
-    final payload = await _shareCodes.fetch(code);
-    return _joinWithPayload(payload, shortCode: code.trim());
+    final normalized = normalizeShareCode(code);
+    final payload = await _shareCodes.fetch(normalized);
+    return _joinWithPayload(payload, shortCode: normalized);
   }
 
   Future<ActiveRoomSession> _joinWithPayload(
