@@ -31,6 +31,7 @@ dependencies:
   path: ^1.9.0
   package_info_plus: ^8.3.0
   image_picker: ^1.1.1
+  file_picker: ^8.3.7
   http: ^1.2.2
   logger: ^2.0.0
   tray_manager: ^0.5.2
