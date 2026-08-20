@@ -46,6 +46,8 @@ class AppConstants {
       'https://github.com/$githubOwner/$githubRepo';
   static const String githubIssuesPage =
       'https://github.com/$githubOwner/$githubRepo/issues';
+  static const String githubGameAdaptIssueUrl =
+      'https://github.com/$githubOwner/$githubRepo/issues/new?template=game-adapt.yml';
 
   /// 官网下载页（「前往下载」入口）。
   static const String downloadPageUrl = 'https://next.astral.fan/game/';

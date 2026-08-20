@@ -5,6 +5,7 @@ import 'package:astral_game/data/services/node_management_service.dart';
 import 'package:astral_game/data/services/screen_state_service.dart';
 import 'package:astral_game/data/services/share_code_service.dart';
 import 'package:astral_game/data/state/room_state.dart';
+import 'package:astral_game/config/constants.dart';
 import 'package:astral_game/di.dart';
 import 'package:astral_game/ui/pages/dashboard_narrow_layout.dart';
 import 'package:astral_game/ui/pages/dashboard_wide_layout.dart';
@@ -13,6 +14,7 @@ import 'package:astral_game/utils/room_share_actions.dart';
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:signals/signals_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -242,6 +244,18 @@ class _DashboardPageState extends State<DashboardPage> {
     });
   }
 
+  Future<void> _openGameAdaptIssue(String searchedName) async {
+    final uri = Uri.parse(AppConstants.githubGameAdaptIssueUrl).replace(
+      queryParameters: {
+        'template': 'game-adapt.yml',
+        if (searchedName.trim().isNotEmpty) 'game_name': searchedName.trim(),
+      },
+    );
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
   Future<void> _handleCreateRoom() async {
     if (_connectionService.isConnecting) return;
     await getIt<GameAssistRulesService>().ensureLoaded();
@@ -319,16 +333,32 @@ class _DashboardPageState extends State<DashboardPage> {
                     Expanded(
                       child: filtered.isEmpty
                           ? Center(
-                              child: Text(
-                                '没有匹配的游戏',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodyMedium
-                                    ?.copyWith(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSurfaceVariant,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    '没有匹配的游戏',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium
+                                        ?.copyWith(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant,
+                                        ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  FilledButton.tonalIcon(
+                                    onPressed: () => _openGameAdaptIssue(
+                                      searchController.text,
                                     ),
+                                    icon: const Icon(
+                                      Icons.open_in_new,
+                                      size: 18,
+                                    ),
+                                    label: const Text('请求适配'),
+                                  ),
+                                ],
                               ),
                             )
                           : ListView.separated(
