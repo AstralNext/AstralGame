@@ -1,0 +1,71 @@
+name: 游戏适配请求
+description: 请求为某款游戏做联机适配
+title: "[适配] "
+labels: ["游戏适配"]
+body:
+  - type: markdown
+    attributes:
+      value: 填完才能提交。请先搜索有没有同名 Issue。
+
+  - type: input
+    id: game_name
+    attributes:
+      label: 游戏名称
+      placeholder: Terraria
+    validations:
+      required: true
+
+  - type: input
+    id: store_url
+    attributes:
+      label: 商店页面
+      description: Steam / Epic / Xbox / 官网链接。
+      placeholder: https://store.steampowered.com/app/
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 主要平台
+      options:
+        - Windows
+        - Linux
+        - Android
+        - macOS
+        - iOS
+    validations:
+      required: true
+
+  - type: dropdown
+    id: join_method
+    attributes:
+      label: 这款游戏平时怎么联机
+      options:
+        - 游戏内能搜到局域网房间
+        - 填 IP 就能进
+        - Steam 或 Epic 好友联机
+        - 只能走官方在线服
+        - 不清楚
+    validations:
+      required: true
+
+  - type: textarea
+    id: what_happened
+    attributes:
+      label: 用 Astral 组网之后怎样
+      description: 写实际步骤和结果。
+      placeholder: 双方进了同一 Astral 房间后 房主开了局域网 客人在游戏里搜不到房间
+    validations:
+      required: true
+
+  - type: dropdown
+    id: can_test
+    attributes:
+      label: 适配后能否帮忙测试
+      options:
+        - 可以
+        - 看情况
+        - 不方便
+    validations:
+      required: true
