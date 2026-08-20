@@ -12,7 +12,6 @@ import 'package:astral_game/ui/pages/dashboard_wide_layout.dart';
 import 'package:astral_game/utils/room_share.dart';
 import 'package:astral_game/utils/room_share_actions.dart';
 import 'package:flutter/material.dart';
-import 'package:get_it/get_it.dart';
 import 'package:signals/signals_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -24,9 +23,9 @@ class DashboardPage extends StatefulWidget {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
-  final NodeManagementService _nodeManagement = GetIt.I<NodeManagementService>();
-  final ConnectionService _connectionService = GetIt.I<ConnectionService>();
-  final ScreenStateService _screenStateService = GetIt.I<ScreenStateService>();
+  final NodeManagementService _nodeManagement = getIt<NodeManagementService>();
+  final ConnectionService _connectionService = getIt<ConnectionService>();
+  final ScreenStateService _screenStateService = getIt<ScreenStateService>();
   final RoomState _roomState = getIt<RoomState>();
 
   Future<void> _handleShareRoom() async {

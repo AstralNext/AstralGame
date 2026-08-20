@@ -20,7 +20,6 @@ import 'package:astral_game/data/state/room_state.dart';
 import 'package:astral_game/utils/logger.dart';
 import 'package:astral_game/utils/room_share.dart';
 import 'package:astral_rust_core/p2p_service.dart';
-import 'package:get_it/get_it.dart';
 import 'package:signals/signals_core.dart';
 
 /// 连接服务：建房 / 进房（6 位 32 进制短码或离线 Base64）/ 会话，不落盘房间历史。
@@ -39,6 +38,8 @@ class ConnectionService {
     this._gameRules,
     this._appSettings,
     this._openGames,
+    this._peerRpc,
+    this._peerRpcRouter,
   );
 
   final P2PService _p2pService;
@@ -52,6 +53,8 @@ class ConnectionService {
   final GameAssistRulesService _gameRules;
   final AppSettingsService _appSettings;
   final OpenGamesService _openGames;
+  final PeerRpcClient _peerRpc;
+  final PeerRpcRouter _peerRpcRouter;
 
   bool _isConnecting = false;
   bool get isConnecting => _isConnecting;
@@ -60,7 +63,7 @@ class ConnectionService {
   final isLinking = signal(false);
 
   /// 递增以作废进行中的乐观连接（例如用户在连接中点了离开）。
-  int _linkEpoch = 0;
+  final _link = ConnectionLinkEpoch();
 
   EffectCleanup? _guestPresenceDispose;
   DateTime? _hostMissingSince;
@@ -117,7 +120,7 @@ class ConnectionService {
       adminToken: adminToken,
     );
     _roomState.setSession(session);
-    final epoch = ++_linkEpoch;
+    final epoch = _link.begin();
     isLinking.value = true;
 
     var linked = false;
@@ -129,7 +132,7 @@ class ConnectionService {
         gameId: gameId,
         epoch: epoch,
       );
-      if (epoch != _linkEpoch) {
+      if (!_link.isLive(epoch)) {
         throw const ConnectionAbortedException();
       }
       if (!ok) {
@@ -143,30 +146,24 @@ class ConnectionService {
     } on ConnectionAbortedException {
       rethrow;
     } catch (e) {
-      if (!linked && epoch == _linkEpoch) {
+      if (!linked && _link.isLive(epoch)) {
         await disconnect(revokeShare: true, clearSession: true);
       }
       rethrow;
     } finally {
-      if (epoch == _linkEpoch) {
+      if (_link.isLive(epoch)) {
         isLinking.value = false;
       }
     }
   }
 
   Future<ActiveRoomSession> joinWithInviteInput(String raw) async {
-    final token = extractJoinToken(raw) ?? raw.trim();
-    if (token.isEmpty) {
-      throw StateError('请粘贴邀请链接、短码或离线邀请');
-    }
+    final token = requireJoinInviteToken(raw);
     if (looksLikeShortCode(token)) {
       return joinWithShortCode(token);
     }
-    if (looksLikeOfflineInvite(token)) {
-      final payload = decodeOfflineInvite(token);
-      return _joinWithPayload(payload, shortCode: null);
-    }
-    throw StateError('无法识别邀请，请使用 Astral 分享的链接');
+    final payload = decodeOfflineInvite(token);
+    return _joinWithPayload(payload, shortCode: null);
   }
 
   /// 当前应分享的一条 URL（短码优先，否则离线）。
@@ -191,14 +188,7 @@ class ConnectionService {
     RoomInvitePayload payload, {
     String? shortCode,
   }) async {
-    if (payload.networkSecret.isEmpty) {
-      throw StateError('邀请无效：缺少房间密码（请让房主用新版重新分享）');
-    }
-    final invitePeers =
-        payload.peers.where((p) => p.uri.trim().isNotEmpty).toList();
-    if (invitePeers.isEmpty) {
-      throw StateError('邀请未包含服务器，无法加入（请让房主启用服务器后重新分享）');
-    }
+    final invitePeers = joinableInvitePeers(payload);
 
     final session = ActiveRoomSession(
       isHost: false,
@@ -212,7 +202,7 @@ class ConnectionService {
       shortCode: shortCode,
     );
     _roomState.setSession(session);
-    final epoch = ++_linkEpoch;
+    final epoch = _link.begin();
     isLinking.value = true;
 
     var linked = false;
@@ -225,7 +215,7 @@ class ConnectionService {
         gameId: payload.gameId,
         epoch: epoch,
       );
-      if (epoch != _linkEpoch) {
+      if (!_link.isLive(epoch)) {
         throw const ConnectionAbortedException();
       }
       if (!ok) {
@@ -239,12 +229,12 @@ class ConnectionService {
     } on ConnectionAbortedException {
       rethrow;
     } catch (e) {
-      if (!linked && epoch == _linkEpoch) {
+      if (!linked && _link.isLive(epoch)) {
         await disconnect(revokeShare: false, clearSession: true);
       }
       rethrow;
     } finally {
-      if (epoch == _linkEpoch) {
+      if (_link.isLive(epoch)) {
         isLinking.value = false;
       }
     }
@@ -380,7 +370,7 @@ class ConnectionService {
     );
     _roomState.setPausedHost(null);
     _roomState.setSession(session);
-    final epoch = ++_linkEpoch;
+    final epoch = _link.begin();
     isLinking.value = true;
 
     var linked = false;
@@ -392,7 +382,7 @@ class ConnectionService {
         gameId: snap.gameId,
         epoch: epoch,
       );
-      if (epoch != _linkEpoch) {
+      if (!_link.isLive(epoch)) {
         throw const ConnectionAbortedException();
       }
       if (!ok) {
@@ -407,12 +397,12 @@ class ConnectionService {
     } on ConnectionAbortedException {
       rethrow;
     } catch (e) {
-      if (!linked && epoch == _linkEpoch) {
+      if (!linked && _link.isLive(epoch)) {
         await disconnect(revokeShare: true, clearSession: true);
       }
       rethrow;
     } finally {
-      if (epoch == _linkEpoch) {
+      if (_link.isLive(epoch)) {
         isLinking.value = false;
       }
     }
@@ -433,6 +423,7 @@ class ConnectionService {
     _isConnecting = true;
     String? createdInstanceId;
     try {
+      await _p2pService.ensureInitialized();
       if (_nodeManagement.isRunning) {
         await disconnect(
           revokeShare: false,
@@ -447,19 +438,19 @@ class ConnectionService {
           appLogger.w('[ConnectionService] Android VPN 权限未授予');
           return false;
         }
-        if (epoch != _linkEpoch) return false;
+        if (!_link.isLive(epoch)) return false;
       }
 
       final fromGame = gameId != null && gameId.isNotEmpty
           ? await _gameRules.wantsUdpBroadcastRelay(gameId)
           : false;
-      if (epoch != _linkEpoch) return false;
+      if (!_link.isLive(epoch)) return false;
       final fromUser = _appSettings.isEnableUdpBroadcastRelay();
       final udpRelay = fromGame || fromUser;
       final protocol = gameId != null && gameId.isNotEmpty
           ? await _gameRules.networkProtocol(gameId)
           : GameAssistNetworkProtocol.udp;
-      if (epoch != _linkEpoch) return false;
+      if (!_link.isLive(epoch)) return false;
 
       final configToml = _p2pConfig.buildTomlConfig(
         networkName,
@@ -479,14 +470,14 @@ class ConnectionService {
         configToml: configToml,
         watchEvent: true,
       );
-      if (epoch != _linkEpoch) {
+      if (!_link.isLive(epoch)) {
         await _p2pService.closeInstance(createdInstanceId);
         createdInstanceId = null;
         return false;
       }
       appLogger.i('[ConnectionService] 实例已创建 id=$createdInstanceId');
       final isRunning = await _p2pService.isEasytierRunning(createdInstanceId);
-      if (epoch != _linkEpoch) {
+      if (!_link.isLive(epoch)) {
         await _p2pService.closeInstance(createdInstanceId);
         createdInstanceId = null;
         return false;
@@ -499,7 +490,7 @@ class ConnectionService {
       }
 
       await _bindPeerRpc(createdInstanceId);
-      if (epoch != _linkEpoch) {
+      if (!_link.isLive(epoch)) {
         await _unbindPeerRpc();
         await _p2pService.closeInstance(createdInstanceId);
         createdInstanceId = null;
@@ -510,7 +501,7 @@ class ConnectionService {
       _armGuestPresenceWatch();
       if (Platform.isAndroid) {
         final vpnOk = await _startAndroidVpnWhenIpReady(createdInstanceId);
-        if (epoch != _linkEpoch) {
+        if (!_link.isLive(epoch)) {
           await disconnect(
             revokeShare: false,
             pauseHost: false,
@@ -575,7 +566,7 @@ class ConnectionService {
     bool abortLink = true,
   }) async {
     if (abortLink) {
-      _linkEpoch++;
+      _link.abort();
     }
     await _roomAssist.stopAll();
     await _gameInject.stop();
@@ -703,14 +694,14 @@ class ConnectionService {
   }
 
   Future<void> _bindPeerRpc(String instanceId) async {
-    GetIt.I<PeerRpcClient>().bindInstance(instanceId);
-    await GetIt.I<PeerRpcRouter>().start(instanceId);
+    _peerRpc.bindInstance(instanceId);
+    await _peerRpcRouter.start(instanceId);
   }
 
   Future<void> _unbindPeerRpc() async {
-    GetIt.I<PeerRpcClient>().bindInstance(null);
+    _peerRpc.bindInstance(null);
     try {
-      await GetIt.I<PeerRpcRouter>().stop();
+      await _peerRpcRouter.stop();
     } catch (e) {
       appLogger.w('[ConnectionService] PeerRpcRouter 停止异常: $e');
     }
@@ -730,4 +721,17 @@ class ConnectionAbortedException implements Exception {
 
   @override
   String toString() => 'ConnectionAbortedException';
+}
+
+/// 乐观进房世代：离开/取消时 abort，进行中的连接看到过期则中止。
+class ConnectionLinkEpoch {
+  int _value = 0;
+
+  int get current => _value;
+
+  int begin() => ++_value;
+
+  void abort() => _value++;
+
+  bool isLive(int epoch) => epoch == _value;
 }

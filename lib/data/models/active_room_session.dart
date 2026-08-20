@@ -126,3 +126,18 @@ class ActiveRoomSession {
     );
   }
 }
+
+/// 加入房间前校验载荷，并返回可用的服务器列表。
+List<PeerEndpoint> joinableInvitePeers(RoomInvitePayload payload) {
+  if (payload.networkSecret.isEmpty) {
+    throw StateError('邀请无效：缺少房间密码（请让房主用新版重新分享）');
+  }
+  final peers = [
+    for (final p in payload.peers)
+      if (p.uri.trim().isNotEmpty) p,
+  ];
+  if (peers.isEmpty) {
+    throw StateError('邀请未包含服务器，无法加入（请让房主启用服务器后重新分享）');
+  }
+  return peers;
+}

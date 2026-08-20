@@ -97,4 +97,6 @@ class ShareCodeService {
     }
     throw ShareCodeException('作废失败 (${res.statusCode})', statusCode: res.statusCode);
   }
+
+  void close() => _client.close();
 }

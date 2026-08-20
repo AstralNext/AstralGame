@@ -13,11 +13,11 @@ dependencies:
   astral_rust_core:
     git:
       url: https://github.com/AstralNext/astral_rust_core.git
-      ref: main
+      ref: 39cbe5b6d794b3949cc1d4f6f94451613eee385b
   vpn_service_plugin:
     git:
       url: https://github.com/AstralNext/vpn_service_plugin.git
-      ref: main
+      ref: 529771eb5b58704f5b03b88fc6c39e6307b05837
   crypto: ^3.0.7
   window_manager: ^0.4.3
   get_it: ^9.2.0
@@ -74,41 +74,6 @@ flutter:
   uses-material-design: true
   assets:
     - assets/logo.png
-    # Windows tray icon
     - assets/icon.ico
-    # Game covers (local assets; remote rules may use network URLs)
-    - assets/games/minecraft/icon.png
-    - assets/games/minecraft/grid.png
-    - assets/games/terraria/icon.png
-    - assets/games/terraria/grid.png
-    - assets/games/valheim/icon.png
-    - assets/games/valheim/grid.png
-    - assets/games/palworld/icon.png
-    - assets/games/palworld/grid.png
-    - assets/games/mindustry/icon.png
-    - assets/games/mindustry/grid.png
-    - assets/games/stardew_valley/icon.png
-    - assets/games/stardew_valley/grid.png
-    - assets/games/factorio/icon.png
-    - assets/games/factorio/grid.png
-    - assets/games/dont_starve_together/icon.png
-    - assets/games/dont_starve_together/grid.png
-    - assets/games/project_zomboid/icon.png
-    - assets/games/project_zomboid/grid.png
-    - assets/games/v_rising/icon.png
-    - assets/games/v_rising/grid.png
-    - assets/games/satisfactory/icon.png
-    - assets/games/satisfactory/grid.png
-    - assets/games/seven_days_to_die/icon.png
-    - assets/games/seven_days_to_die/grid.png
-    - assets/games/ark/icon.png
-    - assets/games/ark/grid.png
-    - assets/games/rust/icon.png
-    - assets/games/rust/grid.png
-    - assets/games/forged_alliance/icon.png
-    - assets/games/forged_alliance/grid.png
-    - assets/games/raft/icon.png
-    - assets/games/raft/grid.png
-    # Offline generic fallback; full rules at https://astral.fan/gamerules.json
-    - assets/games/rules.json
-    - assets/scenery/daily.jpg
+    - assets/games/
+    - assets/scenery/

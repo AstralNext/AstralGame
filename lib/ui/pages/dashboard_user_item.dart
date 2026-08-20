@@ -1,6 +1,7 @@
 import 'package:astral_game/config/constants.dart';
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/models/enhanced_node_info.dart';
+import 'package:astral_game/data/services/node_management_service.dart';
 import 'package:astral_game/ui/widgets/grouped_tile_shape.dart';
 import 'package:astral_game/utils/firewall_presentation.dart';
 import 'package:astral_game/utils/network_presentation.dart';
@@ -8,11 +9,13 @@ import 'package:astral_game/utils/os_presentation.dart';
 import 'package:astral_game/utils/platform_version_parser.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:signals/signals_flutter.dart';
 
 class DashboardUserItem extends StatefulWidget {
   const DashboardUserItem({
     super.key,
     required this.node,
+    required this.nodeManagement,
     this.grouped = false,
     this.index = 0,
     this.count = 1,
@@ -21,6 +24,7 @@ class DashboardUserItem extends StatefulWidget {
   });
 
   final EnhancedNodeInfo node;
+  final NodeManagementService nodeManagement;
   final bool grouped;
   final int index;
   final int count;
@@ -120,18 +124,19 @@ class _DashboardUserItemState extends State<DashboardUserItem> {
               ? colorScheme.onPrimaryContainer
               : colorScheme.onSurfaceVariant,
         ),
-      Text(
-        '${node.baseInfo.latencyMs.round()}ms',
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w500,
-          color: node.baseInfo.latencyMs < 100
-              ? AppColors.online
-              : node.baseInfo.latencyMs < 300
-                  ? AppColors.warning
-                  : AppColors.error,
-        ),
-      ),
+        Watch((context) {
+          final metrics = widget.nodeManagement
+              .linkMetricsOf(node.peerId)
+              .value;
+          return Text(
+            '${metrics.latencyMs.round()}ms',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              color: _latencyColor(metrics.latencyMs),
+            ),
+          );
+        }),
     ];
 
     final row = Row(
@@ -237,17 +242,25 @@ class _DashboardUserItemState extends State<DashboardUserItem> {
                   ),
                 ),
               ],
-              if (node.baseInfo.lossRate > 0) ...[
-                const SizedBox(height: 4),
-                Text(
-                  '丢包: ${node.baseInfo.lossRate.toStringAsFixed(1)}%',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.error,
+              Watch((context) {
+                final metrics = widget.nodeManagement
+                    .linkMetricsOf(node.peerId)
+                    .value;
+                if (metrics.lossRate <= 0) {
+                  return const SizedBox.shrink();
+                }
+                return Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    '丢包: ${metrics.lossRate.toStringAsFixed(1)}%',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.error,
+                    ),
                   ),
-                ),
-              ],
+                );
+              }),
             ],
           ),
         ),
@@ -309,6 +322,12 @@ class _DashboardUserItemState extends State<DashboardUserItem> {
         child: ink,
       ),
     );
+  }
+
+  Color _latencyColor(double latencyMs) {
+    if (latencyMs < 100) return AppColors.online;
+    if (latencyMs < 300) return AppColors.warning;
+    return AppColors.error;
   }
 
   Future<void> _copyIp(
@@ -412,6 +431,8 @@ class _DashboardUserItemState extends State<DashboardUserItem> {
                 fit: BoxFit.cover,
                 width: size,
                 height: size,
+                cacheWidth: (size * 2).round(),
+                cacheHeight: (size * 2).round(),
                 gaplessPlayback: true,
               ),
             )

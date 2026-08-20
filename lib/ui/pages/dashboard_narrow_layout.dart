@@ -39,17 +39,11 @@ class DashboardNarrowLayout extends StatelessWidget {
   Widget build(BuildContext context) {
     return Watch((context) {
       final isRunning = nodeManagement.isRunning;
-      final nodes = nodeManagement.userNodes.value;
-      final myIp = nodeManagement.myVirtualIpv4.value;
       final session = roomState.session.value;
       final paused = roomState.pausedHost.value;
-      final hostOnline = roomState.hostOnline.value;
       final linkingFlag = getIt<ConnectionService>().isLinking.value;
       final showRoom = session != null;
       final isLinking = showRoom && (linkingFlag || !isRunning);
-      final openGames = getIt<OpenGamesService>();
-      final openListings = openGames.listings.value;
-      final openActive = openGames.isActive;
 
       if (!showRoom) {
         return Padding(
@@ -73,10 +67,6 @@ class DashboardNarrowLayout extends StatelessWidget {
       }
 
       final active = session;
-      final showOpenGames =
-          isRunning && (openActive || openListings.isNotEmpty);
-      final openGamesHeight = openListings.isEmpty ? 72.0 : 220.0;
-
       return CustomScrollView(
         key: const PageStorageKey<String>('dashboard_narrow_scroll'),
         physics: const ClampingScrollPhysics(),
@@ -89,22 +79,15 @@ class DashboardNarrowLayout extends StatelessWidget {
               8,
             ),
             sliver: SliverToBoxAdapter(
-              child: DashboardHomePanel(
-                isConnected: true,
+              child: _NarrowRoomHeader(
+                nodeManagement: nodeManagement,
+                roomState: roomState,
+                isRunning: isRunning,
                 isLinking: isLinking,
                 username: nodeManagement.currentUsername.value,
-                roomDisplayName: roomState.activeRoomDisplayLabel,
-                roomRoleLabel: active.roleLabel,
-                roomGameId: active.gameId,
-                roomShortCode: roomState.activeShareCode,
-                isRoomHost: active.isHost,
-                hostOnline: hostOnline,
-                virtualIp: isRunning
-                    ? (myIp.isNotEmpty
-                        ? myIp
-                        : AppConstants.defaultVirtualIp)
-                    : null,
-                traffic: isRunning ? nodeManagement.roomTraffic.value : null,
+                roleLabel: active.roleLabel,
+                gameId: active.gameId,
+                isHost: active.isHost,
                 onCreateRoom: onCreateRoom,
                 onJoinRoom: onJoinRoom,
                 onShareRoom: onShareRoom,
@@ -112,30 +95,20 @@ class DashboardNarrowLayout extends StatelessWidget {
               ),
             ),
           ),
-          if (showOpenGames)
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(
-                AppDimensions.pagePaddingH,
-                8,
-                AppDimensions.pagePaddingH,
-                8,
-              ),
-              sliver: SliverToBoxAdapter(
-                child: AnimatedSize(
-                  duration: const Duration(milliseconds: 240),
-                  curve: Curves.easeOutCubic,
-                  alignment: Alignment.topCenter,
-                  child: SizedBox(
-                    height: openGamesHeight,
-                    width: double.infinity,
-                    child: RoomOpenGamesPanel(
-                      compact: true,
-                      gameId: active.gameId,
-                    ),
-                  ),
-                ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(
+              AppDimensions.pagePaddingH,
+              8,
+              AppDimensions.pagePaddingH,
+              8,
+            ),
+            sliver: SliverToBoxAdapter(
+              child: _NarrowOpenGamesSlot(
+                gameId: active.gameId,
+                isRunning: isRunning,
               ),
             ),
+          ),
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(
               AppDimensions.pagePaddingH,
@@ -145,9 +118,9 @@ class DashboardNarrowLayout extends StatelessWidget {
             ),
             sliver: SliverToBoxAdapter(
               child: _MembersBlock(
-                nodes: isRunning ? nodes : const [],
                 roomState: roomState,
                 nodeManagement: nodeManagement,
+                isRunning: isRunning,
                 forceSkeleton: isLinking,
               ),
             ),
@@ -158,59 +131,156 @@ class DashboardNarrowLayout extends StatelessWidget {
   }
 }
 
+class _NarrowRoomHeader extends StatelessWidget {
+  const _NarrowRoomHeader({
+    required this.nodeManagement,
+    required this.roomState,
+    required this.isRunning,
+    required this.isLinking,
+    required this.username,
+    required this.roleLabel,
+    required this.gameId,
+    required this.isHost,
+    required this.onCreateRoom,
+    required this.onJoinRoom,
+    required this.onShareRoom,
+    required this.onDisconnect,
+  });
+
+  final NodeManagementService nodeManagement;
+  final RoomState roomState;
+  final bool isRunning;
+  final bool isLinking;
+  final String username;
+  final String? roleLabel;
+  final String gameId;
+  final bool isHost;
+  final VoidCallback onCreateRoom;
+  final VoidCallback onJoinRoom;
+  final VoidCallback onShareRoom;
+  final VoidCallback onDisconnect;
+
+  @override
+  Widget build(BuildContext context) {
+    return Watch((context) {
+      final myIp = nodeManagement.myVirtualIpv4.value;
+      return DashboardHomePanel(
+        isConnected: true,
+        isLinking: isLinking,
+        username: username,
+        roomDisplayName: roomState.activeRoomDisplayLabel,
+        roomRoleLabel: roleLabel,
+        roomGameId: gameId,
+        roomShortCode: roomState.activeShareCode,
+        isRoomHost: isHost,
+        hostOnline: roomState.hostOnline.value,
+        virtualIp: isRunning
+            ? (myIp.isNotEmpty ? myIp : AppConstants.defaultVirtualIp)
+            : null,
+        traffic: isRunning ? nodeManagement.roomTraffic.value : null,
+        onCreateRoom: onCreateRoom,
+        onJoinRoom: onJoinRoom,
+        onShareRoom: onShareRoom,
+        onDisconnect: onDisconnect,
+      );
+    });
+  }
+}
+
+class _NarrowOpenGamesSlot extends StatelessWidget {
+  const _NarrowOpenGamesSlot({
+    required this.gameId,
+    required this.isRunning,
+  });
+
+  final String gameId;
+  final bool isRunning;
+
+  @override
+  Widget build(BuildContext context) {
+    return Watch((context) {
+      final openGames = getIt<OpenGamesService>();
+      final openListings = openGames.listings.value;
+      final showOpenGames =
+          isRunning && (openGames.isActive || openListings.isNotEmpty);
+      if (!showOpenGames) return const SizedBox.shrink();
+      final openGamesHeight = openListings.isEmpty ? 72.0 : 220.0;
+      return AnimatedSize(
+        duration: const Duration(milliseconds: 240),
+        curve: Curves.easeOutCubic,
+        alignment: Alignment.topCenter,
+        child: SizedBox(
+          height: openGamesHeight,
+          width: double.infinity,
+          child: RoomOpenGamesPanel(
+            compact: true,
+            gameId: gameId,
+          ),
+        ),
+      );
+    });
+  }
+}
+
 class _MembersBlock extends StatelessWidget {
   const _MembersBlock({
-    required this.nodes,
     required this.roomState,
     required this.nodeManagement,
+    required this.isRunning,
     this.forceSkeleton = false,
   });
 
-  final List<EnhancedNodeInfo> nodes;
   final RoomState roomState;
   final NodeManagementService nodeManagement;
+  final bool isRunning;
   final bool forceSkeleton;
 
   @override
   Widget build(BuildContext context) {
-    final session = roomState.session.value;
-    final game = session == null ? null : GameCatalog.byId(session.gameId);
-    final title = [
-      if (game != null) game.name,
-      '成员',
-    ].join(' · ');
+    return Watch((context) {
+      final session = roomState.session.value;
+      final game = session == null ? null : GameCatalog.byId(session.gameId);
+      final title = [
+        if (game != null) game.name,
+        '成员',
+      ].join(' · ');
+      final nodes = isRunning
+          ? nodeManagement.userNodes.value
+          : const <EnhancedNodeInfo>[];
 
-    if (forceSkeleton || nodes.isEmpty) {
+      if (forceSkeleton || nodes.isEmpty) {
+        return DashboardListSection(
+          title: title,
+          useCard: false,
+          child: const DashboardMembersSkeleton(),
+        );
+      }
+
       return DashboardListSection(
         title: title,
-        useCard: false,
-        child: const DashboardMembersSkeleton(),
-      );
-    }
-
-    return DashboardListSection(
-      title: title,
-      count: nodes.length,
-      child: Column(
-        children: [
-          for (var i = 0; i < nodes.length; i++) ...[
-            if (i > 0) const Divider(height: 1, indent: 56),
-            DashboardUserItem(
-              key: ValueKey<int>(nodes[i].peerId),
-              node: nodes[i],
-              grouped: true,
-              index: i,
-              count: nodes.length,
-              isRoomHost: session != null &&
-                  nodeManagement.isRoomHostPeer(
-                    nodes[i].peerId,
-                    sessionIsHost: session.isHost,
-                    isCredentialPeer: nodes[i].isCredentialPeer,
-                  ),
-            ),
+        count: nodes.length,
+        child: Column(
+          children: [
+            for (var i = 0; i < nodes.length; i++) ...[
+              if (i > 0) const Divider(height: 1, indent: 56),
+              DashboardUserItem(
+                key: ValueKey<int>(nodes[i].peerId),
+                node: nodes[i],
+                nodeManagement: nodeManagement,
+                grouped: true,
+                index: i,
+                count: nodes.length,
+                isRoomHost: session != null &&
+                    nodeManagement.isRoomHostPeer(
+                      nodes[i].peerId,
+                      sessionIsHost: session.isHost,
+                      isCredentialPeer: nodes[i].isCredentialPeer,
+                    ),
+              ),
+            ],
           ],
-        ],
-      ),
-    );
+        ),
+      );
+    });
   }
 }

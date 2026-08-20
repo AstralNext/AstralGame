@@ -56,4 +56,6 @@ class HitokotoService {
       fromWho: decoded['from_who']?.toString(),
     );
   }
+
+  void close() => _client.close();
 }

@@ -7,13 +7,19 @@ import 'package:astral_game/data/services/firewall_service.dart';
 import 'package:astral_game/data/services/peer_rpc/peer_rpc_router.dart';
 import 'package:astral_game/utils/avatar_hash.dart';
 import 'package:astral_game/utils/client_runtime_info.dart';
-import 'package:get_it/get_it.dart';
 
 /// 用户相关方法
 class UserMethods {
-  final AppSettingsService _settings;
+  UserMethods(
+    this._settings, {
+    ConnectivityStatusService? connectivity,
+    FirewallService? firewall,
+  })  : _connectivity = connectivity,
+        _firewall = firewall;
 
-  UserMethods(this._settings);
+  final AppSettingsService _settings;
+  final ConnectivityStatusService? _connectivity;
+  final FirewallService? _firewall;
 
   /// 获取用户信息
   ///
@@ -23,14 +29,12 @@ class UserMethods {
   /// [params.avatarHash] 为对端已知 hash；相同则不回传整图。
   Future<Map<String, dynamic>> getInfo(dynamic params) async {
     final avatar = _settings.getAvatar();
-    final hash = avatarContentHash(avatar);
+    final hash = _settings.getAvatarHash() ?? avatarContentHash(avatar);
     final knownHash = avatarHashFromParams(params);
-    final connectivity = GetIt.I.isRegistered<ConnectivityStatusService>()
-        ? GetIt.I<ConnectivityStatusService>().current.value
-        : NetworkKind.unknown;
+    final connectivity = _connectivity?.current.value ?? NetworkKind.unknown;
     var firewall = 'unsupported';
-    if (GetIt.I.isRegistered<FirewallService>()) {
-      final fw = GetIt.I<FirewallService>();
+    final fw = _firewall;
+    if (fw != null) {
       await fw.refreshPrivateProfile();
       firewall = fw.firewallWireValue();
     }

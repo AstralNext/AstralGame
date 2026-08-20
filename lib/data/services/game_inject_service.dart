@@ -4,16 +4,17 @@ import 'dart:io';
 import 'package:astral_game/data/models/game_assist_rules.dart';
 import 'package:astral_game/data/services/game_assist_rules_service.dart';
 import 'package:astral_game/data/services/windows_game_process.dart';
+import 'package:astral_game/data/services/windows_process_watch.dart';
 import 'package:astral_game/utils/logger.dart';
 import 'package:path/path.dart' as p;
 
 /// Windows：进房后按游戏找进程，用共用 Mono 注入器注入该游戏的插件 DLL。
 class GameInjectService {
-  GameInjectService(this._rules);
+  GameInjectService(this._rules, this._processes);
 
   final GameAssistRulesService _rules;
+  final WindowsProcessWatch _processes;
 
-  Timer? _timer;
   GameAssistInjectConfig? _config;
   String _gameId = '';
   final Set<int> _injected = {};
@@ -41,10 +42,11 @@ class GameInjectService {
     }
     _gameId = gameId;
     _config = inject;
-    _timer = Timer.periodic(const Duration(seconds: 2), (_) {
-      unawaited(_tick());
-    });
-    await _tick();
+    _processes.subscribe(
+      key: this,
+      exeNames: inject.process,
+      onTick: _onProcesses,
+    );
     appLogger.i(
       '[GameInject] 已监视 exe=${inject.process.join(",")} '
       'dll=${inject.dll} delay=${inject.delaySeconds}s',
@@ -52,8 +54,7 @@ class GameInjectService {
   }
 
   Future<void> stop() async {
-    _timer?.cancel();
-    _timer = null;
+    _processes.unsubscribe(this);
     _config = null;
     _gameId = '';
     _injected.clear();
@@ -62,16 +63,11 @@ class GameInjectService {
     _firstSeen.clear();
   }
 
-  Future<void> _tick() async {
+  void _onProcesses(List<WindowsGameProcess> procs) {
     final cfg = _config;
     if (cfg == null) return;
     if (!Platform.isWindows) return;
 
-    // 只认 exe，不用窗口标题：标签页叫 Raft 的浏览器也会中招。
-    final procs = await listWindowsGameProcesses(
-      exeNames: cfg.process,
-      windowNeedles: const [],
-    );
     final alive = <int>{};
     final now = DateTime.now();
     for (final proc in procs) {
@@ -82,7 +78,7 @@ class GameInjectService {
         );
         continue;
       }
-      if (!_exeAllowed(proc.exe, cfg.process)) continue;
+      if (!windowsExeMatchesAny(proc, cfg.process)) continue;
       alive.add(proc.pid);
       if (_injected.contains(proc.pid) || _inflight.contains(proc.pid)) {
         continue;
@@ -163,19 +159,6 @@ class GameInjectService {
     } finally {
       _inflight.remove(pid);
     }
-  }
-
-  bool _exeAllowed(String exe, List<String> names) {
-    if (names.isEmpty) return false;
-    final got = p.basename(exe.trim().toLowerCase());
-    final stem = p.basenameWithoutExtension(got);
-    for (final raw in names) {
-      final want = p.basename(raw.trim().toLowerCase());
-      if (want.isEmpty) continue;
-      if (got == want) return true;
-      if (stem == p.basenameWithoutExtension(want)) return true;
-    }
-    return false;
   }
 
   static const _unsafeExes = {

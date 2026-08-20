@@ -94,4 +94,20 @@ void main() {
     expect(normalizeShareCode('jh j-m8z'), 'JHJM8Z');
     expect(normalizeShareCode('oil'), '011');
   });
+
+  test('requireJoinInviteToken rejects empty and unknown text', () {
+    expect(() => requireJoinInviteToken(''), throwsA(isA<StateError>()));
+    expect(
+      () => requireJoinInviteToken('not-a-invite'),
+      throwsA(isA<StateError>()),
+    );
+  });
+
+  test('requireJoinInviteToken accepts short code and join url', () {
+    expect(requireJoinInviteToken('JHJM8Z'), 'JHJM8Z');
+    expect(
+      requireJoinInviteToken('https://next.astral.fan/j?c=JHJM8Z'),
+      'JHJM8Z',
+    );
+  });
 }

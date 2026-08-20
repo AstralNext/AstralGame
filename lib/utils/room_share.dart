@@ -199,3 +199,15 @@ RoomInvitePayload decodeOfflineInvite(String raw) {
   }
   return payload;
 }
+
+/// 从粘贴内容取出可用的短码或离线邀请；无法识别则抛错。
+String requireJoinInviteToken(String raw) {
+  final token = extractJoinToken(raw) ?? raw.trim();
+  if (token.isEmpty) {
+    throw StateError('请粘贴邀请链接、短码或离线邀请');
+  }
+  if (!looksLikeJoinToken(token)) {
+    throw StateError('无法识别邀请，请使用 Astral 分享的链接');
+  }
+  return token;
+}

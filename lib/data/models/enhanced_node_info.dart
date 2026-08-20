@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:astral_game/utils/net_addr.dart';
 import 'package:astral_rust_core/p2p_service.dart' show KVNodeInfo;
+import 'package:flutter/foundation.dart' show listEquals, mapEquals;
 
 /// 在 [`KVNodeInfo`] 上叠加 peer-RPC（`user.getInfo`）返回的昵称与头像等资料。
 class EnhancedNodeInfo {
@@ -78,4 +79,42 @@ class EnhancedNodeInfo {
   /// 节点是否拥有有效的虚拟网 IPv6（兼容 CIDR）。
   bool get hasValidIpv6 =>
       stripCidrHost(baseInfo.ipv6, unspecified: const {'::'}) != null;
+}
+
+/// 成员列表行会用到的字段；不含 rx/tx、时延、丢包（时延走独立 signal）。
+bool sameKvNodeUiSnapshot(KVNodeInfo a, KVNodeInfo b) {
+  return a.peerId == b.peerId &&
+      a.hostname == b.hostname &&
+      a.ipv4 == b.ipv4 &&
+      a.ipv6 == b.ipv6 &&
+      a.hops.length == b.hops.length &&
+      a.version == b.version &&
+      a.cost == b.cost &&
+      a.remoteStaticPubkeyB64 == b.remoteStaticPubkeyB64 &&
+      a.isCredentialPeer == b.isCredentialPeer;
+}
+
+bool _bytesEqualNullable(Uint8List? a, Uint8List? b) {
+  if (identical(a, b)) return true;
+  if (a == null || b == null) return a == null && b == null;
+  return listEquals(a, b);
+}
+
+bool sameEnhancedPollSnapshot(EnhancedNodeInfo a, EnhancedNodeInfo b) {
+  return sameKvNodeUiSnapshot(a.baseInfo, b.baseInfo) &&
+      mapEquals(a.metadata, b.metadata) &&
+      a.customName == b.customName &&
+      _bytesEqualNullable(a.avatar, b.avatar);
+}
+
+bool sameUserNodesUiSnapshot(
+  List<EnhancedNodeInfo> prev,
+  List<EnhancedNodeInfo> next,
+) {
+  if (prev.length != next.length) return false;
+  for (var i = 0; i < prev.length; i++) {
+    if (prev[i].peerId != next[i].peerId) return false;
+    if (!sameEnhancedPollSnapshot(prev[i], next[i])) return false;
+  }
+  return true;
 }

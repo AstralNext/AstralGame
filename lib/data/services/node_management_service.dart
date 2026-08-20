@@ -3,8 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show listEquals, mapEquals;
-import 'package:get_it/get_it.dart';
 import 'package:signals/signals_core.dart';
 import 'package:astral_game/utils/avatar_hash.dart';
 import 'package:astral_game/utils/client_runtime_info.dart';
@@ -13,6 +11,7 @@ import 'package:astral_game/config/constants.dart';
 import 'package:astral_rust_core/p2p_service.dart';
 
 import '../models/enhanced_node_info.dart';
+import '../models/peer_link_metrics.dart';
 import '../models/room_traffic_stats.dart';
 import 'app_settings_service.dart';
 import 'connectivity_status_service.dart';
@@ -28,8 +27,23 @@ import 'peer_rpc/peer_rpc_exception.dart';
 /// - 获取节点头像和昵称
 /// - 发送节点事件
 class NodeManagementService {
-  final _p2pService = GetIt.I<P2PService>();
-  final _appSettings = GetIt.I<AppSettingsService>();
+  NodeManagementService({
+    required P2PService p2pService,
+    required AppSettingsService appSettings,
+    required PeerRpcClient peerRpc,
+    ConnectivityStatusService? connectivity,
+    FirewallService? firewall,
+  })  : _p2pService = p2pService,
+        _appSettings = appSettings,
+        _peerRpc = peerRpc,
+        _connectivity = connectivity,
+        _firewall = firewall;
+
+  final P2PService _p2pService;
+  final AppSettingsService _appSettings;
+  final PeerRpcClient _peerRpc;
+  final ConnectivityStatusService? _connectivity;
+  final FirewallService? _firewall;
 
   /// 是否打印“每秒轮询细节”日志（非常刷屏，默认关闭）
   static const bool _verbosePollLogs = false;
@@ -55,6 +69,8 @@ class NodeManagementService {
 
   /// 房间流量：对端合计的累计上下行 + 实时速率。
   final roomTraffic = signal<RoomTrafficStats>(RoomTrafficStats.zero);
+
+  final Map<int, Signal<PeerLinkMetrics>> _linkMetrics = {};
 
   Timer? _pollingTimer;
   int _pollTick = 0;
@@ -86,11 +102,28 @@ class NodeManagementService {
   final List<EffectCleanup> _envListenerDisposers = [];
   Timer? _firewallRefreshTimer;
 
-  /// 轮询间隔（用户列表需要更及时：1 秒）
-  static const Duration _pollingInterval = Duration(seconds: 1);
+  bool _pollInFlight = false;
+  int _pollGeneration = 0;
+
+  /// 稳态轮询：成员进出可接受约 2s 延迟；未拿到虚拟 IP 时更快探。
+  static const Duration _pollingInterval = Duration(seconds: 2);
+  static const Duration _pollingIntervalUntilIp = Duration(milliseconds: 500);
+
+  /// 未拿到虚拟 IP 时 500ms，否则 2s。
+  static Duration pollDelayFor({required bool hasVirtualIp}) {
+    return hasVirtualIp ? _pollingInterval : _pollingIntervalUntilIp;
+  }
 
   String? get instanceId => currentInstanceId.value;
   bool get isRunning => currentInstanceId.value != null;
+
+  /// 该 peer 的时延/丢包（独立 signal，成员行可局部 Watch）。
+  Signal<PeerLinkMetrics> linkMetricsOf(int peerId) {
+    return _linkMetrics.putIfAbsent(
+      peerId,
+      () => signal(PeerLinkMetrics.zero),
+    );
+  }
 
   /// 与仪表盘「在线用户」列表一致（含本机，排除公共服务器节点）。
   List<EnhancedNodeInfo> get onlinePeersForDisplay {
@@ -111,14 +144,14 @@ class NodeManagementService {
     // `peerId == 0` 这个守卫挡掉合成本机节点。
     unawaited(_refreshMyPeerId(instanceId));
     _bindEnvListeners();
-    if (Platform.isWindows && GetIt.I.isRegistered<FirewallService>()) {
-      unawaited(GetIt.I<FirewallService>().refreshPrivateProfile());
+    if (Platform.isWindows && _firewall != null) {
+      unawaited(_firewall.refreshPrivateProfile());
       _firewallRefreshTimer?.cancel();
       _firewallRefreshTimer = Timer.periodic(
-        const Duration(seconds: 5),
+        const Duration(seconds: 15),
         (_) {
           if (currentInstanceId.value == null) return;
-          unawaited(GetIt.I<FirewallService>().refreshPrivateProfile());
+          unawaited(_firewall!.refreshPrivateProfile());
         },
       );
     }
@@ -135,6 +168,7 @@ class NodeManagementService {
     currentInstanceId.value = null;
     _myPeerId = null;
     userNodes.value = [];
+    _clearLinkMetrics();
     myVirtualIpv4.value = '';
     _resetRoomTraffic();
     _noIpSince = null;
@@ -161,34 +195,49 @@ class NodeManagementService {
   /// 开始轮询网络状态
   void _startPolling(String instanceId) {
     _stopPolling();
-    _pollNetworkStatus(instanceId);
-    _pollingTimer = Timer.periodic(_pollingInterval, (_) {
+    final gen = _pollGeneration;
+    unawaited(_pollThenRearm(instanceId, gen));
+  }
+
+  Duration _pollDelay() {
+    return pollDelayFor(hasVirtualIp: myVirtualIpv4.value.isNotEmpty);
+  }
+
+  Future<void> _pollThenRearm(String instanceId, int gen) async {
+    await _pollNetworkStatus(instanceId);
+    if (gen != _pollGeneration) return;
+    if (currentInstanceId.value != instanceId) return;
+    _pollingTimer?.cancel();
+    _pollingTimer = Timer(_pollDelay(), () {
+      if (gen != _pollGeneration) return;
       if (_verbosePollLogs) {
-        // 用于确认轮询“确实在每秒触发”（非常刷屏）
         _pollTick++;
         appLogger.d('[NodeManagementService] poll tick=$_pollTick');
       }
-      _pollNetworkStatus(instanceId);
+      unawaited(_pollThenRearm(instanceId, gen));
     });
   }
 
   /// 停止轮询
   void _stopPolling() {
+    _pollGeneration++;
     _pollingTimer?.cancel();
     _pollingTimer = null;
   }
 
   void _bindEnvListeners() {
     _unbindEnvListeners();
-    if (GetIt.I.isRegistered<ConnectivityStatusService>()) {
+    final connectivity = _connectivity;
+    if (connectivity != null) {
       _envListenerDisposers.add(effect(() {
-        GetIt.I<ConnectivityStatusService>().current.value;
+        connectivity.current.value;
         _onVolatileEnvChanged();
       }));
     }
-    if (GetIt.I.isRegistered<FirewallService>()) {
+    final firewall = _firewall;
+    if (firewall != null) {
       _envListenerDisposers.add(effect(() {
-        GetIt.I<FirewallService>().privateProfileEnabled.value;
+        firewall.privateProfileEnabled.value;
         _onVolatileEnvChanged();
       }));
     }
@@ -214,7 +263,7 @@ class NodeManagementService {
       if (!_isLocalPeer(n.peerId)) return n;
       return _enrichLocalNode(n);
     }).toList();
-    if (!_sameUserNodesUiSnapshot(nodes, updated)) {
+    if (!sameUserNodesUiSnapshot(nodes, updated)) {
       userNodes.value = updated;
     }
   }
@@ -223,7 +272,10 @@ class NodeManagementService {
   ///
   /// 获取最新的网络状态和节点信息
   Future<void> _pollNetworkStatus(String instanceId) async {
+    if (_pollInFlight) return;
+    _pollInFlight = true;
     try {
+      if (currentInstanceId.value != instanceId) return;
       final status = await _p2pService.getNetworkStatus(instanceId);
       final newTotalNodes = status.totalNodes;
       final newNodesList = status.nodes;
@@ -274,9 +326,11 @@ class NodeManagementService {
       _peerInfoFetchStartedAt.removeWhere((id, _) => !activePeerIds.contains(id));
 
       final prevUsers = userNodes.value;
-      if (!_sameUserNodesUiSnapshot(prevUsers, normalized)) {
+      _syncLinkMetrics(normalized, prune: false);
+      if (!sameUserNodesUiSnapshot(prevUsers, normalized)) {
         userNodes.value = normalized;
       }
+      _pruneLinkMetrics(normalized);
 
       // 本机虚拟 IP：优先取 `astral_rust_core` 合成的本机哨兵节点（peer_id=0）
       // 的 ipv4；个别状态下 EasyTier 的 routes 表里也可能直接给本机一条
@@ -309,6 +363,8 @@ class NodeManagementService {
       }
     } catch (e, stackTrace) {
       appLogger.e('[NodeManagementService] 轮询网络状态失败: $e', error: e, stackTrace: stackTrace);
+    } finally {
+      _pollInFlight = false;
     }
   }
 
@@ -438,12 +494,8 @@ class NodeManagementService {
   EnhancedNodeInfo _enrichLocalNode(EnhancedNodeInfo node) {
     final localName = _appSettings.getUsername().trim();
     final localAvatar = _appSettings.getAvatar();
-    final localNetwork = GetIt.I.isRegistered<ConnectivityStatusService>()
-        ? GetIt.I<ConnectivityStatusService>().current.value.wireValue
-        : null;
-    final localFirewall = GetIt.I.isRegistered<FirewallService>()
-        ? GetIt.I<FirewallService>().firewallWireValue()
-        : 'unsupported';
+    final localNetwork = _connectivity?.current.value.wireValue;
+    final localFirewall = _firewall?.firewallWireValue() ?? 'unsupported';
     final meta = <String, dynamic>{
       ...node.metadata,
       'peerOs': ClientRuntimeInfo.operatingSystem,
@@ -458,47 +510,6 @@ class NodeManagementService {
       avatar: localAvatar ?? node.avatar,
       metadata: meta,
     );
-  }
-
-  /// 仅比较「在线用户」列表行会用到的字段；不包含 rx/tx、connections 等每秒随流量变化的统计，
-  /// 否则永远无法跳过写入，`userNodes` 仍会每秒整表替换。
-  bool _sameKvNodeUiSnapshot(KVNodeInfo a, KVNodeInfo b) {
-    return a.peerId == b.peerId &&
-        a.hostname == b.hostname &&
-        a.ipv4 == b.ipv4 &&
-        a.ipv6 == b.ipv6 &&
-        a.latencyMs.round() == b.latencyMs.round() &&
-        (a.lossRate * 10).round() == (b.lossRate * 10).round() &&
-        a.hops.length == b.hops.length &&
-        a.version == b.version &&
-        a.cost == b.cost &&
-        a.remoteStaticPubkeyB64 == b.remoteStaticPubkeyB64 &&
-        a.isCredentialPeer == b.isCredentialPeer;
-  }
-
-  bool _bytesEqualNullable(Uint8List? a, Uint8List? b) {
-    if (identical(a, b)) return true;
-    if (a == null || b == null) return a == null && b == null;
-    return listEquals(a, b);
-  }
-
-  bool _sameEnhancedPollSnapshot(EnhancedNodeInfo a, EnhancedNodeInfo b) {
-    return _sameKvNodeUiSnapshot(a.baseInfo, b.baseInfo) &&
-        mapEquals(a.metadata, b.metadata) &&
-        a.customName == b.customName &&
-        _bytesEqualNullable(a.avatar, b.avatar);
-  }
-
-  bool _sameUserNodesUiSnapshot(
-    List<EnhancedNodeInfo> prev,
-    List<EnhancedNodeInfo> next,
-  ) {
-    if (prev.length != next.length) return false;
-    for (var i = 0; i < prev.length; i++) {
-      if (prev[i].peerId != next[i].peerId) return false;
-      if (!_sameEnhancedPollSnapshot(prev[i], next[i])) return false;
-    }
-    return true;
   }
 
   bool _isPublicServerNode(EnhancedNodeInfo node) {
@@ -528,8 +539,7 @@ class NodeManagementService {
     if (_isPublicServerNode(n)) return;
     if (_isLocalPeer(n.peerId)) return;
 
-    final client = GetIt.I<PeerRpcClient>();
-    if (!client.isBound) return;
+    if (!_peerRpc.isBound) return;
 
     final cooldown =
         _needsPeerClientEnv(n) ? _peerInfoCooldownMissingEnv : _peerInfoCooldownHasEnv;
@@ -551,12 +561,11 @@ class NodeManagementService {
     if (node.peerId == _localSyntheticPeerId) return;
     if (_myPeerId != null && node.peerId == _myPeerId) return;
 
-    final client = GetIt.I<PeerRpcClient>();
-    if (!client.isBound) return;
+    if (!_peerRpc.isBound) return;
 
     try {
       final knownHash = node.peerAvatarHash;
-      final result = await client.call(
+      final result = await _peerRpc.call(
         node.peerId,
         'user.getInfo',
         params: {
@@ -646,7 +655,7 @@ class NodeManagementService {
       clearAvatar: clearAvatar,
       metadata: mergedMeta,
     );
-    if (_sameEnhancedPollSnapshot(before, merged)) return;
+    if (sameEnhancedPollSnapshot(before, merged)) return;
 
     userNodes.value = list.map((n) {
       if (n.peerId != peerId) return n;
@@ -701,6 +710,46 @@ class NodeManagementService {
   /// 1 秒轮询才在 UI 上看到变更。
   void _refreshLocalNodesFromSettings() {
     _refreshLocalEnvInUserList();
+  }
+
+  void _syncLinkMetrics(List<EnhancedNodeInfo> nodes, {bool prune = true}) {
+    final live = <int>{};
+    for (final n in nodes) {
+      live.add(n.peerId);
+      final next = PeerLinkMetrics(
+        latencyMs: n.baseInfo.latencyMs,
+        lossRate: n.baseInfo.lossRate,
+      );
+      final existing = _linkMetrics[n.peerId];
+      if (existing == null) {
+        _linkMetrics[n.peerId] = signal(next);
+        continue;
+      }
+      if (existing.value.visiblyDiffersFrom(next)) {
+        existing.value = next;
+      }
+    }
+    if (prune) {
+      _pruneLinkMetrics(nodes);
+    }
+  }
+
+  void _pruneLinkMetrics(List<EnhancedNodeInfo> nodes) {
+    final live = {for (final n in nodes) n.peerId};
+    final staleIds = [
+      for (final id in _linkMetrics.keys)
+        if (!live.contains(id)) id,
+    ];
+    for (final id in staleIds) {
+      _linkMetrics.remove(id)?.dispose();
+    }
+  }
+
+  void _clearLinkMetrics() {
+    for (final s in _linkMetrics.values) {
+      s.dispose();
+    }
+    _linkMetrics.clear();
   }
 
   /// 释放资源
