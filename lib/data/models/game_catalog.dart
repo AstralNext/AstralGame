@@ -18,6 +18,7 @@ class GameInfo {
     this.gridAsset,
     this.showInPicker = true,
     this.sort = 100,
+    this.description = '',
   });
 
   final String id;
@@ -39,6 +40,7 @@ class GameInfo {
 
   final bool showInPicker;
   final int sort;
+  final String description;
 
   bool get hasIconAsset => iconAsset != null && iconAsset!.isNotEmpty;
   bool get hasGridAsset => gridAsset != null && gridAsset!.isNotEmpty;
@@ -55,6 +57,7 @@ class GameInfo {
       gridAsset: rules.gridAsset,
       showInPicker: rules.showInPicker,
       sort: rules.sort,
+      description: rules.description,
     );
   }
 }

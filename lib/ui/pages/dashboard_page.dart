@@ -283,7 +283,8 @@ class _DashboardPageState extends State<DashboardPage> {
                 : catalog
                     .where((g) =>
                         g.name.toLowerCase().contains(q) ||
-                        g.id.toLowerCase().contains(q))
+                        g.id.toLowerCase().contains(q) ||
+                        g.description.toLowerCase().contains(q))
                     .toList(growable: false);
             final selectionValid =
                 filtered.any((g) => g.id == selected.id);
@@ -314,7 +315,8 @@ class _DashboardPageState extends State<DashboardPage> {
                               : catalog
                                   .where((g) =>
                                       g.name.toLowerCase().contains(qq) ||
-                                      g.id.toLowerCase().contains(qq))
+                                      g.id.toLowerCase().contains(qq) ||
+                                      g.description.toLowerCase().contains(qq))
                                   .toList(growable: false);
                           if (list.isNotEmpty &&
                               !list.any((g) => g.id == selected.id)) {
@@ -388,6 +390,8 @@ class _DashboardPageState extends State<DashboardPage> {
                                         vertical: 10,
                                       ),
                                       child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           if (g.hasGridAsset)
                                             GameGridCover(
@@ -400,14 +404,43 @@ class _DashboardPageState extends State<DashboardPage> {
                                             GameLogo(game: g, size: 40),
                                           const SizedBox(width: 12),
                                           Expanded(
-                                            child: Text(
-                                              g.name,
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .titleSmall
-                                                  ?.copyWith(
-                                                    fontWeight: FontWeight.w600,
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  g.name,
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .titleSmall
+                                                      ?.copyWith(
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                      ),
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                                if (g.description
+                                                    .isNotEmpty) ...[
+                                                  const SizedBox(height: 2),
+                                                  Text(
+                                                    g.description,
+                                                    style: Theme.of(context)
+                                                        .textTheme
+                                                        .bodySmall
+                                                        ?.copyWith(
+                                                          color: Theme.of(
+                                                                  context)
+                                                              .colorScheme
+                                                              .onSurfaceVariant,
+                                                        ),
+                                                    maxLines: 2,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
                                                   ),
+                                                ],
+                                              ],
                                             ),
                                           ),
                                           if (selectedNow)

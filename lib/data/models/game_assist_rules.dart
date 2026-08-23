@@ -63,6 +63,7 @@ class GameAssistGameRules {
     this.gridAsset,
     this.showInPicker = true,
     this.sort = 100,
+    this.description = '',
   });
 
   final String id;
@@ -77,6 +78,8 @@ class GameAssistGameRules {
   final String? gridAsset;
   final bool showInPicker;
   final int sort;
+  /// 选择器里标题下方的短说明。
+  final String description;
   final Map<String, GameAssistPlatformRules> platforms;
 
   /// 优先 [platform]，否则 `windows`，再否则任意有配置的平台。
@@ -121,6 +124,7 @@ class GameAssistGameRules {
       gridAsset: _optionalString(json['grid_asset']),
       showInPicker: json['show_in_picker'] != false,
       sort: (json['sort'] as num?)?.toInt() ?? 100,
+      description: _optionalString(json['description']) ?? '',
       platforms: platforms,
     );
   }
@@ -145,6 +149,7 @@ class GameAssistGameRules {
       gridAsset: remote.gridAsset ?? gridAsset,
       showInPicker: remote.showInPicker,
       sort: remote.sort,
+      description: remote.description.isNotEmpty ? remote.description : description,
       platforms: merged,
     );
   }

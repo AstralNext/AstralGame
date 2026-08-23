@@ -9,6 +9,7 @@
     {
       "id": "raft",
       "name": "Raft",
+      "description": "进房后在游戏里搜局域网房间",
       "color": "#2A7F9E",
       "icon": "sailing",
       "steam_app_id": 648800,
@@ -27,6 +28,7 @@
 |------|------|
 | `id` | 英文 id；注入 DLL 在 `native/<id>/` |
 | `name` | 显示名，默认 `id` |
+| `description` | 选择器标题下方的短说明，可省略 |
 | `color` | `#RRGGBB` |
 | `icon` | Material Icons 名 |
 | `steam_app_id` / `sgdb_game_id` | Steam / SteamGridDB |

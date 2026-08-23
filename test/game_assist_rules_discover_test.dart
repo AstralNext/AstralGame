@@ -313,4 +313,26 @@ void main() {
     expect(merged.network.protocol, GameAssistNetworkProtocol.tcp);
     expect(merged.network.enableUdpBroadcastRelay, isTrue);
   });
+
+  test('game description from json and merge', () {
+    final parsed = GameAssistGameRules.fromJson('minecraft', {
+      'name': 'Minecraft',
+      'description': '开局域网世界',
+      'color': '#5D9C3E',
+      'icon': 'terrain',
+    });
+    expect(parsed.description, '开局域网世界');
+
+    final omitted = GameAssistGameRules.fromJson('other', {
+      'name': '其他',
+    });
+    expect(omitted.description, isEmpty);
+
+    final merged = omitted.mergeFromRemote(parsed);
+    expect(merged.description, '开局域网世界');
+    expect(
+      parsed.mergeFromRemote(omitted).description,
+      '开局域网世界',
+    );
+  });
 }
