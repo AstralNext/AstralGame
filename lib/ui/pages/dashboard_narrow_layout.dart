@@ -177,7 +177,6 @@ class _NarrowRoomHeader extends StatelessWidget {
         virtualIp: isRunning
             ? (myIp.isNotEmpty ? myIp : AppConstants.defaultVirtualIp)
             : null,
-        traffic: isRunning ? nodeManagement.roomTraffic.value : null,
         onCreateRoom: onCreateRoom,
         onJoinRoom: onJoinRoom,
         onShareRoom: onShareRoom,
