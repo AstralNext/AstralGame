@@ -10,6 +10,7 @@ import 'package:astral_game/ui/widgets/home_widget_refresh_binder.dart';
 import 'package:astral_game/ui/widgets/join_link_binder.dart';
 import 'package:astral_game/ui/widgets/theme_water_drop_overlay.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:signals/signals_flutter.dart';
 
 class AstralGameApp extends StatefulWidget {
@@ -67,6 +68,13 @@ class _AstralGameAppState extends State<AstralGameApp> with WidgetsBindingObserv
       return MaterialApp(
         title: 'Astral Game',
         debugShowCheckedModeBanner: false,
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: const [Locale('zh', 'CN')],
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
         theme: theme,
         themeAnimationDuration: AppThemeAnimation.duration,
         themeAnimationCurve: AppThemeAnimation.curve,

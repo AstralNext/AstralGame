@@ -10,6 +10,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  intl: any
   astral_rust_core:
     git:
       url: https://github.com/AstralNext/astral_rust_core.git
