@@ -91,6 +91,45 @@ void main() {
       '10.1.2.3',
     );
   });
+
+  test('ensureLocalSelfPresent keeps previous self when poll is empty', () {
+    final previous = [
+      localSelfPlaceholder(hostname: 'phone', ipv4: '10.126.126.1'),
+      _node(peerId: 7, ipv4: '10.126.126.9'),
+    ];
+    final kept = ensureLocalSelfPresent(
+      const [],
+      previous,
+      isLocalPeer: (id) => id == 0,
+      fallback: localSelfPlaceholder(hostname: 'fallback'),
+    );
+    expect(kept, hasLength(1));
+    expect(kept.single.peerId, 0);
+    expect(kept.single.hostname, 'phone');
+  });
+
+  test('ensureLocalSelfPresent uses published when it already has self', () {
+    final published = [_node(peerId: 0, ipv4: '10.126.126.2')];
+    final kept = ensureLocalSelfPresent(
+      published,
+      [localSelfPlaceholder(hostname: 'old')],
+      isLocalPeer: (id) => id == 0,
+      fallback: localSelfPlaceholder(hostname: 'fallback'),
+    );
+    expect(kept.single.ipv4, '10.126.126.2');
+  });
+
+  test('ensureLocalSelfPresent injects self when poll only has remotes', () {
+    final published = [_node(peerId: 7, ipv4: '10.126.126.9')];
+    final kept = ensureLocalSelfPresent(
+      published,
+      [localSelfPlaceholder(hostname: 'phone', ipv4: '10.126.126.1')],
+      isLocalPeer: (id) => id == 0,
+      fallback: localSelfPlaceholder(hostname: 'fallback'),
+    );
+    expect(kept.map((n) => n.peerId), [0, 7]);
+    expect(kept.first.hostname, 'phone');
+  });
 }
 
 String stripHost(String raw) {

@@ -119,7 +119,6 @@ class DashboardNarrowLayout extends StatelessWidget {
               child: _MembersBlock(
                 roomState: roomState,
                 nodeManagement: nodeManagement,
-                forceSkeleton: isLinking,
               ),
             ),
           ),
@@ -223,12 +222,10 @@ class _MembersBlock extends StatelessWidget {
   const _MembersBlock({
     required this.roomState,
     required this.nodeManagement,
-    this.forceSkeleton = false,
   });
 
   final RoomState roomState;
   final NodeManagementService nodeManagement;
-  final bool forceSkeleton;
 
   @override
   Widget build(BuildContext context) {
@@ -240,10 +237,9 @@ class _MembersBlock extends StatelessWidget {
           if (game != null) game.displayName,
           '成员',
         ].join(' · ');
-        final isRunning = nodeManagement.isRunning;
         final nodes = nodeManagement.userNodes.value;
 
-        if (forceSkeleton || !isRunning || nodes.isEmpty) {
+        if (nodes.isEmpty) {
           return DashboardListSection(
             title: title,
             useCard: false,

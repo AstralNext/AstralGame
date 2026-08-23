@@ -21,10 +21,10 @@ class ClientRuntimeInfo {
       final p = await PackageInfo.fromPlatform();
       _appName = p.appName;
       _packageName = p.packageName.trim();
-      final ver = p.version.trim();
-      final build = p.buildNumber.trim();
-      _appVersion =
-          build.isEmpty ? ver : (ver.isEmpty ? build : '$ver+$build');
+      _appVersion = resolveAppVersion(
+        version: p.version,
+        buildNumber: p.buildNumber,
+      );
     } catch (_) {
       _appVersion = '';
       _appName = '';
@@ -47,9 +47,22 @@ class ClientRuntimeInfo {
   /// Android `applicationId` / 其它平台包名；未就绪时为空。
   static String get packageName => _packageName;
 
-  /// 应用版本，形如 `1.0.0` 或 `1.0.0+1`。
+  /// 应用版本（pubspec `versionName`，如 `1.0.41`）。
+  ///
+  /// 不要把 Android `versionCode` 拼成 `1.0.41+1`：未写 `+build` 时
+  /// Flutter 仍会把 versionCode 默认成 1。
   static String get appVersion =>
       _appVersion.isEmpty ? 'unknown' : _appVersion;
+
+  /// 展示/上报用版本：只用 versionName；buildNumber 仅在 version 为空时回退。
+  static String resolveAppVersion({
+    required String version,
+    required String buildNumber,
+  }) {
+    final ver = version.trim();
+    if (ver.isNotEmpty) return ver;
+    return buildNumber.trim();
+  }
 
   /// `windows` / `android` / `macos` / `linux` / `ios` / `web` 等。
   static String get operatingSystem => RuntimePlatform.operatingSystem;

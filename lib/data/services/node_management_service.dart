@@ -129,14 +129,17 @@ class NodeManagementService {
 
   /// 启动节点管理
   void start(String instanceId) {
-    currentInstanceId.value = instanceId;
     _myPeerId = null;
     _noIpSince = DateTime.now();
     _lastNoIpWarnAt = null;
     _nodesEpoch++;
-    userNodes.value = [];
     _clearLinkMetrics();
     myVirtualIpv4.value = '';
+    // 先放入本机占位行再标记 running，避免窄屏成员列表先闪骨架。
+    userNodes.value = [
+      _enrichLocalNode(localSelfPlaceholder(hostname: _localHostname())),
+    ];
+    currentInstanceId.value = instanceId;
     _bindEnvListeners();
     if (Platform.isWindows && _firewall != null) {
       unawaited(_firewall.refreshPrivateProfile());
@@ -149,16 +152,40 @@ class NodeManagementService {
         },
       );
     }
-    // 先拿到真实本机 peer_id，再开轮询：否则 routes 里的本机真实 id
-    // 会被当成「远端成员」，和 peer_id=0 哨兵各显示一行且 IP 可能不一致。
-    unawaited(_startAfterPeerIdReady(instanceId));
+    // 立刻轮询；peer_id 并行去拉。合并重复本机行由 collapseLocalSelfNodes 负责，
+    // 不再把「列表能不能显示自己」卡在 myPeerId RPC 上。
+    _startPolling(instanceId);
+    unawaited(_refreshMyPeerIdThenCollapse(instanceId));
     appLogger.i('[NodeManagementService] 已启动，实例ID: $instanceId');
   }
 
-  Future<void> _startAfterPeerIdReady(String instanceId) async {
+  Future<void> _refreshMyPeerIdThenCollapse(String instanceId) async {
     await _refreshMyPeerId(instanceId);
     if (currentInstanceId.value != instanceId) return;
-    _startPolling(instanceId);
+    _collapseUserNodesInPlace();
+  }
+
+  void _collapseUserNodesInPlace() {
+    final prev = userNodes.value;
+    final collapsed = collapseLocalSelfNodes(
+      prev,
+      isLocalPeer: _isLocalPeer,
+      canonicalPeerId: _localSyntheticPeerId,
+    ).map((n) {
+      if (!_isLocalPeer(n.peerId)) return n;
+      return _enrichLocalNode(n);
+    }).toList();
+    if (!sameUserNodesUiSnapshot(prev, collapsed)) {
+      userNodes.value = collapsed;
+    }
+  }
+
+  String _localHostname() {
+    try {
+      final name = Platform.localHostname.trim();
+      if (name.isNotEmpty) return name;
+    } catch (_) {}
+    return 'local';
   }
 
   /// 停止节点管理
@@ -327,7 +354,7 @@ class NodeManagementService {
 
       // 合并 peer_id=0 哨兵与真实本机 peer，保证成员列表只有一条本机，
       // 且该行携带两侧中有效的虚拟 IPv4（单一数据源）。
-      final published = collapseLocalSelfNodes(
+      final collapsed = collapseLocalSelfNodes(
         normalized,
         isLocalPeer: _isLocalPeer,
         canonicalPeerId: _localSyntheticPeerId,
@@ -335,6 +362,15 @@ class NodeManagementService {
         if (!_isLocalPeer(n.peerId)) return n;
         return _enrichLocalNode(n);
       }).toList();
+
+      final published = ensureLocalSelfPresent(
+        collapsed,
+        userNodes.value,
+        isLocalPeer: _isLocalPeer,
+        fallback: _enrichLocalNode(
+          localSelfPlaceholder(hostname: _localHostname()),
+        ),
+      );
 
       final activePeerIds = published.map((n) => n.peerId).toSet();
       _peerInfoFetchStartedAt.removeWhere((id, _) => !activePeerIds.contains(id));
@@ -353,13 +389,16 @@ class NodeManagementService {
       }
       _pruneLinkMetrics(published);
 
-      if (myIp != myVirtualIpv4.value) {
-        final prev = myVirtualIpv4.value;
-        myVirtualIpv4.value = myIp;
-        appLogger.i(
-          '[NodeManagementService] 本机虚拟 IP: '
-          '${prev.isEmpty ? '(空)' : prev} -> ${myIp.isEmpty ? '(空)' : myIp}',
-        );
+      // 空轮询不要把已经拿到的虚拟 IP 清掉。
+      if (collapsed.isNotEmpty || myIp.isNotEmpty) {
+        if (myIp != myVirtualIpv4.value) {
+          final prev = myVirtualIpv4.value;
+          myVirtualIpv4.value = myIp;
+          appLogger.i(
+            '[NodeManagementService] 本机虚拟 IP: '
+            '${prev.isEmpty ? '(空)' : prev} -> ${myIp.isEmpty ? '(空)' : myIp}',
+          );
+        }
       }
       _trackMissingVirtualIp(myIp, published);
 

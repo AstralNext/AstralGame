@@ -130,14 +130,9 @@ class _MembersPane extends StatelessWidget {
             Expanded(
               child: Watch(
                 (context) {
-                  final isRunning = nodeManagement.isRunning;
-                  final linkingFlag =
-                      getIt<ConnectionService>().isLinking.value;
-                  final isLinking = roomState.session.value != null &&
-                      (linkingFlag || !isRunning);
                   // 无条件读取，确保 computed 始终订阅成员列表。
                   final nodes = nodeManagement.userNodes.value;
-                  if (!isRunning || isLinking || nodes.isEmpty) {
+                  if (nodes.isEmpty) {
                     return const DashboardMembersSkeleton();
                   }
                   return UserListWidget(

@@ -55,7 +55,7 @@ class EnhancedNodeInfo {
   /// 对端应用名（对端 PackageInfo.appName）。
   String? get peerAppName => metadata['peerAppName'] as String?;
 
-  /// 对端应用版本（如 `1.0.0+1`）。
+  /// 对端应用版本（如 `1.0.41`）。
   String? get peerAppVersion => metadata['peerAppVersion'] as String?;
 
   /// 对端网络承载类型 wire 值（`wifi` / `ethernet` / `mobile` / `bluetooth` / `satellite` / `other` / `none` 等）。

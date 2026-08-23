@@ -75,6 +75,50 @@ EnhancedNodeInfo mergeLocalSelfEntries(
   return best.copyWith(baseInfo: mergedBase);
 }
 
+/// 开房瞬间即可展示的本机占位行（peer_id=0），等 EasyTier 轮询到真实节点后再合并。
+EnhancedNodeInfo localSelfPlaceholder({
+  String hostname = 'local',
+  String ipv4 = '',
+  int peerId = 0,
+}) {
+  return EnhancedNodeInfo(
+    baseInfo: KVNodeInfo(
+      peerId: peerId,
+      hostname: hostname,
+      ipv4: ipv4,
+      ipv6: '',
+      latencyMs: 0,
+      nat: 'Unknown',
+      hops: const [],
+      lossRate: 0,
+      connections: const [],
+      tunnelProto: '-',
+      connType: 'Local',
+      rxBytes: BigInt.zero,
+      txBytes: BigInt.zero,
+      version: '',
+      cost: 0,
+      remoteStaticPubkeyB64: '',
+      isCredentialPeer: false,
+    ),
+  );
+}
+
+/// 成员列表的本机行不依赖 EasyTier 快照是否已带上自己。
+/// 快照里没有本机时，沿用上一轮本机行；再没有则用 [fallback]。
+List<EnhancedNodeInfo> ensureLocalSelfPresent(
+  List<EnhancedNodeInfo> published,
+  List<EnhancedNodeInfo> previous, {
+  required bool Function(int peerId) isLocalPeer,
+  required EnhancedNodeInfo fallback,
+}) {
+  if (published.any((n) => isLocalPeer(n.peerId))) return published;
+  final prevSelf = previous.where((n) => isLocalPeer(n.peerId));
+  final self = prevSelf.isNotEmpty ? prevSelf.first : fallback;
+  return [self, ...published]
+    ..sort((a, b) => a.peerId.compareTo(b.peerId));
+}
+
 String? virtualIpv4FromNodes(
   List<EnhancedNodeInfo> nodes, {
   required bool Function(int peerId) isLocalPeer,

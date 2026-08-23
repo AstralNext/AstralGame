@@ -350,7 +350,7 @@ class _DashboardUserItemState extends State<DashboardUserItem> {
     );
   }
 
-  /// 单行摘要（列表内展示）：仅「系统版本 · 应用版本」，例如 `10.0.26200 · 1.0.0+1`。
+  /// 单行摘要（列表内展示）：仅「系统版本 · 应用版本」，例如 `10.0.26200 · 1.0.41`。
   String _peerClientEnvLabel(EnhancedNodeInfo node) {
     final parts = <String>[];
     final osVer = node.peerOsVersion;
