@@ -311,7 +311,7 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
             final optimize = getIt<NetworkOptimizeService>();
             final busy = optimize.busy.value;
             return _buildSwitchTile(
-              title: '网络优化服务',
+              title: '网络加速（仅限中国大陆）',
               subtitle: busy
                   ? '正在安装或卸载…'
                   : '自动选择最低延迟的网址 IP',

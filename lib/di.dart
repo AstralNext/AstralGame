@@ -22,6 +22,7 @@ import 'package:astral_game/data/services/game_inject_service.dart';
 import 'package:astral_game/data/services/open_games_service.dart';
 import 'package:astral_game/data/services/room_assist_service.dart';
 import 'package:astral_game/data/services/windows_process_watch.dart';
+import 'package:astral_game/data/services/windows_time_sync_service.dart';
 import 'package:astral_game/data/services/room_persistence_service.dart';
 import 'package:astral_game/data/services/screen_state_service.dart';
 import 'package:astral_game/data/services/shell_navigation_service.dart';
@@ -85,6 +86,7 @@ Future<void> setupDI() async {
   );
   if (Platform.isWindows) {
     unawaited(getIt<NetworkOptimizeService>().refresh());
+    unawaited(ensureWindowsAliyunNtp());
   }
 
   getIt.registerSingleton<PeerRpcRouter>(PeerRpcRouter(getIt<P2PService>()));

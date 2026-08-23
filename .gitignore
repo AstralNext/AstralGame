@@ -48,3 +48,8 @@ app.*.map.json
 /android/*.keystore
 /android/app/*.jks
 /android/app/*.keystore
+
+# Release build artifacts (never commit)
+/_release_dl/
+/release/
+/_release_notes.md
