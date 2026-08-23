@@ -4,8 +4,9 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use windows_service::service::{
-    ServiceAccess, ServiceDependency, ServiceErrorControl, ServiceInfo, ServiceStartType,
-    ServiceState, ServiceType,
+    ServiceAccess, ServiceAction, ServiceActionType, ServiceDependency, ServiceErrorControl,
+    ServiceFailureActions, ServiceFailureResetPeriod, ServiceInfo, ServiceStartType, ServiceState,
+    ServiceType,
 };
 use windows_service::service_manager::{ServiceManager, ServiceManagerAccess};
 
@@ -66,6 +67,23 @@ fn fs_create(dir: &std::path::Path) -> io::Result<()> {
     std::fs::create_dir_all(dir)
 }
 
+fn configure_restart_on_failure(
+    service: &windows_service::service::Service,
+) -> windows_service::Result<()> {
+    let restart = ServiceAction {
+        action_type: ServiceActionType::Restart,
+        delay: Duration::from_secs(5),
+    };
+    service.update_failure_actions(ServiceFailureActions {
+        reset_period: ServiceFailureResetPeriod::Never,
+        reboot_msg: None,
+        command: None,
+        actions: Some(vec![restart.clone(), restart.clone(), restart]),
+    })?;
+    service.set_failure_actions_on_non_crash_failures(true)?;
+    Ok(())
+}
+
 fn upsert_binder_service() -> Result<(), String> {
     let manager = manager(
         ServiceManagerAccess::CONNECT
@@ -76,7 +94,10 @@ fn upsert_binder_service() -> Result<(), String> {
 
     if let Ok(existing) = manager.open_service(
         paths::SERVICE_NAME,
-        ServiceAccess::CHANGE_CONFIG | ServiceAccess::QUERY_STATUS | ServiceAccess::STOP,
+        ServiceAccess::CHANGE_CONFIG
+            | ServiceAccess::QUERY_STATUS
+            | ServiceAccess::STOP
+            | ServiceAccess::START,
     ) {
         let state = existing.query_status().map_err(fmt_svc)?.current_state;
         if state != ServiceState::Stopped {
@@ -87,8 +108,9 @@ fn upsert_binder_service() -> Result<(), String> {
         existing
             .set_description(paths::SERVICE_DESCRIPTION)
             .map_err(fmt_svc)?;
+        configure_restart_on_failure(&existing).map_err(fmt_svc)?;
         log::info(&format!(
-            "updated existing service {}",
+            "updated existing service {} (restart on failure)",
             paths::SERVICE_NAME
         ));
         return Ok(());
@@ -97,13 +119,17 @@ fn upsert_binder_service() -> Result<(), String> {
     let service = manager
         .create_service(
             &service_info(),
-            ServiceAccess::CHANGE_CONFIG | ServiceAccess::QUERY_STATUS,
+            ServiceAccess::CHANGE_CONFIG | ServiceAccess::QUERY_STATUS | ServiceAccess::START,
         )
         .map_err(fmt_svc)?;
     service
         .set_description(paths::SERVICE_DESCRIPTION)
         .map_err(fmt_svc)?;
-    log::info(&format!("service {} installed", paths::SERVICE_NAME));
+    configure_restart_on_failure(&service).map_err(fmt_svc)?;
+    log::info(&format!(
+        "service {} installed (restart on failure)",
+        paths::SERVICE_NAME
+    ));
     Ok(())
 }
 

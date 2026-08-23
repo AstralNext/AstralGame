@@ -154,10 +154,7 @@ fn is_usable_v4(ip: Ipv4Addr) -> bool {
 }
 
 fn is_usable_v6(ip: Ipv6Addr) -> bool {
-    !ip.is_unspecified()
-        && !ip.is_loopback()
-        && !ip.is_multicast()
-        && !ip.is_unicast_link_local()
+    !ip.is_unspecified() && !ip.is_loopback() && !ip.is_multicast()
 }
 
 fn pick_v4(ips: &[IpAddr]) -> Option<IpAddr> {
@@ -168,13 +165,14 @@ fn pick_v4(ips: &[IpAddr]) -> Option<IpAddr> {
 }
 
 fn pick_v6(ips: &[IpAddr]) -> Option<IpAddr> {
-    let global = ips.iter().copied().find(|ip| match ip {
-        IpAddr::V6(v) => is_usable_v6(*v) && !v.is_unique_local(),
+    // 主 DNS 用「本地链接 IPv6」（fe80::），写入时不含 %zone。
+    let link_local = ips.iter().copied().find(|ip| match ip {
+        IpAddr::V6(v) => is_usable_v6(*v) && v.is_unicast_link_local(),
         IpAddr::V4(_) => false,
     });
-    global.or_else(|| {
+    link_local.or_else(|| {
         ips.iter().copied().find(|ip| match ip {
-            IpAddr::V6(v) => is_usable_v6(*v),
+            IpAddr::V6(v) => is_usable_v6(*v) && !v.is_unicast_link_local(),
             IpAddr::V4(_) => false,
         })
     })
@@ -191,8 +189,17 @@ fn pick_bind_ips(ips: &[IpAddr]) -> Vec<IpAddr> {
     out
 }
 
+/// Windows 会显示 `fe80::…%20`；写入 DNS 时去掉 `%` 及后面的区域 ID。
+fn strip_zone_id(s: &str) -> &str {
+    s.split_once('%').map(|(addr, _)| addr).unwrap_or(s)
+}
+
+fn format_ip_for_dns(ip: IpAddr) -> String {
+    strip_zone_id(&ip.to_string()).to_string()
+}
+
 fn nameserver_list(primary: IpAddr, alt: &str) -> String {
-    format!("{primary},{alt}")
+    format!("{},{}", format_ip_for_dns(primary), strip_zone_id(alt))
 }
 
 pub fn bind_local_smartdns(guid_str: &str, ips: &[IpAddr]) {
@@ -231,7 +238,7 @@ pub fn dns_already_bound(guid_str: &str, ips: &[IpAddr]) -> bool {
 fn parse_dns_list(s: &str) -> Vec<IpAddr> {
     s.split(|c: char| c == ',' || c == ';' || c.is_whitespace())
         .filter(|token| !token.is_empty())
-        .filter_map(|token| token.parse().ok())
+        .filter_map(|token| strip_zone_id(token).parse().ok())
         .collect()
 }
 
