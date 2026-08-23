@@ -44,7 +44,7 @@ impl AddrWatcher {
         if let Some(state) = dns::get_all_physical_ips() {
             for (guid, (friendly_name, ips)) in &state {
                 log::info(&format!("physical NIC [{friendly_name}] ips={ips:?}"));
-                dns::bind_local_smartdns(guid);
+                dns::bind_local_smartdns(guid, ips);
             }
             self.known_ips = state;
         } else {
@@ -66,14 +66,14 @@ impl AddrWatcher {
                 .map(|(_, ips)| ips.as_slice())
                 .unwrap_or(&[]);
             let ip_same = last_ips == current_ips.as_slice();
-            let dns_ok = dns::dns_already_bound(guid);
+            let dns_ok = dns::dns_already_bound(guid, current_ips);
             if ip_same && dns_ok {
                 continue;
             }
             log::info(&format!(
                 "followup bind [{friendly_name}] ip_same={ip_same} dns_ok={dns_ok} ips={current_ips:?}"
             ));
-            dns::bind_local_smartdns(guid);
+            dns::bind_local_smartdns(guid, current_ips);
             applied += 1;
         }
         self.known_ips = current;
@@ -139,7 +139,7 @@ impl AddrWatcher {
                 log::info(&format!(
                     "IP changed on [{friendly_name}] {last_ips:?} -> {current_ips:?}"
                 ));
-                dns::bind_local_smartdns(guid);
+                dns::bind_local_smartdns(guid, current_ips);
                 self.known_ips
                     .insert(guid.clone(), (friendly_name.clone(), current_ips.clone()));
             }

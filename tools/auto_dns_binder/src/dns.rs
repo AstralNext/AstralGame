@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 use windows::core::{GUID, PWSTR};
 use windows::Win32::NetworkManagement::IpHelper::{
@@ -16,9 +16,9 @@ use windows::Win32::NetworkManagement::Ndis::{
 
 use crate::log;
 
-/// 主 DNS：本机 SmartDNS；辅助：DNSPod。IPv4 / IPv6 必须分两次写入。
-const DNS_V4: &str = "127.0.0.1,119.29.29.29";
-const DNS_V6: &str = "::1,2402:4e00::";
+/// 辅助 DNS（主 DNS 用网卡自身地址）。IPv4 / IPv6 必须分两次写入。
+const DNS_V4_ALT: &str = "119.29.29.29";
+const DNS_V6_ALT: &str = "2402:4e00::";
 
 const IF_TYPE_ETHERNET_CSMACD: u32 = 6;
 const IF_TYPE_IEEE80211: u32 = 71;
@@ -28,6 +28,11 @@ const FLAG_HARDWARE: u8 = 1 << 0;
 const FLAG_FILTER: u8 = 1 << 1;
 const FLAG_CONNECTOR: u8 = 1 << 2;
 const FLAG_ENDPOINT: u8 = 1 << 7;
+
+#[link(name = "dnsapi")]
+extern "system" {
+    fn DnsFlushResolverCache() -> i32;
+}
 
 pub type AdapterState = HashMap<String, (String, Vec<IpAddr>)>;
 
@@ -131,24 +136,7 @@ pub fn get_all_physical_ips() -> Option<AdapterState> {
 
         let guid = adapter.adapter_name().to_string();
         let friendly_name = adapter.friendly_name().to_string();
-
-        let mut target_v4 = None;
-        let mut target_v6 = None;
-        for ip in adapter.ip_addresses() {
-            if ip.is_ipv4() && target_v4.is_none() {
-                target_v4 = Some(*ip);
-            } else if ip.is_ipv6() && target_v6.is_none() {
-                target_v6 = Some(*ip);
-            }
-        }
-
-        let mut ips = Vec::new();
-        if let Some(v4) = target_v4 {
-            ips.push(v4);
-        }
-        if let Some(v6) = target_v6 {
-            ips.push(v6);
-        }
+        let ips = pick_bind_ips(adapter.ip_addresses());
         if !ips.is_empty() {
             result.insert(guid, (friendly_name, ips));
         }
@@ -161,12 +149,72 @@ pub fn get_all_physical_ips() -> Option<AdapterState> {
     }
 }
 
-pub fn bind_local_smartdns(guid_str: &str) {
-    set_nameservers(guid_str, DNS_V4, false);
-    set_nameservers(guid_str, DNS_V6, true);
+fn is_usable_v4(ip: Ipv4Addr) -> bool {
+    !ip.is_unspecified() && !ip.is_loopback() && !ip.is_link_local() && !ip.is_multicast()
 }
 
-pub fn dns_already_bound(guid_str: &str) -> bool {
+fn is_usable_v6(ip: Ipv6Addr) -> bool {
+    !ip.is_unspecified()
+        && !ip.is_loopback()
+        && !ip.is_multicast()
+        && !ip.is_unicast_link_local()
+}
+
+fn pick_v4(ips: &[IpAddr]) -> Option<IpAddr> {
+    ips.iter().copied().find(|ip| match ip {
+        IpAddr::V4(v) => is_usable_v4(*v),
+        IpAddr::V6(_) => false,
+    })
+}
+
+fn pick_v6(ips: &[IpAddr]) -> Option<IpAddr> {
+    let global = ips.iter().copied().find(|ip| match ip {
+        IpAddr::V6(v) => is_usable_v6(*v) && !v.is_unique_local(),
+        IpAddr::V4(_) => false,
+    });
+    global.or_else(|| {
+        ips.iter().copied().find(|ip| match ip {
+            IpAddr::V6(v) => is_usable_v6(*v),
+            IpAddr::V4(_) => false,
+        })
+    })
+}
+
+fn pick_bind_ips(ips: &[IpAddr]) -> Vec<IpAddr> {
+    let mut out = Vec::new();
+    if let Some(v4) = pick_v4(ips) {
+        out.push(v4);
+    }
+    if let Some(v6) = pick_v6(ips) {
+        out.push(v6);
+    }
+    out
+}
+
+fn nameserver_list(primary: IpAddr, alt: &str) -> String {
+    format!("{primary},{alt}")
+}
+
+pub fn bind_local_smartdns(guid_str: &str, ips: &[IpAddr]) {
+    let mut wrote = false;
+    if let Some(v4) = pick_v4(ips) {
+        wrote |= set_nameservers(guid_str, &nameserver_list(v4, DNS_V4_ALT), false);
+    }
+    if let Some(v6) = pick_v6(ips) {
+        wrote |= set_nameservers(guid_str, &nameserver_list(v6, DNS_V6_ALT), true);
+    }
+    if wrote {
+        flush_dns_cache();
+    }
+}
+
+pub fn dns_already_bound(guid_str: &str, ips: &[IpAddr]) -> bool {
+    let expected_v4 = pick_v4(ips)
+        .map(|ip| parse_dns_list(&nameserver_list(ip, DNS_V4_ALT)))
+        .unwrap_or_default();
+    let expected_v6 = pick_v6(ips)
+        .map(|ip| parse_dns_list(&nameserver_list(ip, DNS_V6_ALT)))
+        .unwrap_or_default();
     let v4 = read_nameservers(guid_str, false)
         .unwrap_or_default()
         .into_iter()
@@ -177,7 +225,7 @@ pub fn dns_already_bound(guid_str: &str) -> bool {
         .into_iter()
         .filter(IpAddr::is_ipv6)
         .collect::<Vec<_>>();
-    v4 == parse_dns_list(DNS_V4) && v6 == parse_dns_list(DNS_V6)
+    v4 == expected_v4 && v6 == expected_v6
 }
 
 fn parse_dns_list(s: &str) -> Vec<IpAddr> {
@@ -210,18 +258,33 @@ pub fn clear_all_physical_to_dhcp() {
     let Some(state) = get_all_physical_ips() else {
         return;
     };
+    let mut wrote = false;
     for guid in state.keys() {
-        set_nameservers(guid, "", false);
-        set_nameservers(guid, "", true);
+        wrote |= set_nameservers(guid, "", false);
+        wrote |= set_nameservers(guid, "", true);
+    }
+    if wrote {
+        flush_dns_cache();
     }
 }
 
-fn set_nameservers(guid_str: &str, servers: &str, ipv6: bool) {
+/// 与 `ipconfig /flushdns` 相同：清 DNS Client 解析缓存。
+fn flush_dns_cache() {
+    unsafe {
+        if DnsFlushResolverCache() != 0 {
+            log::info("DNS resolver cache flushed");
+        } else {
+            log::warn("DnsFlushResolverCache failed");
+        }
+    }
+}
+
+fn set_nameservers(guid_str: &str, servers: &str, ipv6: bool) -> bool {
     let mut nameservers: Vec<u16> = servers.encode_utf16().chain(std::iter::once(0)).collect();
 
     let Some(guid) = parse_guid(guid_str) else {
         log::error(&format!("cannot parse adapter GUID: {guid_str}"));
-        return;
+        return false;
     };
 
     let mut flags = DNS_SETTING_NAMESERVER as u64;
@@ -245,6 +308,7 @@ fn set_nameservers(guid_str: &str, servers: &str, ipv6: bool) {
                         "DNS overwritten ({stack}) to {servers} on {guid_str}"
                     ));
                 }
+                true
             }
             Err(err) => {
                 let hr = err.code().0 as u32;
@@ -257,6 +321,7 @@ fn set_nameservers(guid_str: &str, servers: &str, ipv6: bool) {
                         "SetInterfaceDnsSettings {stack} failed: {err}"
                     ));
                 }
+                false
             }
         }
     }
