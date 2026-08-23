@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 
@@ -23,7 +24,7 @@ Future<void> main() async {
     exit(0);
   }
 
-  await _initFirebase();
+  unawaited(_initFirebase());
 
   if (Platform.isAndroid) {
     HomeWidget.registerInteractivityCallback(homeWidgetBackgroundCallback);
@@ -67,7 +68,7 @@ bool get _analyticsSupported =>
     Platform.isAndroid || Platform.isIOS || Platform.isMacOS;
 
 Future<void> _initFirebase() async {
-  if (Platform.isLinux) return;
+  if (!_analyticsSupported && !_crashlyticsSupported) return;
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );

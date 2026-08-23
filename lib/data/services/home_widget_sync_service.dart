@@ -15,10 +15,24 @@ import 'package:home_widget/home_widget.dart';
 
 /// 将连接状态、房间列表、在线成员写入 Android 桌面小部件缓存。
 class HomeWidgetSyncService {
+  HomeWidgetSyncService({
+    required SettingsState settings,
+    required RoomState roomState,
+    required NodeManagementService nodeManagement,
+    RoomPersistenceService? roomPersistence,
+  })  : _settings = settings,
+        _roomState = roomState,
+        _nodeManagement = nodeManagement,
+        _roomPersistence = roomPersistence;
+
+  final SettingsState _settings;
+  final RoomState _roomState;
+  final NodeManagementService _nodeManagement;
+  final RoomPersistenceService? _roomPersistence;
+
   Future<void> syncAll() async {
     if (!Platform.isAndroid) return;
-    final settings = getIt<SettingsState>();
-    await syncHomeWidgetTheme(settings.appThemeId.value);
+    await syncHomeWidgetTheme(_settings.appThemeId.value);
     await Future.wait([
       syncConnect(),
       syncRooms(),
@@ -28,8 +42,8 @@ class HomeWidgetSyncService {
 
   Future<void> syncConnect() async {
     if (!Platform.isAndroid) return;
-    final roomState = getIt<RoomState>();
-    final nodeManagement = getIt<NodeManagementService>();
+    final roomState = _roomState;
+    final nodeManagement = _nodeManagement;
     final inRoom = nodeManagement.isRunning;
     final selected = roomState.selectedRoom.value;
     final roomLabel = _resolveRoomLabel(roomState, selected, inRoom);
@@ -94,9 +108,12 @@ class HomeWidgetSyncService {
 
   Future<void> syncRooms() async {
     if (!Platform.isAndroid) return;
-    var rooms = getIt<RoomState>().rooms;
-    if (rooms.isEmpty && getIt.isRegistered<RoomPersistenceService>()) {
-      rooms = await getIt<RoomPersistenceService>().loadRooms();
+    var rooms = _roomState.rooms;
+    if (rooms.isEmpty) {
+      final persistence = _roomPersistence;
+      if (persistence != null) {
+        rooms = await persistence.loadRooms();
+      }
     }
     final preview = rooms.take(4).map(_roomToWidgetJson).toList();
 
@@ -118,8 +135,8 @@ class HomeWidgetSyncService {
 
   Future<void> syncMembers() async {
     if (!Platform.isAndroid) return;
-    final roomState = getIt<RoomState>();
-    final nodeManagement = getIt<NodeManagementService>();
+    final roomState = _roomState;
+    final nodeManagement = _nodeManagement;
     final inRoom = nodeManagement.isRunning;
     final selected = roomState.selectedRoom.value;
     final members = nodeManagement.onlinePeersForDisplay;
@@ -184,9 +201,20 @@ class HomeWidgetSyncService {
   }
 }
 
+HomeWidgetSyncService _homeWidgetSyncFromGetIt() {
+  return HomeWidgetSyncService(
+    settings: getIt<SettingsState>(),
+    roomState: getIt<RoomState>(),
+    nodeManagement: getIt<NodeManagementService>(),
+    roomPersistence: getIt.isRegistered<RoomPersistenceService>()
+        ? getIt<RoomPersistenceService>()
+        : null,
+  );
+}
+
 /// 后台/启动时刷新小部件（不阻塞 UI）。
 Future<void> refreshAndroidHomeWidgets() {
-  return HomeWidgetSyncService().syncAll();
+  return _homeWidgetSyncFromGetIt().syncAll();
 }
 
 /// 小组件后台回调：系统定时或点击刷新时重新拉取缓存。
@@ -203,5 +231,5 @@ Future<void> homeWidgetBackgroundCallback(Uri? uri) async {
     );
     getIt<SettingsState>().loadFromPersistence();
   }
-  await HomeWidgetSyncService().syncAll();
+  await _homeWidgetSyncFromGetIt().syncAll();
 }

@@ -21,6 +21,7 @@ class _ServersMainPageState extends State<ServersMainPage> {
   final _serverState = getIt<ServerState>();
   final _serverStatusState = getIt<ServerStatusState>();
   String? _lastServersFingerprint;
+  bool _pingActive = false;
 
   @override
   void dispose() {
@@ -47,23 +48,26 @@ class _ServersMainPageState extends State<ServersMainPage> {
     return AppColors.error;
   }
 
-  Widget _buildBody(BuildContext context) {
+  Widget _buildBody(BuildContext context, {required bool visible}) {
     return Watch((context) {
       final servers = _serverState.servers.value;
       final statuses = _serverStatusState.serverStatuses.value;
       final latencies = _serverStatusState.serverLatencies.value;
 
-      final fingerprint =
-          servers.map((s) => '${s.id}:${s.url}:${s.enable}').join('|');
-      if (_lastServersFingerprint != fingerprint) {
-        _lastServersFingerprint = fingerprint;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          _serverStatusState.startPeriodicCheck(
-            _serverState.servers.value,
-            AppConstants.serverPingInterval,
-          );
-        });
+      if (visible) {
+        final fingerprint =
+            servers.map((s) => '${s.id}:${s.url}:${s.enable}').join('|');
+        if (_lastServersFingerprint != fingerprint) {
+          _lastServersFingerprint = fingerprint;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            _serverStatusState.startPeriodicCheck(
+              _serverState.servers.value,
+              AppConstants.serverPingInterval,
+            );
+            _pingActive = true;
+          });
+        }
       }
 
       if (servers.isEmpty) {
@@ -271,8 +275,14 @@ class _ServersMainPageState extends State<ServersMainPage> {
 
   @override
   Widget build(BuildContext context) {
+    final visible = TickerMode.valuesOf(context).enabled;
+    if (!visible && _pingActive) {
+      _serverStatusState.stopPeriodicCheck();
+      _pingActive = false;
+      _lastServersFingerprint = null;
+    }
     return Scaffold(
-      body: _buildBody(context),
+      body: _buildBody(context, visible: visible),
       floatingActionButton: FloatingActionButton(
         heroTag: 'add_server',
         tooltip: '添加服务器',

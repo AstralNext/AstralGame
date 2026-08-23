@@ -4,11 +4,18 @@ import 'dart:io';
 import 'package:astral_game/config/home_widget_uris.dart';
 import 'package:astral_game/data/services/shell_navigation_service.dart';
 import 'package:astral_game/data/state/room_state.dart';
-import 'package:astral_game/di.dart';
 import 'package:home_widget/home_widget.dart';
 
 /// 处理从小部件启动 / 点击带来的 URI，切换 Tab 或选中房间。
 class HomeWidgetLaunchHandler {
+  HomeWidgetLaunchHandler({
+    required ShellNavigationService navigation,
+    required RoomState roomState,
+  })  : _navigation = navigation,
+        _roomState = roomState;
+
+  final ShellNavigationService _navigation;
+  final RoomState _roomState;
   StreamSubscription<Uri?>? _sub;
 
   Future<void> start() async {
@@ -29,7 +36,7 @@ class HomeWidgetLaunchHandler {
       return;
     }
 
-    final nav = getIt<ShellNavigationService>();
+    final nav = _navigation;
     final path = uri.path;
 
     if (path == HomeWidgetUris.pathMembers ||
@@ -41,7 +48,7 @@ class HomeWidgetLaunchHandler {
     if (path == HomeWidgetUris.pathRooms) {
       final idRaw = uri.queryParameters['id'];
       final code = uri.queryParameters['code'];
-      final roomState = getIt<RoomState>();
+      final roomState = _roomState;
       if (idRaw != null) {
         final id = int.tryParse(idRaw);
         if (id != null) {

@@ -5,7 +5,6 @@ import 'package:astral_game/config/constants.dart';
 import 'package:astral_game/data/models/enhanced_node_info.dart';
 import 'package:astral_game/data/services/app_settings_service.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
-import 'package:astral_game/di.dart';
 import 'package:flutter/services.dart';
 
 /// Android 悬浮窗：在线用户头像 / IP / 延迟。
@@ -66,9 +65,12 @@ class FloatingOverlayService {
   }
 
   /// 按设置开关与悬浮窗权限应用显示/隐藏并刷新数据。
-  Future<void> applyFromAppState() async {
+  Future<void> applyFromAppState({
+    required AppSettingsService settings,
+    required NodeManagementService nodes,
+  }) async {
     if (!isSupported) return;
-    final enabled = getIt<AppSettingsService>().isFloatingOverlayEnabled();
+    final enabled = settings.isFloatingOverlayEnabled();
     if (!enabled) {
       await hide();
       return;
@@ -78,7 +80,6 @@ class FloatingOverlayService {
       return;
     }
 
-    final nodes = getIt<NodeManagementService>();
     final connected = nodes.isRunning;
     final users = nodes.userNodes.value
         .where((n) => !n.hostname.startsWith(AppConstants.publicServerHostname))

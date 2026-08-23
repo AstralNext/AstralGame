@@ -95,6 +95,17 @@ class ServerState {
   }
 }
 
+/// 未占用且已启用的探测目标（禁用节点不发 ICMP）。
+List<ServerMod> serversEligibleForPing(
+  List<ServerMod> servers, {
+  Set<int> activeIds = const {},
+}) {
+  return [
+    for (final s in servers)
+      if (s.enable && !activeIds.contains(s.id)) s,
+  ];
+}
+
 class ServerStatusState {
   final serverStatuses = signal<Map<int, ServerStatus>>({});
   final serverLatencies = signal<Map<int, int?>>({});
@@ -123,32 +134,34 @@ class ServerStatusState {
       final Map<int, ServerStatus> newStatuses = {};
       final Map<int, int?> newLatencies = {};
 
-      final futures = servers.map((server) async {
+      for (final server in servers) {
         if (activeIds.contains(server.id)) {
           newStatuses[server.id] = ServerStatus.inUse;
           newLatencies[server.id] = null;
-          return;
+        } else if (!server.enable) {
+          newStatuses[server.id] = ServerStatus.unknown;
+          newLatencies[server.id] = null;
         }
+      }
 
-        final latency = await _checkServerLatency(server);
-        newLatencies[server.id] = latency;
-        newStatuses[server.id] =
+      final targets = serversEligibleForPing(servers, activeIds: activeIds);
+      List<int?> rtts = const [];
+      try {
+        rtts = await PingUtil.pingMany([for (final s in targets) s.url]);
+      } catch (_) {
+        rtts = List<int?>.filled(targets.length, null);
+      }
+      for (var i = 0; i < targets.length; i++) {
+        final latency = i < rtts.length ? rtts[i] : null;
+        newLatencies[targets[i].id] = latency;
+        newStatuses[targets[i].id] =
             latency != null ? ServerStatus.online : ServerStatus.offline;
-      });
+      }
 
-      await Future.wait(futures);
       serverStatuses.value = newStatuses;
       serverLatencies.value = newLatencies;
     } finally {
       _checking = false;
-    }
-  }
-
-  Future<int?> _checkServerLatency(ServerMod server) async {
-    try {
-      return await PingUtil.ping(server.url);
-    } catch (e) {
-      return null;
     }
   }
 

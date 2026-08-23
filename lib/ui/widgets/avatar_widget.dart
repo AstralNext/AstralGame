@@ -75,6 +75,8 @@ class AvatarWidget extends StatelessWidget {
                 fit: BoxFit.cover,
                 width: size,
                 height: size,
+                cacheWidth: (size * (MediaQuery.maybeOf(context)?.devicePixelRatio ?? 2)).round(),
+                cacheHeight: (size * (MediaQuery.maybeOf(context)?.devicePixelRatio ?? 2)).round(),
                 gaplessPlayback: true,
               ),
             )

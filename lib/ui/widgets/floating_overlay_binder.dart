@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:astral_game/data/services/app_settings_service.dart';
 import 'package:astral_game/data/services/floating_overlay_service.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
 import 'package:astral_game/data/state/settings_state.dart';
@@ -51,7 +52,10 @@ class _FloatingOverlayBinderState extends State<FloatingOverlayBinder>
   void _scheduleSync() {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 500), () {
-      _overlay.applyFromAppState();
+      _overlay.applyFromAppState(
+        settings: getIt<AppSettingsService>(),
+        nodes: getIt<NodeManagementService>(),
+      );
     });
   }
 

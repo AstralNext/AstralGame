@@ -1,7 +1,9 @@
 import 'package:astral_game/config/theme.dart';
-import 'package:astral_game/di.dart';
 import 'package:astral_game/data/services/home_widget_launch_handler.dart';
+import 'package:astral_game/data/services/shell_navigation_service.dart';
+import 'package:astral_game/data/state/room_state.dart';
 import 'package:astral_game/data/state/settings_state.dart';
+import 'package:astral_game/di.dart';
 import 'package:astral_game/ui/shell/shell.dart';
 import 'package:astral_game/ui/widgets/floating_overlay_binder.dart';
 import 'package:astral_game/ui/widgets/home_widget_refresh_binder.dart';
@@ -19,7 +21,10 @@ class AstralGameApp extends StatefulWidget {
 
 class _AstralGameAppState extends State<AstralGameApp> with WidgetsBindingObserver {
   bool _disposed = false;
-  final _widgetLaunchHandler = HomeWidgetLaunchHandler();
+  final _widgetLaunchHandler = HomeWidgetLaunchHandler(
+    navigation: getIt<ShellNavigationService>(),
+    roomState: getIt<RoomState>(),
+  );
 
   @override
   void initState() {

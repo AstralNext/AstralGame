@@ -4,21 +4,22 @@ import 'dart:io';
 import 'package:astral_game/data/models/game_assist_rules.dart';
 import 'package:astral_game/data/services/game_assist_rules_service.dart';
 import 'package:astral_game/data/services/windows_game_process.dart';
+import 'package:astral_game/data/services/windows_process_watch.dart';
 import 'package:astral_game/utils/logger.dart';
 import 'package:astral_rust_core/astral_rust_core.dart';
 import 'package:path/path.dart' as p;
 
 /// Windows 房间辅助：按进程名自动魔法墙 / 按 JSON 启动 TCP 转发。
 class RoomAssistService {
-  RoomAssistService(this._p2p, this._rules);
+  RoomAssistService(this._p2p, this._rules, this._processes);
 
   final P2PService _p2p;
   final GameAssistRulesService _rules;
+  final WindowsProcessWatch _processes;
 
   bool _magicWallStarted = false;
   final List<String> _appliedRuleIds = [];
   final Set<String> _appliedAppPaths = {};
-  Timer? _magicWallTimer;
   List<GameAssistMagicWallExe> _magicWallTargets = const [];
   String _magicWallGameId = '';
 
@@ -74,10 +75,11 @@ class RoomAssistService {
 
     _magicWallGameId = gameId;
     _magicWallTargets = targets;
-    _magicWallTimer = Timer.periodic(const Duration(seconds: 2), (_) {
-      unawaited(_tickMagicWall());
-    });
-    await _tickMagicWall();
+    _processes.subscribe(
+      key: this,
+      exeNames: [for (final t in targets) t.process],
+      onTick: _onProcesses,
+    );
     appLogger.i(
       '[RoomAssist] 魔法墙监视 exe=${[
         for (final t in targets) t.process,
@@ -85,22 +87,26 @@ class RoomAssistService {
     );
   }
 
-  Future<void> _tickMagicWall() async {
+  bool _applyingMagicWall = false;
+
+  void _onProcesses(List<WindowsGameProcess> procs) {
     if (!_magicWallStarted || _magicWallTargets.isEmpty) return;
-    final exeNames = [
-      for (final t in _magicWallTargets) t.process,
-    ];
-    final procs = await listWindowsGameProcesses(
-      exeNames: exeNames,
-      windowNeedles: const [],
-    );
+    unawaited(_applyMagicWall(procs));
+  }
+
+  Future<void> _applyMagicWall(List<WindowsGameProcess> procs) async {
+    if (!_magicWallStarted || _magicWallTargets.isEmpty || _applyingMagicWall) {
+      return;
+    }
+    _applyingMagicWall = true;
+    try {
     for (final proc in procs) {
       final path = proc.path.trim();
       if (path.isEmpty) continue;
       for (var t = 0; t < _magicWallTargets.length; t++) {
         final target = _magicWallTargets[t];
-        if (!_exeMatches(path, target.process) &&
-            !_exeMatches(proc.exe, target.process)) {
+        if (!windowsExeMatches(path, target.process) &&
+            !windowsExeMatches(proc.exe, target.process)) {
           continue;
         }
         final key =
@@ -148,21 +154,16 @@ class RoomAssistService {
         }
       }
     }
-  }
-
-  bool _exeMatches(String exe, String wantRaw) {
-    final got = p.basename(exe.trim().toLowerCase());
-    final stem = p.basenameWithoutExtension(got);
-    final want = p.basename(wantRaw.trim().toLowerCase());
-    if (want.isEmpty) return false;
-    return got == want || stem == p.basenameWithoutExtension(want);
+    } finally {
+      _applyingMagicWall = false;
+    }
   }
 
   Future<void> _stopMagicWallWatch() async {
-    _magicWallTimer?.cancel();
-    _magicWallTimer = null;
+    _processes.unsubscribe(this);
     _magicWallTargets = const [];
     _magicWallGameId = '';
+    _applyingMagicWall = false;
   }
 
   Future<void> _startForwards(

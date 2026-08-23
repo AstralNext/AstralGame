@@ -39,4 +39,6 @@ class AlcyWallpaperService {
     }
     return url;
   }
+
+  void close() => _client.close();
 }

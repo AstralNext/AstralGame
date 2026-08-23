@@ -12,13 +12,17 @@ import 'package:signals/signals_core.dart';
 /// 从远程加载游戏规则（目录 + 平台辅助）；失败时回退本地 asset。
 /// 仓库根或程序旁的 [testDirName] 里若有 JSON，优先用测试文件，不再拉线上。
 ///
-/// 启动时异步加载：先本地、再测试目录 / 远程，不阻塞 [runApp]。
+/// 启动时异步加载：本地 asset → 测试目录 → 磁盘 ETag 缓存 → 远程，不阻塞 [runApp]。
 class GameAssistRulesService {
   GameAssistRulesService({
     http.Client? client,
     List<Directory>? testRuleDirs,
+    Directory? cacheDir,
+    Future<String?> Function()? assetLoader,
   })  : _client = client ?? http.Client(),
-        _testRuleDirs = testRuleDirs;
+        _testRuleDirs = testRuleDirs,
+        _cacheDir = cacheDir,
+        _assetLoader = assetLoader;
 
   /// 线上规则。
   static const remoteUrl = kAstralGameRulesUrl;
@@ -29,11 +33,16 @@ class GameAssistRulesService {
   /// 测试覆盖目录名（工作目录或可执行文件旁）。
   static const testDirName = 'gamerules';
 
+  static const _cacheJsonName = 'gamerules-cache.json';
+  static const _cacheEtagName = 'gamerules-cache.etag';
+
   /// 相对路径图片的解析基准。
   static const mediaBaseUrl = kAstralGameMediaBaseUrl;
 
   final http.Client _client;
   final List<Directory>? _testRuleDirs;
+  final Directory? _cacheDir;
+  final Future<String?> Function()? _assetLoader;
 
   GameAssistRulesCatalog? _catalog;
   Future<GameAssistRulesCatalog>? _loadFuture;
@@ -59,10 +68,16 @@ class GameAssistRulesService {
       return _catalog!;
     }
 
-    // 3) 远程覆盖（后台；失败则保留 asset）。
-    final remoteRaw = await _fetchRemote();
-    if (remoteRaw != null) {
-      _applyRaw(remoteRaw, source: 'remote');
+    // 3) 上次远程成功结果（ETag 缓存），弱网也能用较新目录。
+    await _applyDiskCache();
+
+    // 4) 远程覆盖（If-None-Match；失败则保留 cache / asset）。
+    final remote = await _fetchRemote();
+    if (remote.notModified) {
+      appLogger.i('[GameAssistRules] 远程未变化 (304)');
+    } else if (remote.body != null) {
+      _applyRaw(remote.body!, source: 'remote');
+      await _writeDiskCache(remote.body!, remote.etag);
     }
 
     if (_catalog != null) return _catalog!;
@@ -196,26 +211,88 @@ class GameAssistRulesService {
     return 2;
   }
 
-  Future<String?> _fetchRemote() async {
+  Future<_RemoteRulesFetch> _fetchRemote() async {
     try {
+      final etag = await _readDiskEtag();
+      final headers = <String, String>{
+        if (etag != null && etag.isNotEmpty) 'If-None-Match': etag,
+      };
       final res = await _client
-          .get(Uri.parse(remoteUrl))
+          .get(Uri.parse(remoteUrl), headers: headers)
           .timeout(const Duration(seconds: 12));
+      if (res.statusCode == 304) {
+        return const _RemoteRulesFetch(notModified: true);
+      }
       if (res.statusCode < 200 || res.statusCode >= 300) {
         appLogger.w(
           '[GameAssistRules] 远程 HTTP ${res.statusCode}，保留本地目录',
         );
-        return null;
+        return const _RemoteRulesFetch();
       }
       appLogger.i('[GameAssistRules] 已从远程加载 $remoteUrl');
-      return utf8.decode(res.bodyBytes);
+      return _RemoteRulesFetch(
+        body: utf8.decode(res.bodyBytes),
+        etag: res.headers['etag'],
+      );
     } catch (e) {
       appLogger.w('[GameAssistRules] 远程加载失败: $e，保留本地目录');
+      return const _RemoteRulesFetch();
+    }
+  }
+
+  File? get _cacheJsonFile {
+    final dir = _cacheDir;
+    if (dir == null) return null;
+    return File(p.join(dir.path, _cacheJsonName));
+  }
+
+  File? get _cacheEtagFile {
+    final dir = _cacheDir;
+    if (dir == null) return null;
+    return File(p.join(dir.path, _cacheEtagName));
+  }
+
+  Future<void> _applyDiskCache() async {
+    final file = _cacheJsonFile;
+    if (file == null || !await file.exists()) return;
+    try {
+      _applyRaw(await file.readAsString(), source: 'cache');
+    } catch (e) {
+      appLogger.w('[GameAssistRules] 读取磁盘缓存失败: $e');
+    }
+  }
+
+  Future<void> _writeDiskCache(String body, String? etag) async {
+    final jsonFile = _cacheJsonFile;
+    if (jsonFile == null) return;
+    try {
+      await jsonFile.parent.create(recursive: true);
+      await jsonFile.writeAsString(body, flush: true);
+      final etagFile = _cacheEtagFile;
+      if (etagFile != null) {
+        await etagFile.writeAsString(etag?.trim() ?? '', flush: true);
+      }
+    } catch (e) {
+      appLogger.w('[GameAssistRules] 写入磁盘缓存失败: $e');
+    }
+  }
+
+  Future<String?> _readDiskEtag() async {
+    final file = _cacheEtagFile;
+    if (file == null || !await file.exists()) return null;
+    try {
+      final raw = (await file.readAsString()).trim();
+      return raw.isEmpty ? null : raw;
+    } catch (_) {
       return null;
     }
   }
 
   Future<String?> _loadAssetFallback() async {
+    final injected = _assetLoader;
+    if (injected != null) {
+      return injected();
+    }
     try {
       final raw = await rootBundle.loadString(assetPath);
       appLogger.i('[GameAssistRules] 使用本地 $assetPath');
@@ -263,4 +340,18 @@ class GameAssistRulesService {
     if (Platform.isLinux) return 'linux';
     return 'windows';
   }
+
+  void close() => _client.close();
+}
+
+class _RemoteRulesFetch {
+  const _RemoteRulesFetch({
+    this.body,
+    this.etag,
+    this.notModified = false,
+  });
+
+  final String? body;
+  final String? etag;
+  final bool notModified;
 }

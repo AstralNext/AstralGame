@@ -1,6 +1,5 @@
 import 'package:astral_game/config/app_theme_id.dart';
 import 'package:astral_game/data/state/settings_state.dart';
-import 'package:astral_game/di.dart';
 import 'package:flutter/material.dart';
 import 'package:signals/signals.dart';
 
@@ -31,14 +30,16 @@ class ThemeRevealState {
 
 /// 主题水滴揭示（与 [SettingsState.appThemeId] 配合）。
 class ThemeRevealController {
+  ThemeRevealController(this._settings);
+
+  final SettingsState _settings;
   final reveal = signal(const ThemeRevealState.idle());
 
   void beginReveal({required Offset origin, required AppThemeId newTheme}) {
-    final settings = getIt<SettingsState>();
-    final previous = settings.appThemeId.value;
+    final previous = _settings.appThemeId.value;
     if (previous == newTheme) return;
 
-    settings.appThemeId.value = newTheme;
+    _settings.appThemeId.value = newTheme;
     reveal.value = ThemeRevealState.revealing(
       origin: origin,
       previousThemeId: previous,

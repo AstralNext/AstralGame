@@ -67,8 +67,9 @@ class DashboardWideLayout extends StatelessWidget {
         children: [
           Expanded(
             flex: 6,
-            child: _buildMembersPane(
-              context,
+            child: _MembersPane(
+              nodeManagement: nodeManagement,
+              roomState: roomState,
               isRunning: isRunning,
               isLinking: isLinking,
             ),
@@ -76,28 +77,40 @@ class DashboardWideLayout extends StatelessWidget {
           const SizedBox(width: AppDimensions.sectionGap),
           Expanded(
             flex: 3,
-            child: _buildRoomPane(
-              context,
+            child: _RoomPane(
+              nodeManagement: nodeManagement,
+              roomState: roomState,
               isRunning: isRunning,
               isLinking: isLinking,
+              onCreateRoom: onCreateRoom,
+              onJoinRoom: onJoinRoom,
+              onShareRoom: onShareRoom,
+              onDisconnect: onDisconnect,
             ),
           ),
         ],
       );
     });
   }
+}
 
-  Widget _buildMembersPane(
-    BuildContext context, {
-    required bool isRunning,
-    required bool isLinking,
-  }) {
+class _MembersPane extends StatelessWidget {
+  const _MembersPane({
+    required this.nodeManagement,
+    required this.roomState,
+    required this.isRunning,
+    required this.isLinking,
+  });
+
+  final NodeManagementService nodeManagement;
+  final RoomState roomState;
+  final bool isRunning;
+  final bool isLinking;
+
+  @override
+  Widget build(BuildContext context) {
     final palette = context.astralPalette;
     final textTheme = Theme.of(context).textTheme;
-    final session = roomState.session.value;
-    final game = session == null ? null : GameCatalog.byId(session.gameId);
-    final title = [if (game != null) game.name, '成员'].join(' · ');
-    final nodes = isRunning ? nodeManagement.userNodes.value : const [];
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -110,43 +123,74 @@ class DashboardWideLayout extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              title,
-              style: textTheme.titleSmall?.copyWith(
-                color: palette.accent,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.2,
-              ),
-            ),
+            Watch((context) {
+              final session = roomState.session.value;
+              final game =
+                  session == null ? null : GameCatalog.byId(session.gameId);
+              final title = [if (game != null) game.name, '成员'].join(' · ');
+              return Text(
+                title,
+                style: textTheme.titleSmall?.copyWith(
+                  color: palette.accent,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.2,
+                ),
+              );
+            }),
             const SizedBox(height: 12),
             Expanded(
-              child: isLinking || nodes.isEmpty
-                  ? const DashboardMembersSkeleton()
-                  : UserListWidget(
-                      users: nodeManagement.userNodes.value,
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      isRoomHostOf: (node) {
-                        final s = roomState.session.value;
-                        if (s == null) return false;
-                        return nodeManagement.isRoomHostPeer(
-                          node.peerId,
-                          sessionIsHost: s.isHost,
-                          isCredentialPeer: node.isCredentialPeer,
-                        );
-                      },
-                    ),
+              child: Watch((context) {
+                final nodes =
+                    isRunning ? nodeManagement.userNodes.value : const [];
+                if (isLinking || nodes.isEmpty) {
+                  return const DashboardMembersSkeleton();
+                }
+                return UserListWidget(
+                  users: nodeManagement.userNodes.value,
+                  nodeManagement: nodeManagement,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  isRoomHostOf: (node) {
+                    final s = roomState.session.value;
+                    if (s == null) return false;
+                    return nodeManagement.isRoomHostPeer(
+                      node.peerId,
+                      sessionIsHost: s.isHost,
+                      isCredentialPeer: node.isCredentialPeer,
+                    );
+                  },
+                );
+              }),
             ),
           ],
         ),
       ),
     );
   }
+}
 
-  Widget _buildRoomPane(
-    BuildContext context, {
-    required bool isRunning,
-    required bool isLinking,
-  }) {
+class _RoomPane extends StatelessWidget {
+  const _RoomPane({
+    required this.nodeManagement,
+    required this.roomState,
+    required this.isRunning,
+    required this.isLinking,
+    required this.onCreateRoom,
+    required this.onJoinRoom,
+    required this.onShareRoom,
+    required this.onDisconnect,
+  });
+
+  final NodeManagementService nodeManagement;
+  final RoomState roomState;
+  final bool isRunning;
+  final bool isLinking;
+  final VoidCallback onCreateRoom;
+  final VoidCallback onJoinRoom;
+  final VoidCallback onShareRoom;
+  final VoidCallback onDisconnect;
+
+  @override
+  Widget build(BuildContext context) {
     return Watch((context) {
       final myIp = nodeManagement.myVirtualIpv4.value;
       final session = roomState.session.value;

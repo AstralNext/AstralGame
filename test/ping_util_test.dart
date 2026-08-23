@@ -3,6 +3,8 @@ import 'package:astral_game/utils/ping_util.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  tearDownAll(PingUtil.close);
+
   test('pingHostOf from EasyTier URI', () {
     expect(pingHostOf('tcp://192.168.1.10:11010'), '192.168.1.10');
     expect(pingHostOf('udp://example.com:11010'), 'example.com');
@@ -35,5 +37,16 @@ void main() {
   test('icmp echo localhost', () async {
     final ms = await PingUtil.pingHost('127.0.0.1');
     expect(ms, isNotNull);
+  });
+
+  test('pingMany empty and loopback batch', () async {
+    expect(await PingUtil.pingMany(const []), isEmpty);
+    final rtts = await PingUtil.pingMany(const [
+      '127.0.0.1',
+      'tcp://127.0.0.1:11010',
+    ]);
+    expect(rtts, hasLength(2));
+    expect(rtts[0], isNotNull);
+    expect(rtts[1], isNotNull);
   });
 }

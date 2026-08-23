@@ -1,5 +1,11 @@
-import 'package:get_it/get_it.dart';
 import 'package:logger/logger.dart';
 
-/// 获取 Logger 实例
-Logger get appLogger => GetIt.I<Logger>();
+/// 默认关闭输出，避免单测未装配 logger 时刷屏。
+Logger appLogger = Logger(
+  level: Level.off,
+  printer: SimplePrinter(colors: false, printTime: false),
+);
+
+void setAppLogger(Logger logger) {
+  appLogger = logger;
+}

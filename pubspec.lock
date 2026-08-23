@@ -61,7 +61,7 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: main
+      ref: "39cbe5b6d794b3949cc1d4f6f94451613eee385b"
       resolved-ref: "39cbe5b6d794b3949cc1d4f6f94451613eee385b"
       url: "https://github.com/AstralNext/astral_rust_core.git"
     source: git
@@ -218,6 +218,14 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "7.0.1"
+  file_picker:
+    dependency: "direct main"
+    description:
+      name: file_picker
+      sha256: ab13ae8ef5580a411c458d6207b6774a6c237d77ac37011b13994879f68a8810
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "8.3.7"
   file_selector_linux:
     dependency: transitive
     description:
@@ -1090,7 +1098,7 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: main
+      ref: "529771eb5b58704f5b03b88fc6c39e6307b05837"
       resolved-ref: "529771eb5b58704f5b03b88fc6c39e6307b05837"
       url: "https://github.com/AstralNext/vpn_service_plugin.git"
     source: git
