@@ -39,12 +39,9 @@ class DashboardWideLayout extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Watch((context) {
-      final isRunning = nodeManagement.isRunning;
       final session = roomState.session.value;
       final paused = roomState.pausedHost.value;
-      final linkingFlag = getIt<ConnectionService>().isLinking.value;
       final showRoom = session != null;
-      final isLinking = showRoom && (linkingFlag || !isRunning);
 
       if (!showRoom) {
         return Padding(
@@ -70,8 +67,6 @@ class DashboardWideLayout extends StatelessWidget {
             child: _MembersPane(
               nodeManagement: nodeManagement,
               roomState: roomState,
-              isRunning: isRunning,
-              isLinking: isLinking,
             ),
           ),
           const SizedBox(width: AppDimensions.sectionGap),
@@ -80,8 +75,6 @@ class DashboardWideLayout extends StatelessWidget {
             child: _RoomPane(
               nodeManagement: nodeManagement,
               roomState: roomState,
-              isRunning: isRunning,
-              isLinking: isLinking,
               onCreateRoom: onCreateRoom,
               onJoinRoom: onJoinRoom,
               onShareRoom: onShareRoom,
@@ -98,14 +91,10 @@ class _MembersPane extends StatelessWidget {
   const _MembersPane({
     required this.nodeManagement,
     required this.roomState,
-    required this.isRunning,
-    required this.isLinking,
   });
 
   final NodeManagementService nodeManagement;
   final RoomState roomState;
-  final bool isRunning;
-  final bool isLinking;
 
   @override
   Widget build(BuildContext context) {
@@ -139,27 +128,38 @@ class _MembersPane extends StatelessWidget {
             }),
             const SizedBox(height: 12),
             Expanded(
-              child: Watch((context) {
-                final nodes =
-                    isRunning ? nodeManagement.userNodes.value : const [];
-                if (isLinking || nodes.isEmpty) {
-                  return const DashboardMembersSkeleton();
-                }
-                return UserListWidget(
-                  users: nodeManagement.userNodes.value,
-                  nodeManagement: nodeManagement,
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  isRoomHostOf: (node) {
-                    final s = roomState.session.value;
-                    if (s == null) return false;
-                    return nodeManagement.isRoomHostPeer(
-                      node.peerId,
-                      sessionIsHost: s.isHost,
-                      isCredentialPeer: node.isCredentialPeer,
-                    );
-                  },
-                );
-              }),
+              child: Watch(
+                (context) {
+                  final isRunning = nodeManagement.isRunning;
+                  final linkingFlag =
+                      getIt<ConnectionService>().isLinking.value;
+                  final isLinking = roomState.session.value != null &&
+                      (linkingFlag || !isRunning);
+                  // 无条件读取，确保 computed 始终订阅成员列表。
+                  final nodes = nodeManagement.userNodes.value;
+                  if (!isRunning || isLinking || nodes.isEmpty) {
+                    return const DashboardMembersSkeleton();
+                  }
+                  return UserListWidget(
+                    users: nodes,
+                    nodeManagement: nodeManagement,
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    isRoomHostOf: (node) {
+                      final s = roomState.session.value;
+                      if (s == null) return false;
+                      return nodeManagement.isRoomHostPeer(
+                        node.peerId,
+                        sessionIsHost: s.isHost,
+                        isCredentialPeer: node.isCredentialPeer,
+                      );
+                    },
+                  );
+                },
+                dependencies: [
+                  nodeManagement.userNodes,
+                  nodeManagement.currentInstanceId,
+                ],
+              ),
             ),
           ],
         ),
@@ -172,8 +172,6 @@ class _RoomPane extends StatelessWidget {
   const _RoomPane({
     required this.nodeManagement,
     required this.roomState,
-    required this.isRunning,
-    required this.isLinking,
     required this.onCreateRoom,
     required this.onJoinRoom,
     required this.onShareRoom,
@@ -182,8 +180,6 @@ class _RoomPane extends StatelessWidget {
 
   final NodeManagementService nodeManagement;
   final RoomState roomState;
-  final bool isRunning;
-  final bool isLinking;
   final VoidCallback onCreateRoom;
   final VoidCallback onJoinRoom;
   final VoidCallback onShareRoom;
@@ -192,6 +188,10 @@ class _RoomPane extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Watch((context) {
+      final isRunning = nodeManagement.isRunning;
+      final linkingFlag = getIt<ConnectionService>().isLinking.value;
+      final isLinking =
+          roomState.session.value != null && (linkingFlag || !isRunning);
       final myIp = nodeManagement.myVirtualIpv4.value;
       final session = roomState.session.value;
       return Column(

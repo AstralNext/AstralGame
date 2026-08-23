@@ -1,4 +1,9 @@
-"""Regenerate anti-aliased logo.png and multi-size Windows ICO via SDF."""
+"""Regenerate anti-aliased logo.png and multi-size Windows ICO via SDF.
+
+Windows Explorer often shows the 48–256 frames; AA width is expressed in
+**screen pixels** (then converted to canvas units) so edges stay soft at every
+size. Rounded-corner alpha matches the general Astral Windows ICO (~23/256).
+"""
 
 from __future__ import annotations
 
@@ -24,6 +29,8 @@ BARS = (
     (1, 2, 13.5),
 )
 CANVAS = 512.0
+# Match general Astral windows/runner/resources/app_icon.ico (~23px @ 256).
+CORNER_RADIUS_FRAC = 23.0 / 256.0
 ICO_SIZES = (16, 24, 32, 48, 64, 128, 256)
 
 
@@ -40,40 +47,105 @@ def sdf_capsule(
     return np.hypot(x - (ax + t * dx), y - (ay + t * dy)) - r
 
 
-def coverage(size: int, aa: float) -> np.ndarray:
-    scale = size / CANVAS
-    yy, xx = np.mgrid[0:size, 0:size].astype(np.float32)
-    xx = (xx + 0.5) / scale
-    yy = (yy + 0.5) / scale
-    sdf = np.full((size, size), 1e6, dtype=np.float32)
+def sdf_rounded_rect(
+    x: np.ndarray, y: np.ndarray, size: float, radius: float
+) -> np.ndarray:
+    """SDF of axis-aligned rounded square covering [0, size)²."""
+    half = size * 0.5
+    r = min(radius, half - 1e-3)
+    qx = np.abs(x - half) - (half - r)
+    qy = np.abs(y - half) - (half - r)
+    outside = np.hypot(np.maximum(qx, 0.0), np.maximum(qy, 0.0))
+    inside = np.minimum(np.maximum(qx, qy), 0.0)
+    return outside + inside - r
+
+
+def mark_sdf(xx: np.ndarray, yy: np.ndarray) -> np.ndarray:
+    sdf = np.full(xx.shape, 1e6, dtype=np.float32)
     for cx, cy, r in CIRCLES:
         sdf = np.minimum(sdf, sdf_circle(xx, yy, cx, cy, r))
     for i, j, br in BARS:
         ax, ay, _ = CIRCLES[i]
         bx, by, _ = CIRCLES[j]
         sdf = np.minimum(sdf, sdf_capsule(xx, yy, ax, ay, bx, by, br))
-    return np.clip(0.5 - sdf / aa, 0.0, 1.0)
+    return sdf
 
 
-def aa_for(size: int) -> float:
-    # Wider coverage on large black/white icons; tighter on 16–24 so they stay crisp.
-    if size <= 24:
-        return 1.05
-    if size <= 48:
-        return 1.25
+def coverage_from_sdf(sdf: np.ndarray, aa_canvas: float) -> np.ndarray:
+    return np.clip(0.5 - sdf / aa_canvas, 0.0, 1.0)
+
+
+def aa_canvas_for(size: int) -> float:
+    """AA soft-edge width in canvas units ≈ target screen pixels."""
+    # Black-on-white marks need a slightly wider ramp than light-on-color icons
+    # or Explorer shows staircase edges, especially at 48–128.
+    if size <= 16:
+        px = 2.1
+    elif size <= 24:
+        px = 1.9
+    elif size <= 48:
+        px = 1.7
+    elif size <= 128:
+        px = 1.55
+    else:
+        px = 1.4
+    return px * (CANVAS / size)
+
+
+def supersample_factor(size: int) -> int:
+    if size <= 32:
+        return 8
+    if size <= 64:
+        return 4
     if size <= 128:
-        return 1.45
-    return 1.65
+        return 2
+    return 1
 
 
-def to_rgba(cover: np.ndarray) -> Image.Image:
+def render_mark_cover(size: int) -> np.ndarray:
+    """Coverage of the white mark in [0, 1], supersampled then box-downsampled."""
+    factor = supersample_factor(size)
+    hi = size * factor
+    scale = hi / CANVAS
+    yy, xx = np.mgrid[0:hi, 0:hi].astype(np.float32)
+    xx = (xx + 0.5) / scale
+    yy = (yy + 0.5) / scale
+    # AA width is in canvas units for the *final* size. Rendering at `hi` uses the
+    # same canvas space, so do NOT divide by factor — box-downsampling then yields
+    # ≈ aa_canvas_for(size) screen pixels of soft edge.
+    cover = coverage_from_sdf(mark_sdf(xx, yy), aa_canvas_for(size))
+    if factor == 1:
+        return cover.astype(np.float32)
+    reshaped = cover.reshape(size, factor, size, factor)
+    return reshaped.mean(axis=(1, 3)).astype(np.float32)
+
+
+def render_corner_alpha(size: int) -> np.ndarray:
+    """Soft alpha mask for rounded square (1 = opaque interior)."""
+    radius = CORNER_RADIUS_FRAC * size
+    yy, xx = np.mgrid[0:size, 0:size].astype(np.float32)
+    xx = xx + 0.5
+    yy = yy + 0.5
+    sdf = sdf_rounded_rect(xx, yy, float(size), radius)
+    # ~1 px AA on the corner silhouette.
+    return coverage_from_sdf(sdf, 1.15).astype(np.float32)
+
+
+def render(size: int, *, rounded: bool) -> Image.Image:
+    cover = render_mark_cover(size)
+    # White mark on black: gray = coverage. Soft edge = intermediate gray.
     gray = np.clip(cover * 255.0 + 0.5, 0, 255).astype(np.uint8)
-    alpha = np.full_like(gray, 255)
+    if rounded:
+        alpha = np.clip(render_corner_alpha(size) * 255.0 + 0.5, 0, 255).astype(
+            np.uint8
+        )
+        # Outside the rounded rect keep RGB black so premultiplied-ish scaling
+        # in Explorer does not fringe white into transparent corners.
+        mask = alpha.astype(np.float32) / 255.0
+        gray = np.clip(gray.astype(np.float32) * mask + 0.5, 0, 255).astype(np.uint8)
+    else:
+        alpha = np.full((size, size), 255, dtype=np.uint8)
     return Image.fromarray(np.stack([gray, gray, gray, alpha], axis=-1))
-
-
-def render(size: int) -> Image.Image:
-    return to_rgba(coverage(size, aa_for(size)))
 
 
 def _dib_bytes(im: Image.Image) -> bytes:
@@ -104,7 +176,7 @@ def save_ico(path: Path) -> None:
     # 32-bit BMP DIB for every size so Windows GDI/Explorer can pick 16–256 natively.
     encoded: list[tuple[int, bytes]] = []
     for size in ICO_SIZES:
-        frame = render(size)
+        frame = render(size, rounded=True)
         blob = _dib_bytes(frame)
         encoded.append((size, blob))
     count = len(encoded)
@@ -120,7 +192,8 @@ def save_ico(path: Path) -> None:
 
 
 def main() -> None:
-    logo = render(512)
+    # Square logo asset (launcher / in-app); ICO gets rounded corners for desktop.
+    logo = render(512, rounded=False)
     LOGO_OUT.parent.mkdir(parents=True, exist_ok=True)
     logo.save(LOGO_OUT, format="PNG", optimize=True)
     save_ico(ICO_ASSETS)

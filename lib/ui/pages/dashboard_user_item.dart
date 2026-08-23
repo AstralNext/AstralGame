@@ -49,8 +49,8 @@ class _DashboardUserItemState extends State<DashboardUserItem> {
     final os = OsPresentation.forNode(node);
     final network = NetworkPresentation.fromWire(node.peerNetwork);
     final firewall = FirewallPresentation.fromWire(node.peerFirewall);
-    final versionNumber = PlatformVersionParser.getVersionNumber(node.baseInfo.version);
-
+    final versionNumber =
+        PlatformVersionParser.getVersionNumber(node.baseInfo.version);
     final peerEnvLine = _peerClientEnvLabel(node);
 
     return RepaintBoundary(

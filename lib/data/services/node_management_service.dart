@@ -11,6 +11,7 @@ import 'package:astral_game/config/constants.dart';
 import 'package:astral_rust_core/p2p_service.dart';
 
 import '../models/enhanced_node_info.dart';
+import '../models/local_self_nodes.dart';
 import '../models/peer_link_metrics.dart';
 import 'app_settings_service.dart';
 import 'connectivity_status_service.dart';
@@ -62,8 +63,8 @@ class NodeManagementService {
   /// 当前用户名
   final currentUsername = signal<String>('');
 
-  /// 本机的虚拟网 IPv4（不带 CIDR）。轮询时从 `userNodes` 中取 peer_id=0 的
-  /// 哨兵节点的 ipv4。未连接 / 尚未拿到地址 / DHCP 未分配时为空字符串。
+  /// 本机的虚拟网 IPv4（不带 CIDR）。由规范化后的本机哨兵行推导，
+  /// 与成员列表同一数据源，避免左右栏 IP 状态分叉。
   final myVirtualIpv4 = signal<String>('');
 
   final Map<int, Signal<PeerLinkMetrics>> _linkMetrics = {};
@@ -96,6 +97,8 @@ class NodeManagementService {
 
   bool _pollInFlight = false;
   int _pollGeneration = 0;
+  /// 防止 `_refreshLocalEnvInUserList` 用过期快照盖掉正在写入的 poll 结果。
+  int _nodesEpoch = 0;
 
   /// 稳态轮询：成员进出可接受约 2s 延迟；未拿到虚拟 IP 时更快探。
   static const Duration _pollingInterval = Duration(seconds: 2);
@@ -130,10 +133,10 @@ class NodeManagementService {
     _myPeerId = null;
     _noIpSince = DateTime.now();
     _lastNoIpWarnAt = null;
+    _nodesEpoch++;
+    userNodes.value = [];
+    _clearLinkMetrics();
     myVirtualIpv4.value = '';
-    // 后台异步取本机 peer_id，不阻塞 polling 启动；取到之前 polling 已经会用
-    // `peerId == 0` 这个守卫挡掉合成本机节点。
-    unawaited(_refreshMyPeerId(instanceId));
     _bindEnvListeners();
     if (Platform.isWindows && _firewall != null) {
       unawaited(_firewall.refreshPrivateProfile());
@@ -146,8 +149,16 @@ class NodeManagementService {
         },
       );
     }
-    _startPolling(instanceId);
+    // 先拿到真实本机 peer_id，再开轮询：否则 routes 里的本机真实 id
+    // 会被当成「远端成员」，和 peer_id=0 哨兵各显示一行且 IP 可能不一致。
+    unawaited(_startAfterPeerIdReady(instanceId));
     appLogger.i('[NodeManagementService] 已启动，实例ID: $instanceId');
+  }
+
+  Future<void> _startAfterPeerIdReady(String instanceId) async {
+    await _refreshMyPeerId(instanceId);
+    if (currentInstanceId.value != instanceId) return;
+    _startPolling(instanceId);
   }
 
   /// 停止节点管理
@@ -247,12 +258,14 @@ class NodeManagementService {
   }
 
   void _refreshLocalEnvInUserList() {
+    final epoch = _nodesEpoch;
     final nodes = userNodes.value;
     if (nodes.isEmpty) return;
     final updated = nodes.map((n) {
       if (!_isLocalPeer(n.peerId)) return n;
       return _enrichLocalNode(n);
     }).toList();
+    if (epoch != _nodesEpoch) return;
     if (!sameUserNodesUiSnapshot(nodes, updated)) {
       userNodes.value = updated;
     }
@@ -312,20 +325,34 @@ class NodeManagementService {
       final normalized = newNodes.values.toList()
         ..sort((a, b) => a.peerId.compareTo(b.peerId));
 
-      final activePeerIds = normalized.map((n) => n.peerId).toSet();
+      // 合并 peer_id=0 哨兵与真实本机 peer，保证成员列表只有一条本机，
+      // 且该行携带两侧中有效的虚拟 IPv4（单一数据源）。
+      final published = collapseLocalSelfNodes(
+        normalized,
+        isLocalPeer: _isLocalPeer,
+        canonicalPeerId: _localSyntheticPeerId,
+      ).map((n) {
+        if (!_isLocalPeer(n.peerId)) return n;
+        return _enrichLocalNode(n);
+      }).toList();
+
+      final activePeerIds = published.map((n) => n.peerId).toSet();
       _peerInfoFetchStartedAt.removeWhere((id, _) => !activePeerIds.contains(id));
 
-      final prevUsers = userNodes.value;
-      _syncLinkMetrics(normalized, prune: false);
-      if (!sameUserNodesUiSnapshot(prevUsers, normalized)) {
-        userNodes.value = normalized;
-      }
-      _pruneLinkMetrics(normalized);
+      final myIp =
+          virtualIpv4FromNodes(published, isLocalPeer: _isLocalPeer) ?? '';
 
-      // 本机虚拟 IP：优先取 `astral_rust_core` 合成的本机哨兵节点（peer_id=0）
-      // 的 ipv4；个别状态下 EasyTier 的 routes 表里也可能直接给本机一条
-      // 真实 peer_id 的条目，做一个兜底匹配。任意一种都拿不到时清空。
-      final myIp = _resolveMyVirtualIpv4(normalized);
+      final prevUsers = userNodes.value;
+      _nodesEpoch++;
+      final epoch = _nodesEpoch;
+      _syncLinkMetrics(published, prune: false);
+      if (!sameUserNodesUiSnapshot(prevUsers, published)) {
+        if (epoch == _nodesEpoch) {
+          userNodes.value = published;
+        }
+      }
+      _pruneLinkMetrics(published);
+
       if (myIp != myVirtualIpv4.value) {
         final prev = myVirtualIpv4.value;
         myVirtualIpv4.value = myIp;
@@ -334,20 +361,20 @@ class NodeManagementService {
           '${prev.isEmpty ? '(空)' : prev} -> ${myIp.isEmpty ? '(空)' : myIp}',
         );
       }
-      _trackMissingVirtualIp(myIp, normalized);
+      _trackMissingVirtualIp(myIp, published);
 
       if (_verbosePollLogs) {
         // 每秒打印“本次实际获取到的节点列表”（非常刷屏）
-        final nodesPreview = normalized
+        final nodesPreview = published
             .map((n) => '${n.peerId}:${n.hostname}:${n.ipv4.split('/').first}')
             .join(', ');
         appLogger.d(
-          '[NodeManagementService] poll users(total=${normalized.length}, rawTotal=$newTotalNodes) [$nodesPreview]',
+          '[NodeManagementService] poll users(total=${published.length}, rawTotal=$newTotalNodes) [$nodesPreview]',
         );
       }
 
       // 拉取对端资料（昵称/头像/客户端环境）：节流，避免每秒对每个 peer 再打一遍 RPC 导致列表疯狂重建。
-      for (final n in normalized) {
+      for (final n in published) {
         _maybeFetchNodeInfo(n);
       }
     } catch (e, stackTrace) {
@@ -370,20 +397,6 @@ class NodeManagementService {
   bool isRoomHostPeer(int peerId, {required bool sessionIsHost, required bool isCredentialPeer}) {
     if (sessionIsHost) return _isLocalPeer(peerId);
     return false;
-  }
-
-  /// 从节点列表里挑出"本机"的虚拟 IPv4（去掉 CIDR 后缀），找不到返回空串。
-  String _resolveMyVirtualIpv4(List<EnhancedNodeInfo> nodes) {
-    EnhancedNodeInfo? candidate;
-    for (final n in nodes) {
-      if (!_isLocalPeer(n.peerId)) continue;
-      // 优先选有合法 IPv4 的本机条目；若全都没有，至少返回第一条本机
-      if (n.hasValidIpv4) return n.ipv4.split('/').first.trim();
-      candidate ??= n;
-    }
-    if (candidate == null) return '';
-    final raw = candidate.ipv4.split('/').first.trim();
-    return raw == '0.0.0.0' ? '' : raw;
   }
 
   /// 连接后长时间无虚拟 IP 时打告警，并带上节点摘要，方便对照内核日志。

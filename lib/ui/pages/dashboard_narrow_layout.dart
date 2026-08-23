@@ -1,6 +1,5 @@
 import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/config/constants.dart';
-import 'package:astral_game/data/models/enhanced_node_info.dart';
 import 'package:astral_game/data/models/game_catalog.dart';
 import 'package:astral_game/data/services/connection_service.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
@@ -120,7 +119,6 @@ class DashboardNarrowLayout extends StatelessWidget {
               child: _MembersBlock(
                 roomState: roomState,
                 nodeManagement: nodeManagement,
-                isRunning: isRunning,
                 forceSkeleton: isLinking,
               ),
             ),
@@ -225,61 +223,64 @@ class _MembersBlock extends StatelessWidget {
   const _MembersBlock({
     required this.roomState,
     required this.nodeManagement,
-    required this.isRunning,
     this.forceSkeleton = false,
   });
 
   final RoomState roomState;
   final NodeManagementService nodeManagement;
-  final bool isRunning;
   final bool forceSkeleton;
 
   @override
   Widget build(BuildContext context) {
-    return Watch((context) {
-      final session = roomState.session.value;
-      final game = session == null ? null : GameCatalog.byId(session.gameId);
-      final title = [
-        if (game != null) game.displayName,
-        '成员',
-      ].join(' · ');
-      final nodes = isRunning
-          ? nodeManagement.userNodes.value
-          : const <EnhancedNodeInfo>[];
+    return Watch(
+      (context) {
+        final session = roomState.session.value;
+        final game = session == null ? null : GameCatalog.byId(session.gameId);
+        final title = [
+          if (game != null) game.displayName,
+          '成员',
+        ].join(' · ');
+        final isRunning = nodeManagement.isRunning;
+        final nodes = nodeManagement.userNodes.value;
 
-      if (forceSkeleton || nodes.isEmpty) {
+        if (forceSkeleton || !isRunning || nodes.isEmpty) {
+          return DashboardListSection(
+            title: title,
+            useCard: false,
+            child: const DashboardMembersSkeleton(),
+          );
+        }
+
         return DashboardListSection(
           title: title,
-          useCard: false,
-          child: const DashboardMembersSkeleton(),
-        );
-      }
-
-      return DashboardListSection(
-        title: title,
-        count: nodes.length,
-        child: Column(
-          children: [
-            for (var i = 0; i < nodes.length; i++) ...[
-              if (i > 0) const Divider(height: 1, indent: 56),
-              DashboardUserItem(
-                key: ValueKey<int>(nodes[i].peerId),
-                node: nodes[i],
-                nodeManagement: nodeManagement,
-                grouped: true,
-                index: i,
-                count: nodes.length,
-                isRoomHost: session != null &&
-                    nodeManagement.isRoomHostPeer(
-                      nodes[i].peerId,
-                      sessionIsHost: session.isHost,
-                      isCredentialPeer: nodes[i].isCredentialPeer,
-                    ),
-              ),
+          count: nodes.length,
+          child: Column(
+            children: [
+              for (var i = 0; i < nodes.length; i++) ...[
+                if (i > 0) const Divider(height: 1, indent: 56),
+                DashboardUserItem(
+                  key: ValueKey<int>(nodes[i].peerId),
+                  node: nodes[i],
+                  nodeManagement: nodeManagement,
+                  grouped: true,
+                  index: i,
+                  count: nodes.length,
+                  isRoomHost: session != null &&
+                      nodeManagement.isRoomHostPeer(
+                        nodes[i].peerId,
+                        sessionIsHost: session.isHost,
+                        isCredentialPeer: nodes[i].isCredentialPeer,
+                      ),
+                ),
+              ],
             ],
-          ],
-        ),
-      );
-    });
+          ),
+        );
+      },
+      dependencies: [
+        nodeManagement.userNodes,
+        nodeManagement.currentInstanceId,
+      ],
+    );
   }
 }
