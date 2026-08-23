@@ -23,7 +23,7 @@ body:
     attributes:
       label: 客户端版本
       description: 设置页或关于里能看到。
-      placeholder: 1.0.39
+      placeholder: 1.0.40
     validations:
       required: true
 

@@ -2,7 +2,7 @@ name: astral_game
 description: "Astral Game Client"
 publish_to: 'none'
 
-version: 1.0.39
+version: 1.0.40
 
 environment:
   sdk: ^3.8.0
@@ -79,4 +79,24 @@ flutter:
     - assets/logo.png
     - assets/icon.ico
     - assets/games/
+    - assets/games/ark/
+    - assets/games/dont_starve_together/
+    - assets/games/factorio/
+    - assets/games/forged_alliance/
+    - assets/games/left_4_dead/
+    - assets/games/left_4_dead_2/
+    - assets/games/mindustry/
+    - assets/games/minecraft/
+    - assets/games/palworld/
+    - assets/games/payday_the_heist/
+    - assets/games/project_zomboid/
+    - assets/games/raft/
+    - assets/games/rust/
+    - assets/games/satisfactory/
+    - assets/games/seven_days_to_die/
+    - assets/games/stardew_valley/
+    - assets/games/sudden_strike_II/
+    - assets/games/terraria/
+    - assets/games/v_rising/
+    - assets/games/valheim/
     - assets/scenery/

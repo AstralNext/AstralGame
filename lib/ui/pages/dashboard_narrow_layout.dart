@@ -240,7 +240,7 @@ class _MembersBlock extends StatelessWidget {
       final session = roomState.session.value;
       final game = session == null ? null : GameCatalog.byId(session.gameId);
       final title = [
-        if (game != null) game.name,
+        if (game != null) game.displayName,
         '成员',
       ].join(' · ');
       final nodes = isRunning

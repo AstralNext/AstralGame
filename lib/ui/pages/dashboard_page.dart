@@ -9,6 +9,7 @@ import 'package:astral_game/config/constants.dart';
 import 'package:astral_game/di.dart';
 import 'package:astral_game/ui/pages/dashboard_narrow_layout.dart';
 import 'package:astral_game/ui/pages/dashboard_wide_layout.dart';
+import 'package:astral_game/ui/widgets/create_room_dialog.dart';
 import 'package:astral_game/utils/room_share.dart';
 import 'package:astral_game/utils/room_share_actions.dart';
 import 'package:flutter/material.dart';
@@ -266,248 +267,25 @@ class _DashboardPageState extends State<DashboardPage> {
       );
       return;
     }
-    var selected = catalog.first;
-    final nameController = TextEditingController();
-    final searchController = TextEditingController();
-    var query = '';
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        final maxH = MediaQuery.sizeOf(context).height * 0.55;
-        return StatefulBuilder(
-          builder: (context, setState) {
-            final q = query.trim().toLowerCase();
-            final filtered = q.isEmpty
-                ? catalog
-                : catalog
-                    .where((g) =>
-                        g.name.toLowerCase().contains(q) ||
-                        g.id.toLowerCase().contains(q) ||
-                        g.description.toLowerCase().contains(q))
-                    .toList(growable: false);
-            final selectionValid =
-                filtered.any((g) => g.id == selected.id);
-
-            return AlertDialog(
-              title: const Text('创建房间'),
-              content: SizedBox(
-                width: 380,
-                height: maxH.clamp(320.0, 480.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    TextField(
-                      controller: searchController,
-                      textInputAction: TextInputAction.search,
-                      decoration: const InputDecoration(
-                        labelText: '搜索游戏',
-                        hintText: '名称或 id',
-                        prefixIcon: Icon(Icons.search),
-                        isDense: true,
-                      ),
-                      onChanged: (v) {
-                        setState(() {
-                          query = v;
-                          final qq = v.trim().toLowerCase();
-                          final list = qq.isEmpty
-                              ? catalog
-                              : catalog
-                                  .where((g) =>
-                                      g.name.toLowerCase().contains(qq) ||
-                                      g.id.toLowerCase().contains(qq) ||
-                                      g.description.toLowerCase().contains(qq))
-                                  .toList(growable: false);
-                          if (list.isNotEmpty &&
-                              !list.any((g) => g.id == selected.id)) {
-                            selected = list.first;
-                          }
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      '选择游戏',
-                      style: Theme.of(context).textTheme.labelLarge,
-                    ),
-                    const SizedBox(height: 8),
-                    Expanded(
-                      child: filtered.isEmpty
-                          ? Center(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    '没有匹配的游戏',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodyMedium
-                                        ?.copyWith(
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .onSurfaceVariant,
-                                        ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  FilledButton.tonalIcon(
-                                    onPressed: () => _openGameAdaptIssue(
-                                      searchController.text,
-                                    ),
-                                    icon: const Icon(
-                                      Icons.open_in_new,
-                                      size: 18,
-                                    ),
-                                    label: const Text('请求适配'),
-                                  ),
-                                ],
-                              ),
-                            )
-                          : ListView.separated(
-                              itemCount: filtered.length,
-                              separatorBuilder: (context, index) =>
-                                  const SizedBox(height: 6),
-                              itemBuilder: (context, index) {
-                                final g = filtered[index];
-                                final selectedNow = selected.id == g.id;
-                                return Material(
-                                  color: selectedNow
-                                      ? Theme.of(context)
-                                          .colorScheme
-                                          .primaryContainer
-                                          .withValues(alpha: 0.55)
-                                      : Theme.of(context)
-                                          .colorScheme
-                                          .surfaceContainerHighest
-                                          .withValues(alpha: 0.35),
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: InkWell(
-                                    borderRadius: BorderRadius.circular(12),
-                                    onTap: () =>
-                                        setState(() => selected = g),
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                        vertical: 10,
-                                      ),
-                                      child: Row(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          if (g.hasGridAsset)
-                                            GameGridCover(
-                                              game: g,
-                                              width: 40,
-                                              height: 60,
-                                              borderRadius: 8,
-                                            )
-                                          else
-                                            GameLogo(game: g, size: 40),
-                                          const SizedBox(width: 12),
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  g.name,
-                                                  style: Theme.of(context)
-                                                      .textTheme
-                                                      .titleSmall
-                                                      ?.copyWith(
-                                                        fontWeight:
-                                                            FontWeight.w600,
-                                                      ),
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
-                                                if (g.description
-                                                    .isNotEmpty) ...[
-                                                  const SizedBox(height: 2),
-                                                  Text(
-                                                    g.description,
-                                                    style: Theme.of(context)
-                                                        .textTheme
-                                                        .bodySmall
-                                                        ?.copyWith(
-                                                          color: Theme.of(
-                                                                  context)
-                                                              .colorScheme
-                                                              .onSurfaceVariant,
-                                                        ),
-                                                    maxLines: 2,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                  ),
-                                                ],
-                                              ],
-                                            ),
-                                          ),
-                                          if (selectedNow)
-                                            Icon(
-                                              Icons.check_circle,
-                                              color: Theme.of(context)
-                                                  .colorScheme
-                                                  .primary,
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: nameController,
-                      decoration: const InputDecoration(
-                        labelText: '房间备注（可选）',
-                        hintText: '例如：周五开黑',
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  child: const Text('取消'),
-                ),
-                FilledButton(
-                  onPressed: !selectionValid
-                      ? null
-                      : () => Navigator.pop(context, true),
-                  child: const Text('创建并连接'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+    final selected = await showCreateRoomDialog(
+      context,
+      catalog: catalog,
+      onRequestAdapt: _openGameAdaptIssue,
     );
-    searchController.dispose();
-    if (confirmed != true) {
-      nameController.dispose();
-      return;
-    }
+    if (selected == null) return;
 
     try {
-      final session = await _connectionService.createAndConnect(
+      await _connectionService.createAndConnect(
         gameId: selected.id,
-        gameName: selected.name,
-        displayName: nameController.text.trim(),
+        gameName: selected.displayName,
       );
-      nameController.dispose();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('已开房，去分享发给好友')),
       );
     } on ConnectionAbortedException {
-      nameController.dispose();
       return;
     } catch (e) {
-      nameController.dispose();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('$e')),

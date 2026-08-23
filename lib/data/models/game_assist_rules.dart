@@ -5,12 +5,10 @@ import 'package:astral_game/utils/net_addr.dart';
 /// 本地游戏规则目录（UI 元数据 / 网络标志 / 魔法墙 / TCP 转发 / 局域网发现）。
 /// 数据源：测试目录 `gamerules/` → 否则 `https://astral.fan/gamerules.json`（失败回退本地 asset）。
 class GameAssistRulesCatalog {
-  const GameAssistRulesCatalog({
-    required this.version,
-    required this.games,
-  });
+  const GameAssistRulesCatalog({required this.version, required this.games});
 
   final int version;
+
   /// 有序列表（按 JSON 中 `sort`）。
   final List<GameAssistGameRules> games;
 
@@ -46,8 +44,8 @@ class GameAssistRulesCatalog {
   }
 
   Map<String, GameAssistGameRules> get gamesById => {
-        for (final g in games) g.id: g,
-      };
+    for (final g in games) g.id: g,
+  };
 }
 
 class GameAssistGameRules {
@@ -64,12 +62,15 @@ class GameAssistGameRules {
     this.showInPicker = true,
     this.sort = 100,
     this.description = '',
+    this.nameZh = '',
   });
 
   final String id;
   final String name;
+
   /// `#RRGGBB` 或 `#AARRGGBB`。
   final String colorHex;
+
   /// Material Icons 名称，如 `terrain`。
   final String iconName;
   final int? steamAppId;
@@ -78,9 +79,15 @@ class GameAssistGameRules {
   final String? gridAsset;
   final bool showInPicker;
   final int sort;
+
   /// 选择器里标题下方的短说明。
   final String description;
+
+  /// 中文名；有则 UI 优先显示。
+  final String nameZh;
   final Map<String, GameAssistPlatformRules> platforms;
+
+  String get displayName => nameZh.trim().isNotEmpty ? nameZh.trim() : name;
 
   /// 优先 [platform]，否则 `windows`，再否则任意有配置的平台。
   GameAssistPlatformRules? platformOrFallback(String platform) {
@@ -125,6 +132,7 @@ class GameAssistGameRules {
       showInPicker: json['show_in_picker'] != false,
       sort: (json['sort'] as num?)?.toInt() ?? 100,
       description: _optionalString(json['description']) ?? '',
+      nameZh: _optionalString(json['name_zh']) ?? '',
       platforms: platforms,
     );
   }
@@ -149,7 +157,10 @@ class GameAssistGameRules {
       gridAsset: remote.gridAsset ?? gridAsset,
       showInPicker: remote.showInPicker,
       sort: remote.sort,
-      description: remote.description.isNotEmpty ? remote.description : description,
+      description: remote.description.isNotEmpty
+          ? remote.description
+          : description,
+      nameZh: remote.nameZh.isNotEmpty ? remote.nameZh : nameZh,
       platforms: merged,
     );
   }
@@ -203,22 +214,30 @@ class GameAssistLanGameDiscoverEntry {
 
   final String id;
   final String label;
+
   /// `static_port` | `udp_multicast` | `udp_probe` | `udp_broadcast` | `process_udp`
   final String type;
   final int port;
+
   /// 组播地址（不含端口）。
   final String? multicast;
   final int multicastPort;
+
   /// `minecraft_motd` / `mindustry_server` / `scfa_lan` …
   final String? parser;
+
   /// `udp_probe` 探测包十六进制，如 `fe01`。
   final String? probe;
+
   /// 标题模板：`{player}` `{game}` `{label}` `{motd}` `{map}`。
   final String? title;
+
   /// `process_udp`：exe 名，如 `game.exe`。
   final List<String> process;
+
   /// `process_udp`：窗口标题关键字，如 `Forged Alliance`。
   final List<String> window;
+
   /// `process_udp`：本机代答发现口（FA 默认 15000）。
   final int beaconPort;
 
@@ -321,8 +340,10 @@ class GameAssistPlatformRules {
   final GameAssistNetworkConfig network;
   final GameAssistMagicWallConfig magicWall;
   final List<GameAssistForwardRule> forwards;
+
   /// 发现本机开放游戏并经 ET 宣告。
   final GameAssistLanGameDiscoverConfig? lanGameDiscover;
+
   /// 进房后自动检测进程并注入（Windows / Unity Mono）。
   final GameAssistInjectConfig? inject;
 
@@ -330,8 +351,8 @@ class GameAssistPlatformRules {
   List<GameAssistMagicWallExe> get magicWallTargets => magicWall.targets;
 
   List<String> get magicWallProcessNames => [
-        for (final t in magicWallTargets) t.process,
-      ];
+    for (final t in magicWallTargets) t.process,
+  ];
 
   factory GameAssistPlatformRules.fromJson(Map<String, dynamic> json) {
     final mw = json['magic_wall'];
@@ -360,7 +381,8 @@ class GameAssistPlatformRules {
   GameAssistPlatformRules mergePreferRemote(GameAssistPlatformRules remote) {
     return GameAssistPlatformRules(
       network: GameAssistNetworkConfig(
-        enableUdpBroadcastRelay: remote.network.enableUdpBroadcastRelay ||
+        enableUdpBroadcastRelay:
+            remote.network.enableUdpBroadcastRelay ||
             network.enableUdpBroadcastRelay,
         protocol: remote.network.protocolSpecified
             ? remote.network.protocol
@@ -393,16 +415,17 @@ class GameAssistInjectConfig {
   final String type;
   final List<String> process;
   final List<String> window;
+
   /// 文件名，如 `AstralRaftNet.dll`。安装后在 `native/<gameId>/`。
   final String dll;
   final String namespace;
   final String className;
   final String method;
+
   /// 首次发现进程后等待多少秒再注入，避免游戏未完全启动就注入导致崩溃。
   final int delaySeconds;
 
-  bool get isMono =>
-      type == 'mono' && dll.isNotEmpty && className.isNotEmpty;
+  bool get isMono => type == 'mono' && dll.isNotEmpty && className.isNotEmpty;
 
   factory GameAssistInjectConfig.fromJson(Map<String, dynamic> json) {
     final method = '${json['method'] ?? 'Init'}'.trim();
@@ -434,6 +457,7 @@ class GameAssistMagicWallConfig {
   static const _reservedKeys = {'enabled', 'process', 'rules'};
 
   final bool enabled;
+
   /// 每个 exe 一套规则。
   final List<GameAssistMagicWallExe> targets;
 
@@ -453,9 +477,7 @@ class GameAssistMagicWallConfig {
       return GameAssistMagicWallConfig._fromList(raw);
     }
     if (raw is Map) {
-      return GameAssistMagicWallConfig.fromJson(
-        Map<String, dynamic>.from(raw),
-      );
+      return GameAssistMagicWallConfig.fromJson(Map<String, dynamic>.from(raw));
     }
     return disabled;
   }
@@ -507,16 +529,16 @@ class GameAssistMagicWallConfig {
 
 /// 单个 exe 的魔法墙。规则只作用在这个进程上。
 class GameAssistMagicWallExe {
-  const GameAssistMagicWallExe({
-    required this.process,
-    this.rules = const [],
-  });
+  const GameAssistMagicWallExe({required this.process, this.rules = const []});
 
   final String process;
   final List<GameAssistMagicWallRule> rules;
 
   List<GameAssistMagicWallRule> get effectiveRules {
-    final enabled = [for (final r in rules) if (r.enabled) r];
+    final enabled = [
+      for (final r in rules)
+        if (r.enabled) r,
+    ];
     if (enabled.isEmpty) return const [GameAssistMagicWallRule.defaultAllow];
     return enabled;
   }
@@ -593,9 +615,7 @@ class GameAssistMagicWallRule {
     } else if (raw is Map) {
       maps.add(Map<String, dynamic>.from(raw));
     }
-    return [
-      for (final m in maps) GameAssistMagicWallRule.fromJson(m),
-    ];
+    return [for (final m in maps) GameAssistMagicWallRule.fromJson(m)];
   }
 
   factory GameAssistMagicWallRule.fromJson(Map<String, dynamic> json) {
@@ -628,6 +648,7 @@ class GameAssistForwardRule {
   final String listen;
   final String target;
   final String proto;
+
   /// 仅房主启动该转发。
   final bool hostOnly;
 

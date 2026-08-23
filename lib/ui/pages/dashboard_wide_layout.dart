@@ -127,7 +127,7 @@ class _MembersPane extends StatelessWidget {
               final session = roomState.session.value;
               final game =
                   session == null ? null : GameCatalog.byId(session.gameId);
-              final title = [if (game != null) game.name, '成员'].join(' · ');
+              final title = [if (game != null) game.displayName, '成员'].join(' · ');
               return Text(
                 title,
                 style: textTheme.titleSmall?.copyWith(

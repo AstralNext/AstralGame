@@ -9,7 +9,7 @@
     {
       "id": "raft",
       "name": "Raft",
-      "description": "进房后在游戏里搜局域网房间",
+      "name_zh": "木筏求生",
       "color": "#2A7F9E",
       "icon": "sailing",
       "steam_app_id": 648800,
@@ -27,7 +27,8 @@
 | 字段 | 说明 |
 |------|------|
 | `id` | 英文 id；注入 DLL 在 `native/<id>/` |
-| `name` | 显示名，默认 `id` |
+| `name` | 英文显示名，默认 `id` |
+| `name_zh` | 中文名；有则列表优先显示，可省略 |
 | `description` | 选择器标题下方的短说明，可省略 |
 | `color` | `#RRGGBB` |
 | `icon` | Material Icons 名 |

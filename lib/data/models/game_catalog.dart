@@ -19,6 +19,7 @@ class GameInfo {
     this.showInPicker = true,
     this.sort = 100,
     this.description = '',
+    this.nameZh = '',
   });
 
   final String id;
@@ -42,8 +43,21 @@ class GameInfo {
   final int sort;
   final String description;
 
+  /// 中文名；有则 [displayName] 优先用它。
+  final String nameZh;
+
+  /// 有中文名则用中文，否则英文 `name`。
+  String get displayName => nameZh.trim().isNotEmpty ? nameZh.trim() : name;
+
   bool get hasIconAsset => iconAsset != null && iconAsset!.isNotEmpty;
   bool get hasGridAsset => gridAsset != null && gridAsset!.isNotEmpty;
+
+  /// JSON 未写封面时，回退到打包的 `assets/games/<id>/grid.png`。
+  String get resolvedGridAsset {
+    final g = gridAsset?.trim() ?? '';
+    if (g.isNotEmpty) return g;
+    return 'assets/games/$id/grid.png';
+  }
 
   factory GameInfo.fromRules(GameAssistGameRules rules) {
     return GameInfo(
@@ -58,6 +72,7 @@ class GameInfo {
       showInPicker: rules.showInPicker,
       sort: rules.sort,
       description: rules.description,
+      nameZh: rules.nameZh,
     );
   }
 }
@@ -73,9 +88,7 @@ class GameCatalog {
       _items.where((g) => g.showInPicker).toList(growable: false);
 
   static void applyFromRules(GameAssistRulesCatalog catalog) {
-    _items = [
-      for (final g in catalog.games) GameInfo.fromRules(g),
-    ];
+    _items = [for (final g in catalog.games) GameInfo.fromRules(g)];
   }
 
   static GameInfo? byId(String? id) {
@@ -148,7 +161,9 @@ enum GameMediaKind { asset, network }
 
 class GameMediaRef {
   const GameMediaRef.asset(this.path) : kind = GameMediaKind.asset, url = null;
-  const GameMediaRef.network(this.url) : kind = GameMediaKind.network, path = null;
+  const GameMediaRef.network(this.url)
+    : kind = GameMediaKind.network,
+      path = null;
 
   final GameMediaKind kind;
   final String? path;
@@ -221,11 +236,7 @@ class GameMediaImage extends StatelessWidget {
 
 /// 游戏方形 Logo：优先 icon_asset，否则色块 + Material 图标。
 class GameLogo extends StatelessWidget {
-  const GameLogo({
-    super.key,
-    required this.game,
-    this.size = 40,
-  });
+  const GameLogo({super.key, required this.game, this.size = 40});
 
   final GameInfo game;
   final double size;
@@ -280,17 +291,10 @@ class GameGridCover extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!game.hasGridAsset) {
-      return SizedBox(
-        width: width,
-        height: height,
-        child: GameLogo(game: game, size: width.clamp(40, height)),
-      );
-    }
     return ClipRRect(
       borderRadius: BorderRadius.circular(borderRadius),
       child: GameMediaImage(
-        source: game.gridAsset!,
+        source: game.resolvedGridAsset,
         width: width,
         height: height,
         fit: BoxFit.cover,

@@ -335,4 +335,19 @@ void main() {
       '开局域网世界',
     );
   });
+
+  test('name_zh preferred for displayName', () {
+    final named = GameAssistGameRules.fromJson('minecraft', {
+      'name': 'Minecraft',
+      'name_zh': '我的世界',
+    });
+    expect(named.name, 'Minecraft');
+    expect(named.nameZh, '我的世界');
+    expect(named.displayName, '我的世界');
+
+    final englishOnly = GameAssistGameRules.fromJson('raft', {
+      'name': 'Raft',
+    });
+    expect(englishOnly.displayName, 'Raft');
+  });
 }

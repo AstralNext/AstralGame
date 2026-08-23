@@ -747,7 +747,7 @@ class _ConnectedRoomCard extends StatelessWidget {
                     const SizedBox(height: 6),
                     Text(
                       [
-                        if (game != null) game.name,
+                        if (game != null) game.displayName,
                         if (roomRoleLabel != null && roomRoleLabel!.isNotEmpty)
                           roomRoleLabel!,
                       ].join(' · '),

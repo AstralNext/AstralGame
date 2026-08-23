@@ -4,6 +4,7 @@
     {
       "id": "minecraft",
       "name": "Minecraft",
+      "name_zh": "我的世界",
       "description": "开局域网世界，客人在本机游戏列表加入",
       "color": "#5D9C3E",
       "icon": "terrain",
@@ -29,7 +30,7 @@
     {
       "id": "raft",
       "name": "Raft",
-      "description": "进房后在游戏里搜局域网房间",
+      "name_zh": "木筏求生",
       "color": "#2A7F9E",
       "icon": "sailing",
       "steam_app_id": 648800,
@@ -65,8 +66,8 @@
     },
     {
       "id": "forged_alliance",
-      "name": "Forged Alliance",
-      "description": "大厅联机，房间会出现在本机列表",
+      "name": "Supreme Commander: Forged Alliance",
+      "name_zh": "最高指挥官：钢铁联盟",
       "color": "#3B6EA5",
       "icon": "military_tech",
       "steam_app_id": 9420,
@@ -96,7 +97,7 @@
     {
       "id": "valheim",
       "name": "Valheim",
-      "description": "进房后在游戏里搜局域网房间",
+      "name_zh": "英灵神殿",
       "color": "#4A6FA5",
       "icon": "ac_unit",
       "steam_app_id": 892970,
@@ -132,7 +133,7 @@
     {
       "id": "other",
       "name": "其他",
-      "description": "只组网，游戏内需自己填 IP 或走原联机",
+      "name_zh": "其他",
       "color": "#6B7280",
       "icon": "sports_esports_outlined",
       "show_in_picker": true,
