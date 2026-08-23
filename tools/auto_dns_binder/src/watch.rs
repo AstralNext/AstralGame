@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use windows::Win32::Foundation::{CloseHandle, HANDLE, WAIT_FAILED, WAIT_OBJECT_0};
+use windows::Win32::Foundation::{CloseHandle, HANDLE, WAIT_FAILED, WAIT_OBJECT_0, WAIT_TIMEOUT};
 use windows::Win32::NetworkManagement::IpHelper::{CancelIPChangeNotify, NotifyAddrChange};
 use windows::Win32::System::IO::OVERLAPPED;
 use windows::Win32::System::Threading::{
@@ -11,6 +11,12 @@ use crate::dns::{self, AdapterState};
 use crate::log;
 
 const ERROR_IO_PENDING: u32 = 997;
+
+pub enum WaitResult {
+    Stop,
+    Changed,
+    Timeout,
+}
 
 pub struct AddrWatcher {
     stop_event: HANDLE,
@@ -46,6 +52,36 @@ impl AddrWatcher {
         }
     }
 
+    /// 启动一分钟后复查：IP 和 DNS 都没变就不写。
+    pub fn apply_followup_if_changed(&mut self) {
+        let Some(current) = dns::get_all_physical_ips() else {
+            log::info("followup: no physical NIC is up");
+            return;
+        };
+        let mut applied = 0u32;
+        for (guid, (friendly_name, current_ips)) in &current {
+            let last_ips = self
+                .known_ips
+                .get(guid)
+                .map(|(_, ips)| ips.as_slice())
+                .unwrap_or(&[]);
+            let ip_same = last_ips == current_ips.as_slice();
+            let dns_ok = dns::dns_already_bound(guid);
+            if ip_same && dns_ok {
+                continue;
+            }
+            log::info(&format!(
+                "followup bind [{friendly_name}] ip_same={ip_same} dns_ok={dns_ok} ips={current_ips:?}"
+            ));
+            dns::bind_local_smartdns(guid);
+            applied += 1;
+        }
+        self.known_ips = current;
+        if applied == 0 {
+            log::info("followup: no change, skip");
+        }
+    }
+
     pub fn arm(&mut self) -> bool {
         unsafe {
             self.overlapped = OVERLAPPED {
@@ -64,22 +100,28 @@ impl AddrWatcher {
         }
     }
 
-    /// Wait until stop is signaled (`true`) or an address-table change arrives (`false`).
-    pub fn wait_stop_or_change(&self) -> bool {
+    pub fn wait(&self, timeout_ms: u32) -> WaitResult {
         unsafe {
             let handles = [self.stop_event, self.addr_event];
-            let wait = WaitForMultipleObjects(&handles, false, INFINITE);
+            let wait = WaitForMultipleObjects(&handles, false, timeout_ms);
             if wait == WAIT_OBJECT_0 {
-                return true;
+                return WaitResult::Stop;
             }
             if wait.0 == WAIT_OBJECT_0.0 + 1 {
-                return false;
+                return WaitResult::Changed;
+            }
+            if wait == WAIT_TIMEOUT {
+                return WaitResult::Timeout;
             }
             if wait == WAIT_FAILED {
                 log::error("WaitForMultipleObjects failed");
             }
-            false
+            WaitResult::Timeout
         }
+    }
+
+    pub fn wait_stop_or_change(&self) -> bool {
+        matches!(self.wait(INFINITE), WaitResult::Stop)
     }
 
     pub fn on_addr_change(&mut self) {

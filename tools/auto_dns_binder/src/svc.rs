@@ -12,7 +12,7 @@ use windows_service::service_dispatcher;
 
 use crate::log;
 use crate::paths;
-use crate::watch::AddrWatcher;
+use crate::watch::{AddrWatcher, WaitResult};
 
 const SERVICE_TYPE: ServiceType = ServiceType::OWN_PROCESS;
 
@@ -62,7 +62,7 @@ fn run_service() -> Result<(), String> {
         })
         .map_err(|err| format!("{err}"))?;
 
-    let _ = std::fs::create_dir_all(paths::program_data_dir());
+    let _ = std::fs::create_dir_all(paths::install_dir());
     log::init(paths::log_file());
     log::info("service starting");
 
@@ -76,9 +76,36 @@ fn run_service() -> Result<(), String> {
         .set_service_status(running_status())
         .map_err(|err| format!("{err}"))?;
 
+    let followup_at = std::time::Instant::now() + Duration::from_secs(60);
+    let mut followup_done = false;
     loop {
         if rx.try_recv().is_ok() {
             break;
+        }
+        if !followup_done {
+            let now = std::time::Instant::now();
+            if now >= followup_at {
+                watcher.apply_followup_if_changed();
+                followup_done = true;
+                continue;
+            }
+            let remain_ms = followup_at.saturating_duration_since(now).as_millis();
+            let remain_ms = remain_ms.min(u128::from(u32::MAX)) as u32;
+            match watcher.wait(remain_ms.max(1)) {
+                WaitResult::Stop => break,
+                WaitResult::Changed => {
+                    watcher.on_addr_change();
+                    if !watcher.arm() {
+                        std::thread::sleep(Duration::from_secs(5));
+                        let _ = watcher.arm();
+                    }
+                }
+                WaitResult::Timeout => {
+                    watcher.apply_followup_if_changed();
+                    followup_done = true;
+                }
+            }
+            continue;
         }
         if watcher.wait_stop_or_change() {
             break;

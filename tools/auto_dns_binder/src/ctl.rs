@@ -52,7 +52,7 @@ fn wait_state(want: ServiceState, timeout: Duration) -> windows_service::Result<
 }
 
 fn copy_self_exe() -> io::Result<()> {
-    let dest_dir = paths::program_data_dir();
+    let dest_dir = paths::install_dir();
     fs_create(&dest_dir)?;
     let src_exe = std::env::current_exe()?;
     let dest_exe = paths::installed_exe();
@@ -108,7 +108,7 @@ fn upsert_binder_service() -> Result<(), String> {
 }
 
 pub fn install() -> Result<(), String> {
-    let _ = std::fs::create_dir_all(paths::program_data_dir());
+    let _ = std::fs::create_dir_all(paths::install_dir());
     smartdns::install_official_service()?;
     smartdns::deploy_conf().map_err(|err| format!("复制 smartdns.conf 失败: {err}"))?;
     smartdns::restart_service()?;
@@ -144,14 +144,15 @@ pub fn uninstall() -> Result<(), String> {
         Err(_) => log::warn("binder service is not installed"),
     }
 
-    let dir = paths::program_data_dir();
-    if dir.is_dir() {
-        match remove_dir_best_effort(&dir) {
-            Ok(()) => log::info(&format!("removed {}", dir.display())),
-            Err(err) => log::warn(&format!(
-                "could not fully remove {}: {err}",
-                dir.display()
-            )),
+    for dir in [paths::install_dir(), paths::legacy_program_data_dir()] {
+        if dir.is_dir() {
+            match remove_dir_best_effort(&dir) {
+                Ok(()) => log::info(&format!("removed {}", dir.display())),
+                Err(err) => log::warn(&format!(
+                    "could not fully remove {}: {err}",
+                    dir.display()
+                )),
+            }
         }
     }
 

@@ -3,8 +3,9 @@ use std::net::IpAddr;
 
 use windows::core::{GUID, PWSTR};
 use windows::Win32::NetworkManagement::IpHelper::{
-    ConvertInterfaceGuidToLuid, GetIfEntry2, SetInterfaceDnsSettings, DNS_INTERFACE_SETTINGS,
-    MIB_IF_ROW2,
+    ConvertInterfaceGuidToLuid, FreeInterfaceDnsSettings, GetIfEntry2, GetInterfaceDnsSettings,
+    SetInterfaceDnsSettings, DNS_INTERFACE_SETTINGS, DNS_INTERFACE_SETTINGS_VERSION1,
+    DNS_SETTING_IPV6, DNS_SETTING_NAMESERVER, MIB_IF_ROW2,
 };
 use windows::Win32::NetworkManagement::Ndis::{
     NdisPhysicalMedium802_3, NdisPhysicalMediumBluetooth, NdisPhysicalMediumNative802_11,
@@ -15,10 +16,9 @@ use windows::Win32::NetworkManagement::Ndis::{
 
 use crate::log;
 
-const DNS_INTERFACE_SETTINGS_VERSION1: u32 = 1;
-const DNS_SETTING_NAMESERVER: u64 = 2;
-/// 主 DNS：本机 SmartDNS；辅助：DNSPod 119.29.29.29 / 2402:4e00::
-const LOCAL_DNS: &str = "127.0.0.1,119.29.29.29,::1,2402:4e00::";
+/// 主 DNS：本机 SmartDNS；辅助：DNSPod。IPv4 / IPv6 必须分两次写入。
+const DNS_V4: &str = "127.0.0.1,119.29.29.29";
+const DNS_V6: &str = "::1,2402:4e00::";
 
 const IF_TYPE_ETHERNET_CSMACD: u32 = 6;
 const IF_TYPE_IEEE80211: u32 = 71;
@@ -162,7 +162,48 @@ pub fn get_all_physical_ips() -> Option<AdapterState> {
 }
 
 pub fn bind_local_smartdns(guid_str: &str) {
-    set_nameservers(guid_str, LOCAL_DNS);
+    set_nameservers(guid_str, DNS_V4, false);
+    set_nameservers(guid_str, DNS_V6, true);
+}
+
+pub fn dns_already_bound(guid_str: &str) -> bool {
+    let v4 = read_nameservers(guid_str, false)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(IpAddr::is_ipv4)
+        .collect::<Vec<_>>();
+    let v6 = read_nameservers(guid_str, true)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(IpAddr::is_ipv6)
+        .collect::<Vec<_>>();
+    v4 == parse_dns_list(DNS_V4) && v6 == parse_dns_list(DNS_V6)
+}
+
+fn parse_dns_list(s: &str) -> Vec<IpAddr> {
+    s.split(|c: char| c == ',' || c == ';' || c.is_whitespace())
+        .filter(|token| !token.is_empty())
+        .filter_map(|token| token.parse().ok())
+        .collect()
+}
+
+fn read_nameservers(guid_str: &str, ipv6: bool) -> Option<Vec<IpAddr>> {
+    let guid = parse_guid(guid_str)?;
+    unsafe {
+        let mut settings = DNS_INTERFACE_SETTINGS {
+            Version: DNS_INTERFACE_SETTINGS_VERSION1,
+            Flags: if ipv6 { DNS_SETTING_IPV6 as u64 } else { 0 },
+            ..DNS_INTERFACE_SETTINGS::default()
+        };
+        GetInterfaceDnsSettings(guid, &mut settings).ok()?;
+        let text = if settings.NameServer.is_null() {
+            String::new()
+        } else {
+            settings.NameServer.to_string().unwrap_or_default()
+        };
+        let _ = FreeInterfaceDnsSettings(&mut settings);
+        Some(parse_dns_list(&text))
+    }
 }
 
 pub fn clear_all_physical_to_dhcp() {
@@ -170,11 +211,12 @@ pub fn clear_all_physical_to_dhcp() {
         return;
     };
     for guid in state.keys() {
-        set_nameservers(guid, "");
+        set_nameservers(guid, "", false);
+        set_nameservers(guid, "", true);
     }
 }
 
-fn set_nameservers(guid_str: &str, servers: &str) {
+fn set_nameservers(guid_str: &str, servers: &str, ipv6: bool) {
     let mut nameservers: Vec<u16> = servers.encode_utf16().chain(std::iter::once(0)).collect();
 
     let Some(guid) = parse_guid(guid_str) else {
@@ -182,18 +224,26 @@ fn set_nameservers(guid_str: &str, servers: &str) {
         return;
     };
 
+    let mut flags = DNS_SETTING_NAMESERVER as u64;
+    if ipv6 {
+        flags |= DNS_SETTING_IPV6 as u64;
+    }
+    let stack = if ipv6 { "IPv6" } else { "IPv4" };
+
     unsafe {
         let mut settings: DNS_INTERFACE_SETTINGS = std::mem::zeroed();
         settings.Version = DNS_INTERFACE_SETTINGS_VERSION1;
-        settings.Flags = DNS_SETTING_NAMESERVER;
+        settings.Flags = flags;
         settings.NameServer = PWSTR(nameservers.as_mut_ptr());
 
         match SetInterfaceDnsSettings(guid, &settings) {
             Ok(()) => {
                 if servers.is_empty() {
-                    log::info(&format!("DNS restored to DHCP on {guid_str}"));
+                    log::info(&format!("DNS restored to DHCP ({stack}) on {guid_str}"));
                 } else {
-                    log::info(&format!("DNS overwritten to {servers} on {guid_str}"));
+                    log::info(&format!(
+                        "DNS overwritten ({stack}) to {servers} on {guid_str}"
+                    ));
                 }
             }
             Err(err) => {
@@ -203,7 +253,9 @@ fn set_nameservers(guid_str: &str, servers: &str) {
                         "SetInterfaceDnsSettings access denied; run as Administrator",
                     );
                 } else {
-                    log::error(&format!("SetInterfaceDnsSettings failed: {err}"));
+                    log::error(&format!(
+                        "SetInterfaceDnsSettings {stack} failed: {err}"
+                    ));
                 }
             }
         }

@@ -1,10 +1,12 @@
 use std::fs::OpenOptions;
 use std::io::{self, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 static LOG_PATH: OnceLock<PathBuf> = OnceLock::new();
+
+const MAX_LOG_BYTES: u64 = 10 * 1024 * 1024;
 
 pub fn init(path: PathBuf) {
     if let Some(dir) = path.parent() {
@@ -30,11 +32,22 @@ fn write_line(level: &str, msg: &str) {
     let _ = writeln!(io::stdout(), "{line}");
     let _ = io::stdout().flush();
     if let Some(path) = LOG_PATH.get() {
+        cap_log_size(path);
         if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
             let _ = writeln!(file, "{line}");
             let _ = file.flush();
         }
     }
+}
+
+fn cap_log_size(path: &Path) {
+    let Ok(meta) = std::fs::metadata(path) else {
+        return;
+    };
+    if meta.len() < MAX_LOG_BYTES {
+        return;
+    }
+    let _ = OpenOptions::new().write(true).truncate(true).open(path);
 }
 
 fn timestamp() -> String {

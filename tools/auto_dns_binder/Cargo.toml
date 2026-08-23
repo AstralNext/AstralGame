@@ -6,6 +6,9 @@ description = "AstralGame Auto DNS Binder：监听物理网卡 IP 变动，把 D
 
 [dependencies]
 
+[build-dependencies]
+winres = "0.1"
+
 [target.'cfg(windows)'.dependencies]
 ipconfig = "0.3"
 uuid = "1"

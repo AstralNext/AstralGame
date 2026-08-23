@@ -314,7 +314,7 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
               title: '网络优化服务',
               subtitle: busy
                   ? '正在安装或卸载…'
-                  : '安装 SmartDNS 并把物理网卡 DNS 绑到本机；卸载后恢复自动获取',
+                  : '自动选择最低延迟的网址 IP',
               value: optimize.installed.value,
               onChanged: busy
                   ? null

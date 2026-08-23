@@ -34,7 +34,7 @@ Commands:
 Service name: {}
 Install dir:  {}",
         paths::SERVICE_NAME,
-        paths::program_data_dir().display()
+        paths::install_dir().display()
     );
 }
 
