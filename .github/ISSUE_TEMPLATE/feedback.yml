@@ -1,0 +1,59 @@
+name: 问题与建议
+description: 缺陷、功能建议或其它反馈（不是游戏适配）
+title: "[反馈] "
+labels: ["反馈"]
+body:
+  - type: markdown
+    attributes:
+      value: 填完才能提交。请先搜索有没有同名 Issue。游戏适配请用「游戏适配请求」模板。
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: 类型
+      options:
+        - 缺陷
+        - 功能建议
+        - 其它
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: 客户端版本
+      description: 设置页或关于里能看到。
+      placeholder: 1.0.39
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 主要平台
+      options:
+        - Windows
+        - Android
+        - Linux
+        - macOS
+        - iOS
+    validations:
+      required: true
+
+  - type: textarea
+    id: what_happened
+    attributes:
+      label: 发生了什么 / 想要什么
+      description: 缺陷请写实际步骤和结果；建议请写使用场景。
+      placeholder: 进房后列表不刷新，关掉再开会好
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: 补充
+      description: 日志、截图、是否必现，有就写。
+      placeholder: 每次进房都会；日志见附件
+    validations:
+      required: false
