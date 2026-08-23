@@ -1,0 +1,20 @@
+[package]
+name = "auto_dns_binder"
+version = "0.1.0"
+edition = "2021"
+description = "AstralGame Auto DNS Binder：监听物理网卡 IP 变动，把 DNS 绑到本机 SmartDNS"
+
+[dependencies]
+
+[target.'cfg(windows)'.dependencies]
+ipconfig = "0.3"
+uuid = "1"
+windows-service = "0.7"
+windows = { version = "0.52", features = [
+    "Win32_Foundation",
+    "Win32_NetworkManagement_IpHelper",
+    "Win32_NetworkManagement_Ndis",
+    "Win32_Security",
+    "Win32_System_IO",
+    "Win32_System_Threading",
+] }

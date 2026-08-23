@@ -8,6 +8,7 @@ import 'package:astral_game/data/services/firewall_service.dart';
 import 'package:astral_game/data/services/hitokoto_service.dart';
 import 'package:astral_game/data/services/join_link_service.dart';
 import 'package:astral_game/data/services/alcy_wallpaper_service.dart';
+import 'package:astral_game/data/services/network_optimize_service.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
 import 'package:astral_game/data/services/peer_rpc/methods/game_methods.dart';
 import 'package:astral_game/data/services/peer_rpc/methods/message_methods.dart';
@@ -79,6 +80,12 @@ Future<void> setupDI() async {
 
   getIt.registerLazySingleton<FirewallService>(() => FirewallService());
   unawaited(getIt<FirewallService>().refreshPrivateProfile());
+  getIt.registerLazySingleton<NetworkOptimizeService>(
+    () => NetworkOptimizeService(),
+  );
+  if (Platform.isWindows) {
+    unawaited(getIt<NetworkOptimizeService>().refresh());
+  }
 
   getIt.registerSingleton<PeerRpcRouter>(PeerRpcRouter(getIt<P2PService>()));
   getIt.registerSingleton<PeerRpcClient>(PeerRpcClient(getIt<P2PService>()));

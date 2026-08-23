@@ -140,6 +140,33 @@ else()
   message(WARNING "Valheim plugin missing (${ASTRAL_VALHEIM_PLUGIN}); Valheim auto-inject disabled")
 endif()
 
+# 网络优化：SmartDNS + auto_dns_binder（仅 Windows 打包）。
+set(ASTRAL_DNS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../tools/auto_dns_binder")
+set(ASTRAL_DNS_BINDER "${ASTRAL_DNS_DIR}/target/release/auto_dns_binder.exe")
+set(ASTRAL_DNS_BINDER_FALLBACK "${ASTRAL_DNS_DIR}/bin/auto_dns_binder.exe")
+if(EXISTS "${ASTRAL_DNS_BINDER}")
+  install(FILES "${ASTRAL_DNS_BINDER}"
+    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}/native/dns"
+    COMPONENT Runtime)
+elseif(EXISTS "${ASTRAL_DNS_BINDER_FALLBACK}")
+  install(FILES "${ASTRAL_DNS_BINDER_FALLBACK}"
+    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}/native/dns"
+    COMPONENT Runtime)
+else()
+  message(WARNING "auto_dns_binder missing (${ASTRAL_DNS_BINDER}); 网络优化服务不可用")
+endif()
+
+set(ASTRAL_SMARTDNS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../tools/smartdns")
+set(ASTRAL_SMARTDNS_EXE "${ASTRAL_SMARTDNS_DIR}/smartdns.exe")
+set(ASTRAL_SMARTDNS_CONF "${ASTRAL_SMARTDNS_DIR}/smartdns.conf")
+if(EXISTS "${ASTRAL_SMARTDNS_EXE}" AND EXISTS "${ASTRAL_SMARTDNS_CONF}")
+  install(FILES "${ASTRAL_SMARTDNS_EXE}" "${ASTRAL_SMARTDNS_CONF}"
+    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}/native/dns/smartdns"
+    COMPONENT Runtime)
+else()
+  message(WARNING "smartdns missing in ${ASTRAL_SMARTDNS_DIR}; 网络优化服务不可用")
+endif()
+
 # Copy the native assets provided by the build.dart from all packages.
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/windows/")
 install(DIRECTORY "${NATIVE_ASSETS_DIR}"

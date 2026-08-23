@@ -31,6 +31,8 @@ on:
       - 'tools/raft_astral_net/**'
       - 'tools/valheim_astral_net/**'
       - 'tools/mono_inject/**'
+      - 'tools/auto_dns_binder/**'
+      - 'tools/smartdns/**'
       - 'pubspec.yaml'
       - 'pubspec.lock'
       - '.github/workflows/build.yml'
@@ -261,9 +263,22 @@ jobs:
           New-Item -ItemType Directory -Force -Path tools\mono_inject\bin | Out-Null
           Copy-Item tools\mono_inject\target\release\astral_mono_inject.exe `
             tools\mono_inject\bin\astral_mono_inject.exe -Force
+          if (-not (Test-Path tools\smartdns\smartdns.exe)) {
+            throw 'tools/smartdns/smartdns.exe missing'
+          }
+          if (-not (Test-Path tools\smartdns\smartdns.conf)) {
+            throw 'tools/smartdns/smartdns.conf missing'
+          }
+          cargo build --release --manifest-path tools\auto_dns_binder\Cargo.toml
+          New-Item -ItemType Directory -Force -Path tools\auto_dns_binder\bin | Out-Null
+          Copy-Item tools\auto_dns_binder\target\release\auto_dns_binder.exe `
+            tools\auto_dns_binder\bin\auto_dns_binder.exe -Force
           Get-Item tools\raft_astral_net\dist\AstralRaftNet.dll,
                    tools\valheim_astral_net\dist\AstralValheimNet.dll,
-                   tools\mono_inject\bin\astral_mono_inject.exe
+                   tools\mono_inject\bin\astral_mono_inject.exe,
+                   tools\auto_dns_binder\bin\auto_dns_binder.exe,
+                   tools\smartdns\smartdns.exe,
+                   tools\smartdns\smartdns.conf
 
       - name: 🛠️ Build for ${{ matrix.platform }}
         run: ${{ matrix.build_cmd }}

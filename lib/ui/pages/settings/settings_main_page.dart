@@ -13,6 +13,7 @@ import 'package:astral_game/ui/widgets/fade_in_section.dart';
 import 'package:astral_game/ui/navigation/astral_page_route.dart';
 import 'package:astral_game/ui/widgets/theme_picker_sheet.dart';
 import 'package:astral_game/data/services/floating_overlay_service.dart';
+import 'package:astral_game/data/services/network_optimize_service.dart';
 import 'package:astral_game/utils/input_validator.dart';
 import 'package:astral_game/utils/runtime_platform.dart';
 import 'package:flutter/material.dart';
@@ -305,6 +306,21 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
               },
             );
           }),
+          const Divider(height: 1),
+          Watch((context) {
+            final optimize = getIt<NetworkOptimizeService>();
+            final busy = optimize.busy.value;
+            return _buildSwitchTile(
+              title: '网络优化服务',
+              subtitle: busy
+                  ? '正在安装或卸载…'
+                  : '安装 SmartDNS 并把物理网卡 DNS 绑到本机；卸载后恢复自动获取',
+              value: optimize.installed.value,
+              onChanged: busy
+                  ? null
+                  : (v) => _onNetworkOptimizeChanged(context, optimize, v),
+            );
+          }),
         ],
         if (_isAndroid) ...[
           const Divider(height: 1),
@@ -327,7 +343,7 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
     required String title,
     String? subtitle,
     required bool value,
-    required ValueChanged<bool> onChanged,
+    required ValueChanged<bool>? onChanged,
   }) {
     return SwitchListTile.adaptive(
       contentPadding: _tilePadding,
@@ -336,5 +352,20 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
       value: value,
       onChanged: onChanged,
     );
+  }
+
+  Future<void> _onNetworkOptimizeChanged(
+    BuildContext context,
+    NetworkOptimizeService optimize,
+    bool enable,
+  ) async {
+    try {
+      await optimize.setEnabled(enable);
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(enable ? '安装失败：$e' : '卸载失败：$e')),
+      );
+    }
   }
 }
