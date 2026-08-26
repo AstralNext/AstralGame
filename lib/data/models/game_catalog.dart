@@ -1,4 +1,5 @@
 import 'package:astral_game/data/models/game_assist_rules.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 /// 线上规则与相对路径图片基准。
@@ -52,11 +53,19 @@ class GameInfo {
   bool get hasIconAsset => iconAsset != null && iconAsset!.isNotEmpty;
   bool get hasGridAsset => gridAsset != null && gridAsset!.isNotEmpty;
 
-  /// JSON 未写封面时，回退到打包的 `assets/games/<id>/grid.png`。
+  /// JSON 未写封面时，回退到按 id 推断的路径（先找本地 asset，没有再走远程 CDN）。
   String get resolvedGridAsset {
     final g = gridAsset?.trim() ?? '';
     if (g.isNotEmpty) return g;
-    return 'assets/games/$id/grid.png';
+    // 纯相对路径格式 → GameMediaImage 会先试本地 asset，失败再走远程
+    return 'games/$id/grid.png';
+  }
+
+  /// 方形 icon 的解析路径（与 resolvedGridAsset 策略一致，用于 hasIconAsset 判断）。
+  String get resolvedIconAsset {
+    final g = iconAsset?.trim() ?? '';
+    if (g.isNotEmpty) return g;
+    return 'games/$id/icon.png';
   }
 
   factory GameInfo.fromRules(GameAssistGameRules rules) {
@@ -156,19 +165,33 @@ IconData resolveGameIcon(String name) {
   }
 }
 
-/// `icon_asset` / `grid_asset`：本地 asset、绝对 URL，或相对站点路径。
-enum GameMediaKind { asset, network }
+/// `icon_asset` / `grid_asset`：
+/// - 绝对 URL (http/https) → CachedNetworkImage（带磁盘缓存）
+/// - `assets/` 开头 → Image.asset（打包资源）
+/// - 其他（纯相对路径，如 `games/minecraft/icon.png`）→ **HYBRID**：
+///     先尝试本地打包资源（自动加 `assets/` 前缀），
+///     失败再走 `kAstralGameMediaBaseUrl + path` 的远程 CDN（带磁盘缓存）。
+///   这样线上/线下 JSON 路径完全一致，同时离线兜底也能用本地包。
+enum GameMediaKind { asset, network, hybrid }
 
 class GameMediaRef {
-  const GameMediaRef.asset(this.path) : kind = GameMediaKind.asset, url = null;
+  const GameMediaRef.asset(this.path)
+    : kind = GameMediaKind.asset,
+      url = null;
   const GameMediaRef.network(this.url)
     : kind = GameMediaKind.network,
       path = null;
+  /// hybrid：同时持有本地 asset 路径 + 远程 URL，按顺序尝试。
+  const GameMediaRef.hybrid({required this.path, required this.url})
+    : kind = GameMediaKind.hybrid;
 
   final GameMediaKind kind;
+  /// asset 路径（或 hybrid 的本地 asset 路径，带 assets/ 前缀）。
   final String? path;
+  /// 完整 URL（network / hybrid 的远程地址）。
   final String? url;
 
+  /// 将纯相对路径解析为「本地 asset 路径」和「远程 URL」。
   static GameMediaRef? tryParse(
     String? raw, {
     String baseUrl = kAstralGameMediaBaseUrl,
@@ -182,15 +205,23 @@ class GameMediaRef {
     if (lower.startsWith('assets/')) {
       return GameMediaRef.asset(s);
     }
+    // 纯相对路径 → hybrid：
+    //   本地试 assets/<path>；远端试 <baseUrl>/<path>
     final base = Uri.parse(baseUrl.endsWith('/') ? baseUrl : '$baseUrl/');
     final resolved = s.startsWith('/')
         ? base.replace(path: s)
         : base.resolve(s);
-    return GameMediaRef.network(resolved.toString());
+    return GameMediaRef.hybrid(
+      path: 'assets/$s',
+      url: resolved.toString(),
+    );
   }
 }
 
-/// 按 [GameMediaRef] 渲染图片（asset 或网络）。
+/// 按 [GameMediaRef] 渲染图片：
+/// - asset：打包资源，最快
+/// - hybrid：先 asset 失败再走 network（带磁盘缓存）
+/// - network：CachedNetworkImage（带磁盘缓存，关闭 app 后还在）
 class GameMediaImage extends StatelessWidget {
   const GameMediaImage({
     super.key,
@@ -199,6 +230,7 @@ class GameMediaImage extends StatelessWidget {
     this.height,
     this.fit = BoxFit.cover,
     this.errorBuilder,
+    this.placeholder,
   });
 
   final String source;
@@ -206,6 +238,8 @@ class GameMediaImage extends StatelessWidget {
   final double? height;
   final BoxFit fit;
   final ImageErrorWidgetBuilder? errorBuilder;
+  /// 网络加载中的占位 Widget（可选，默认是空白）。
+  final WidgetBuilder? placeholder;
 
   @override
   Widget build(BuildContext context) {
@@ -214,27 +248,63 @@ class GameMediaImage extends StatelessWidget {
       return errorBuilder?.call(context, 'empty media', StackTrace.empty) ??
           const SizedBox.shrink();
     }
-    if (ref.kind == GameMediaKind.network) {
-      return Image.network(
-        ref.url!,
-        width: width,
-        height: height,
-        fit: fit,
-        gaplessPlayback: true,
-        errorBuilder: errorBuilder,
-      );
+    switch (ref.kind) {
+      case GameMediaKind.asset:
+        return Image.asset(
+          ref.path!,
+          width: width,
+          height: height,
+          fit: fit,
+          gaplessPlayback: true,
+          errorBuilder: errorBuilder,
+        );
+      case GameMediaKind.network:
+        return _cachedNetwork(
+          url: ref.url!,
+          errorBuilder: errorBuilder,
+        );
+      case GameMediaKind.hybrid:
+        // 优先本地打包 asset；加载失败再走带缓存的远程 CDN。
+        return Image.asset(
+          ref.path!,
+          width: width,
+          height: height,
+          fit: fit,
+          gaplessPlayback: true,
+          errorBuilder: (context, error, stackTrace) {
+            return _cachedNetwork(
+              url: ref.url!,
+              errorBuilder: (c, e, s) =>
+                  errorBuilder?.call(c, e, s) ?? const SizedBox.shrink(),
+            );
+          },
+        );
     }
-    return Image.asset(
-      ref.path!,
+  }
+
+  Widget _cachedNetwork({
+    required String url,
+    ImageErrorWidgetBuilder? errorBuilder,
+  }) {
+    return CachedNetworkImage(
+      imageUrl: url,
       width: width,
       height: height,
       fit: fit,
-      errorBuilder: errorBuilder,
+      placeholder: placeholder != null
+          ? (context, _) => placeholder!(context)
+          : null,
+      errorWidget: errorBuilder != null
+          ? (context, u, e) =>
+              errorBuilder!(context, e ?? 'load failed', StackTrace.empty)
+          : (context, u, e) => const SizedBox.shrink(),
     );
   }
 }
 
-/// 游戏方形 Logo：优先 icon_asset，否则色块 + Material 图标。
+/// 游戏方形 Logo：
+/// - 用 resolvedIconAsset（优先 JSON 写的 icon_asset，否则自动推断 games/<id>/icon.png）
+/// - GameMediaImage 会：先试本地 asset → 失败走远程 CDN（磁盘缓存）→ 再失败回退色块
 class GameLogo extends StatelessWidget {
   const GameLogo({super.key, required this.game, this.size = 40});
 
@@ -244,19 +314,16 @@ class GameLogo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final radius = BorderRadius.circular(size * 0.22);
-    if (game.hasIconAsset) {
-      return ClipRRect(
-        borderRadius: radius,
-        child: GameMediaImage(
-          source: game.iconAsset!,
-          width: size,
-          height: size,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) => _fallback(radius),
-        ),
-      );
-    }
-    return _fallback(radius);
+    return ClipRRect(
+      borderRadius: radius,
+      child: GameMediaImage(
+        source: game.resolvedIconAsset,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => _fallback(radius),
+      ),
+    );
   }
 
   Widget _fallback(BorderRadius radius) {

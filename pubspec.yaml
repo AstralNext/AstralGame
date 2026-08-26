@@ -41,6 +41,7 @@ dependencies:
   device_info_plus: ^12.4.0
   connectivity_plus: ^7.1.1
   home_widget: ^0.7.0
+  cached_network_image: ^3.4.1
   firebase_core: ^4.9.0
   flutter_markdown: ^0.7.7+1
   ffi: ^2.1.0

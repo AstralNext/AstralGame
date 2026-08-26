@@ -9,8 +9,8 @@
       "color": "#5D9C3E",
       "icon": "terrain",
       "sgdb_game_id": 38365,
-      "icon_asset": "assets/games/minecraft/icon.png",
-      "grid_asset": "assets/games/minecraft/grid.png",
+      "icon_asset": "games/minecraft/icon.png",
+      "grid_asset": "games/minecraft/grid.png",
       "show_in_picker": true,
       "sort": 10,
       "platforms": {
@@ -35,8 +35,8 @@
       "icon": "sailing",
       "steam_app_id": 648800,
       "sgdb_game_id": 18740,
-      "icon_asset": "assets/games/raft/icon.png",
-      "grid_asset": "assets/games/raft/grid.png",
+      "icon_asset": "games/raft/icon.png",
+      "grid_asset": "games/raft/grid.png",
       "show_in_picker": true,
       "sort": 20,
       "platforms": {
@@ -72,8 +72,8 @@
       "icon": "military_tech",
       "steam_app_id": 9420,
       "sgdb_game_id": 31467,
-      "icon_asset": "assets/games/forged_alliance/icon.png",
-      "grid_asset": "assets/games/forged_alliance/grid.png",
+      "icon_asset": "games/forged_alliance/icon.png",
+      "grid_asset": "games/forged_alliance/grid.png",
       "show_in_picker": true,
       "sort": 25,
       "platforms": {
@@ -101,8 +101,8 @@
       "color": "#4A6FA5",
       "icon": "ac_unit",
       "steam_app_id": 892970,
-      "icon_asset": "assets/games/valheim/icon.png",
-      "grid_asset": "assets/games/valheim/grid.png",
+      "icon_asset": "games/valheim/icon.png",
+      "grid_asset": "games/valheim/grid.png",
       "show_in_picker": true,
       "sort": 50,
       "platforms": {
