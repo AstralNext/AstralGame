@@ -1,8 +1,7 @@
-import 'dart:io';
-
 import 'package:astral_game/config/app_theme_id.dart';
 import 'package:astral_game/data/services/app_settings_service.dart';
 import 'package:astral_game/data/services/home_widget_theme_sync.dart';
+import 'package:astral_game/utils/runtime_platform.dart';
 import 'package:signals/signals.dart';
 
 class SettingsState {
@@ -35,7 +34,7 @@ class SettingsState {
     disableP2p.value = _settings.isDisableP2p();
     enableUdpBroadcastRelay.value = _settings.isEnableUdpBroadcastRelay();
     floatingOverlayEnabled.value = _settings.isFloatingOverlayEnabled();
-    if (Platform.isAndroid) {
+    if (RuntimePlatform.isAndroid) {
       syncHomeWidgetTheme(appThemeId.value);
     }
   }
@@ -49,7 +48,7 @@ class SettingsState {
       _settings.setEnableUdpBroadcastRelay(enableUdpBroadcastRelay.value),
       _settings.setFloatingOverlayEnabled(floatingOverlayEnabled.value),
     ]);
-    if (Platform.isAndroid) {
+    if (RuntimePlatform.isAndroid) {
       await syncHomeWidgetTheme(appThemeId.value);
     }
   }

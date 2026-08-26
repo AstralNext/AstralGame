@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:astral_game/data/models/enhanced_node_info.dart';
 import 'package:astral_game/data/models/game_assist_rules.dart';
@@ -15,6 +14,7 @@ import 'package:astral_game/data/services/peer_rpc/peer_rpc_router.dart';
 import 'package:astral_game/utils/lan_title_template.dart';
 import 'package:astral_game/utils/logger.dart';
 import 'package:astral_game/utils/net_addr.dart';
+import 'package:astral_game/utils/runtime_platform.dart';
 import 'package:signals/signals_core.dart';
 
 /// 局域网游戏发现 + 经 EasyTier peer-RPC 向房间同步「开放游戏」列表。
@@ -55,7 +55,7 @@ class OpenGamesService {
   String _roomGameName = '';
 
   /// 本机发现 + 注入 + 转发：只在 Windows。
-  static bool get lanAssistEnabled => Platform.isWindows;
+  static bool get lanAssistEnabled => RuntimePlatform.isWindows;
 
   bool get isActive => _roomGameId != null;
   String? get roomGameId => _roomGameId;
@@ -242,21 +242,38 @@ class OpenGamesService {
     final out = <ScfaLanAnnounce>[];
 
     if (_isHost) {
-      for (final ad in _lastLocalAds) {
-        if (!_isScfaEntry(ad.entry)) continue;
-        out.add(
-          ScfaLanAnnounce(
-            title: ad.label,
-            lobbyPort: ad.port,
-            mapName: ad.motd,
-            hostedBy: host,
-            ipv4: ad.ipv4,
-          ),
-        );
-      }
+      out.addAll(_collectLocalScfaAnnounces(host));
     }
+    out.addAll(_collectRemoteScfaAnnounces(host, cfg));
 
+    ScfaDiscoveryBeacon.instance.publish(out);
+  }
+
+  /// 房主本机 SCFA 广告 → 广播公告。
+  List<ScfaLanAnnounce> _collectLocalScfaAnnounces(String host) {
+    final out = <ScfaLanAnnounce>[];
+    for (final ad in _lastLocalAds) {
+      if (!_isScfaEntry(ad.entry)) continue;
+      out.add(
+        ScfaLanAnnounce(
+          title: ad.label,
+          lobbyPort: ad.port,
+          mapName: ad.motd,
+          hostedBy: host,
+          ipv4: ad.ipv4,
+        ),
+      );
+    }
+    return out;
+  }
+
+  /// 远端 peer 的 SCFA 开放游戏 → 代理广播公告（含本机转发端口）。
+  List<ScfaLanAnnounce> _collectRemoteScfaAnnounces(
+    String host,
+    GameAssistLanGameDiscoverConfig cfg,
+  ) {
     final relays = _localRelay.statuses.value;
+    final out = <ScfaLanAnnounce>[];
     for (final listing in listings.value) {
       if (listing.isSelf || listing.isExpired) continue;
       final entry = _scfaEntryForListing(listing, cfg.entries);
@@ -278,8 +295,7 @@ class OpenGamesService {
         ),
       );
     }
-
-    ScfaDiscoveryBeacon.instance.publish(out);
+    return out;
   }
 
   bool _isScfaEntry(GameAssistLanGameDiscoverEntry entry) {
@@ -411,8 +427,24 @@ class OpenGamesService {
     }
     _emptyAdsStrikes[fromPeerId] = 0;
 
-    const isHostPeer = false;
+    final parsed = _parseTrustedAds(
+      list: list,
+      fromPeerId: fromPeerId,
+      ownerName: ownerName,
+      roomGameId: roomGameId,
+    );
+    _replacePeerListings(fromPeerId, parsed);
+  }
 
+  /// 将远端 peer 广告列表解析为受信任的 [OpenGameListing]。
+  /// 只接受 peer 当前虚拟 IPv4，避免任意 IP 诱骗本机转发。
+  /// 远端 peer 广告不标记为房主（isRoomHost = false）。
+  List<OpenGameListing> _parseTrustedAds({
+    required List<Map<String, dynamic>> list,
+    required int fromPeerId,
+    required String ownerName,
+    required String roomGameId,
+  }) {
     final parsed = <OpenGameListing>[];
     for (final raw in list) {
       final item = OpenGameListing.fromWire(
@@ -421,7 +453,7 @@ class OpenGamesService {
         raw: raw,
         ttlMs: GameAssistLanGameDiscoverConfig.ttlMs,
         isSelf: false,
-        isRoomHost: isHostPeer,
+        isRoomHost: false,
       );
       if (item == null) continue;
       if (item.roomGameId.isNotEmpty && item.roomGameId != roomGameId) continue;
@@ -448,11 +480,11 @@ class OpenGamesService {
           motd: item.motd,
           expiresAt: item.expiresAt,
           isSelf: false,
-          isRoomHost: item.isRoomHost,
+          isRoomHost: false,
         ),
       );
     }
-    _replacePeerListings(fromPeerId, parsed);
+    return parsed;
   }
 
   /// 只接受该 peer 当前虚拟 IPv4，避免房间内任意 IP 诱骗本机转发。

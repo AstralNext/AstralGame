@@ -1,3 +1,5 @@
+import 'package:astral_game/config/network_constants.dart';
+
 /// `224.0.2.60:4445` → host + port。
 ({String host, int port})? parseHostPort(String? raw) {
   final s = (raw ?? '').trim();
@@ -14,7 +16,7 @@
 /// 去掉 CIDR，得到纯地址；空或未指定地址则 null。
 String? stripCidrHost(
   String? raw, {
-  Set<String> unspecified = const {'0.0.0.0', '::'},
+  Set<String> unspecified = kUnspecifiedIpSet,
 }) {
   if (raw == null) return null;
   var s = raw.trim();
@@ -27,4 +29,4 @@ String? stripCidrHost(
 
 /// 去掉 CIDR，得到纯 IPv4；无效则 null。
 String? stripIpv4Host(String? raw) =>
-    stripCidrHost(raw, unspecified: const {'0.0.0.0'});
+    stripCidrHost(raw, unspecified: const {kUnspecifiedIpV4});

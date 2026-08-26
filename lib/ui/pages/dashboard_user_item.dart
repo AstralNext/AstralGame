@@ -91,235 +91,45 @@ class _DashboardUserItemState extends State<DashboardUserItem> {
         ? groupedTileBorderRadius(index: widget.index, count: widget.count)
         : AppRadius.brMedium;
 
-    final chips = <Widget>[
-      if (widget.isRoomHost)
-        _MiniChip(
-          icon: Icons.star_rounded,
-          label: '房主',
-          background: colorScheme.primaryContainer,
-          foreground: colorScheme.onPrimaryContainer,
+    return _UserTileShell(
+      grouped: widget.grouped,
+      index: widget.index,
+      count: widget.count,
+      borderRadius: borderRadius,
+      isHovered: _isHovered,
+      onHoverChanged: (v) => setState(() => _isHovered = v),
+      onTap: () => _copyIp(context, hasIpv4: hasIpv4, ipv4: node.ipv4),
+      colorScheme: colorScheme,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          widget.grouped ? 16 : 12,
+          12,
+          12,
+          12,
         ),
-      if (platformName.isNotEmpty)
-        _MiniChip(
-          icon: platformIcon,
-          label: platformName,
-          background: colorScheme.secondaryContainer,
-          foreground: colorScheme.onSecondaryContainer,
-        ),
-      if (network.hasLabel)
-        _MiniChip(
-          icon: network.icon,
-          label: network.shortLabel,
-          background: colorScheme.tertiaryContainer,
-          foreground: colorScheme.onTertiaryContainer,
-        ),
-      if (firewall.hasLabel)
-        _MiniChip(
-          icon: firewall.icon,
-          label: firewall.shortLabel,
-          background: firewall.isEnabled == true
-              ? colorScheme.primaryContainer
-              : colorScheme.surfaceContainerHighest,
-          foreground: firewall.isEnabled == true
-              ? colorScheme.onPrimaryContainer
-              : colorScheme.onSurfaceVariant,
-        ),
-        Watch((context) {
-          final metrics = widget.nodeManagement
-              .linkMetricsOf(node.peerId)
-              .value;
-          return Text(
-            '${metrics.latencyMs.round()}ms',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-              color: _latencyColor(metrics.latencyMs),
-            ),
-          );
-        }),
-    ];
-
-    final row = Row(
-      children: [
-        _buildAvatar(colorScheme),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                node.customName ?? '...',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: node.customName != null
-                      ? colorScheme.onSurface
-                      : colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
-                ),
-              ),
-              if (chips.isNotEmpty) ...[
-                const SizedBox(height: 4),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 4,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: chips,
-                ),
-              ],
-              const SizedBox(height: 4),
-              Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Text(
-                    ipDisplayText,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: hasIpv4
-                          ? colorScheme.onSurfaceVariant
-                          : colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
-                    ),
-                  ),
-                  if (isDirect)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.online,
-                        borderRadius: AppRadius.brSmall,
-                      ),
-                      child: const Text(
-                        '直连',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  if (versionNumber.isNotEmpty)
-                    Text(
-                      versionNumber,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: colorScheme.onSurfaceVariant.withValues(
-                          alpha: 0.5,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              if (hasIpv6)
-                Padding(
-                  padding: const EdgeInsets.only(top: 2),
-                  child: Text(
-                    node.ipv6,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: colorScheme.onSurfaceVariant.withValues(
-                        alpha: 0.9,
-                      ),
-                    ),
-                  ),
-                ),
-              if (peerEnvLine.isNotEmpty) ...[
-                const SizedBox(height: 4),
-                Tooltip(
-                  message: _peerClientEnvFull(node),
-                  child: Text(
-                    peerEnvLine,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: colorScheme.onSurfaceVariant.withValues(
-                        alpha: 0.75,
-                      ),
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-              Watch((context) {
-                final metrics = widget.nodeManagement
-                    .linkMetricsOf(node.peerId)
-                    .value;
-                if (metrics.lossRate <= 0) {
-                  return const SizedBox.shrink();
-                }
-                return Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    '丢包: ${metrics.lossRate.toStringAsFixed(1)}%',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.error,
-                    ),
-                  ),
-                );
-              }),
-            ],
+        child: _UserMainContentRow(
+          node: node,
+          colorScheme: colorScheme,
+          accentColor: palette.accent,
+          platformName: platformName,
+          platformIcon: platformIcon,
+          network: network,
+          firewall: firewall,
+          versionNumber: versionNumber,
+          hasIpv4: hasIpv4,
+          hasIpv6: hasIpv6,
+          ipDisplayText: ipDisplayText,
+          isDirect: isDirect,
+          peerEnvLine: peerEnvLine,
+          isRoomHost: widget.isRoomHost,
+          nodeManagement: widget.nodeManagement,
+          latencyColor: _latencyColor,
+          peerClientEnvFull: () => _peerClientEnvFull(node),
+          avatarWidget: _UserAvatar(
+            avatar: widget.node.avatar,
+            colorScheme: colorScheme,
           ),
         ),
-        Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(
-            color: palette.accent,
-            borderRadius: BorderRadius.circular(4),
-          ),
-        ),
-      ],
-    );
-
-    final padded = Padding(
-      padding: EdgeInsets.fromLTRB(
-        widget.grouped ? 16 : 12,
-        12,
-        12,
-        12,
-      ),
-      child: row,
-    );
-
-    final ink = Material(
-      color: Colors.transparent,
-      shape: widget.grouped
-          ? groupedTileShape(index: widget.index, count: widget.count)
-          : RoundedRectangleBorder(borderRadius: borderRadius),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => _copyIp(context, hasIpv4: hasIpv4, ipv4: node.ipv4),
-        borderRadius: widget.grouped ? null : borderRadius,
-        customBorder: widget.grouped
-            ? groupedTileShape(index: widget.index, count: widget.count)
-            : null,
-        child: padded,
-      ),
-    );
-
-    if (widget.grouped) {
-      return ink;
-    }
-
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      cursor: SystemMouseCursors.click,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeInOut,
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        decoration: BoxDecoration(
-          color: _isHovered
-              ? colorScheme.surfaceContainerHighest.withValues(alpha: 0.5)
-              : Colors.transparent,
-          borderRadius: borderRadius,
-        ),
-        child: ink,
       ),
     );
   }
@@ -413,9 +223,20 @@ class _DashboardUserItemState extends State<DashboardUserItem> {
     }
   }
 
-  Widget _buildAvatar(ColorScheme colorScheme) {
-    const size = 36.0;
+}
 
+// ─── 拆分后的子 Widget ───────────────────────────────────────────────────────
+
+/// 用户头像组件：圆形头像容器 + 图片或默认图标。
+class _UserAvatar extends StatelessWidget {
+  const _UserAvatar({required this.avatar, required this.colorScheme});
+
+  final Uint8List? avatar;
+  final ColorScheme colorScheme;
+
+  @override
+  Widget build(BuildContext context) {
+    const size = 36.0;
     return Container(
       width: size,
       height: size,
@@ -424,10 +245,10 @@ class _DashboardUserItemState extends State<DashboardUserItem> {
         color: colorScheme.primaryContainer,
         border: Border.all(color: colorScheme.outline),
       ),
-      child: widget.node.avatar != null
+      child: avatar != null
           ? ClipOval(
               child: Image.memory(
-                widget.node.avatar!,
+                avatar!,
                 fit: BoxFit.cover,
                 width: size,
                 height: size,
@@ -444,6 +265,375 @@ class _DashboardUserItemState extends State<DashboardUserItem> {
     );
   }
 }
+
+/// 状态标签 chips 区域（房主 / 平台 / 网络 / 防火墙 / 延迟）。
+class _UserStatusChips extends StatelessWidget {
+  const _UserStatusChips({
+    required this.isRoomHost,
+    required this.platformName,
+    required this.platformIcon,
+    required this.network,
+    required this.firewall,
+    required this.colorScheme,
+    required this.nodeManagement,
+    required this.peerId,
+    required this.latencyColor,
+  });
+
+  final bool isRoomHost;
+  final String platformName;
+  final IconData platformIcon;
+  final NetworkPresentation network;
+  final FirewallPresentation firewall;
+  final ColorScheme colorScheme;
+  final NodeManagementService nodeManagement;
+  final int peerId;
+  final Color Function(double) latencyColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final chips = <Widget>[
+      if (isRoomHost)
+        _MiniChip(
+          icon: Icons.star_rounded,
+          label: '房主',
+          background: colorScheme.primaryContainer,
+          foreground: colorScheme.onPrimaryContainer,
+        ),
+      if (platformName.isNotEmpty)
+        _MiniChip(
+          icon: platformIcon,
+          label: platformName,
+          background: colorScheme.secondaryContainer,
+          foreground: colorScheme.onSecondaryContainer,
+        ),
+      if (network.hasLabel)
+        _MiniChip(
+          icon: network.icon,
+          label: network.shortLabel,
+          background: colorScheme.tertiaryContainer,
+          foreground: colorScheme.onTertiaryContainer,
+        ),
+      if (firewall.hasLabel)
+        _MiniChip(
+          icon: firewall.icon,
+          label: firewall.shortLabel,
+          background: firewall.isEnabled == true
+              ? colorScheme.primaryContainer
+              : colorScheme.surfaceContainerHighest,
+          foreground: firewall.isEnabled == true
+              ? colorScheme.onPrimaryContainer
+              : colorScheme.onSurfaceVariant,
+        ),
+      Watch((context) {
+        final metrics = nodeManagement.linkMetricsOf(peerId).value;
+        return Text(
+          '${metrics.latencyMs.round()}ms',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+            color: latencyColor(metrics.latencyMs),
+          ),
+        );
+      }),
+    ];
+
+    return Wrap(
+      spacing: 6,
+      runSpacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: chips,
+    );
+  }
+}
+
+/// IP 信息 + 版本号 + 直连标签 + IPv6 + 环境信息 + 丢包率 行。
+class _UserIpAndMetaRow extends StatelessWidget {
+  const _UserIpAndMetaRow({
+    required this.node,
+    required this.colorScheme,
+    required this.versionNumber,
+    required this.hasIpv4,
+    required this.hasIpv6,
+    required this.ipDisplayText,
+    required this.isDirect,
+    required this.peerEnvLine,
+    required this.nodeManagement,
+    required this.peerClientEnvFull,
+  });
+
+  final EnhancedNodeInfo node;
+  final ColorScheme colorScheme;
+  final String versionNumber;
+  final bool hasIpv4;
+  final bool hasIpv6;
+  final String ipDisplayText;
+  final bool isDirect;
+  final String peerEnvLine;
+  final NodeManagementService nodeManagement;
+  final String Function() peerClientEnvFull;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(
+              ipDisplayText,
+              style: TextStyle(
+                fontSize: 12,
+                color: hasIpv4
+                    ? colorScheme.onSurfaceVariant
+                    : colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+              ),
+            ),
+            if (isDirect)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppColors.online,
+                  borderRadius: AppRadius.brSmall,
+                ),
+                child: const Text(
+                  '直连',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            if (versionNumber.isNotEmpty)
+              Text(
+                versionNumber,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                ),
+              ),
+          ],
+        ),
+        if (hasIpv6)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              node.ipv6,
+              style: TextStyle(
+                fontSize: 11,
+                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.9),
+              ),
+            ),
+          ),
+        if (peerEnvLine.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Tooltip(
+            message: peerClientEnvFull(),
+            child: Text(
+              peerEnvLine,
+              style: TextStyle(
+                fontSize: 11,
+                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.75),
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+        Watch((context) {
+          final metrics = nodeManagement.linkMetricsOf(node.peerId).value;
+          if (metrics.lossRate <= 0) return const SizedBox.shrink();
+          return Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              '丢包: ${metrics.lossRate.toStringAsFixed(1)}%',
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: AppColors.error,
+              ),
+            ),
+          );
+        }),
+      ],
+    );
+  }
+}
+
+/// 主内容行（头像 + 信息列 + 状态指示点）。
+class _UserMainContentRow extends StatelessWidget {
+  const _UserMainContentRow({
+    required this.node,
+    required this.colorScheme,
+    required this.accentColor,
+    required this.platformName,
+    required this.platformIcon,
+    required this.network,
+    required this.firewall,
+    required this.versionNumber,
+    required this.hasIpv4,
+    required this.hasIpv6,
+    required this.ipDisplayText,
+    required this.isDirect,
+    required this.peerEnvLine,
+    required this.isRoomHost,
+    required this.nodeManagement,
+    required this.latencyColor,
+    required this.peerClientEnvFull,
+    required this.avatarWidget,
+  });
+
+  final EnhancedNodeInfo node;
+  final ColorScheme colorScheme;
+  final Color accentColor;
+  final String platformName;
+  final IconData platformIcon;
+  final NetworkPresentation network;
+  final FirewallPresentation firewall;
+  final String versionNumber;
+  final bool hasIpv4;
+  final bool hasIpv6;
+  final String ipDisplayText;
+  final bool isDirect;
+  final String peerEnvLine;
+  final bool isRoomHost;
+  final NodeManagementService nodeManagement;
+  final Color Function(double) latencyColor;
+  final String Function() peerClientEnvFull;
+  final Widget avatarWidget;
+
+  int get peerId => node.peerId;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        avatarWidget,
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                node.customName ?? '...',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: node.customName != null
+                      ? colorScheme.onSurface
+                      : colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                ),
+              ),
+              const SizedBox(height: 4),
+              _UserStatusChips(
+                isRoomHost: isRoomHost,
+                platformName: platformName,
+                platformIcon: platformIcon,
+                network: network,
+                firewall: firewall,
+                colorScheme: colorScheme,
+                nodeManagement: nodeManagement,
+                peerId: node.peerId,
+                latencyColor: latencyColor,
+              ),
+              const SizedBox(height: 4),
+              _UserIpAndMetaRow(
+                node: node,
+                colorScheme: colorScheme,
+                versionNumber: versionNumber,
+                hasIpv4: hasIpv4,
+                hasIpv6: hasIpv6,
+                ipDisplayText: ipDisplayText,
+                isDirect: isDirect,
+                peerEnvLine: peerEnvLine,
+                nodeManagement: nodeManagement,
+                peerClientEnvFull: peerClientEnvFull,
+              ),
+            ],
+          ),
+        ),
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            color: accentColor,
+            borderRadius: BorderRadius.circular(4),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 外层交互容器（Padding / Material / InkWell / 分组样式 / MouseRegion）。
+class _UserTileShell extends StatelessWidget {
+  const _UserTileShell({
+    required this.grouped,
+    required this.index,
+    required this.count,
+    required this.borderRadius,
+    required this.isHovered,
+    required this.onHoverChanged,
+    required this.onTap,
+    required this.colorScheme,
+    required this.child,
+  });
+
+  final bool grouped;
+  final int index;
+  final int count;
+  final BorderRadius borderRadius;
+  final bool isHovered;
+  final ValueChanged<bool> onHoverChanged;
+  final VoidCallback onTap;
+  final ColorScheme colorScheme;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final shape = grouped
+        ? groupedTileShape(index: index, count: count)
+        : RoundedRectangleBorder(borderRadius: borderRadius);
+
+    final ink = Material(
+      color: Colors.transparent,
+      shape: shape,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: grouped ? null : borderRadius,
+        customBorder: grouped ? shape : null,
+        child: child,
+      ),
+    );
+
+    if (grouped) return ink;
+
+    return MouseRegion(
+      onEnter: (_) => onHoverChanged(true),
+      onExit: (_) => onHoverChanged(false),
+      cursor: SystemMouseCursors.click,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeInOut,
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        decoration: BoxDecoration(
+          color: isHovered
+              ? colorScheme.surfaceContainerHighest.withValues(alpha: 0.5)
+              : Colors.transparent,
+          borderRadius: borderRadius,
+        ),
+        child: ink,
+      ),
+    );
+  }
+}
+
+// ─── 原有子 Widget ──────────────────────────────────────────────────────────
 
 class _MiniChip extends StatelessWidget {
   const _MiniChip({

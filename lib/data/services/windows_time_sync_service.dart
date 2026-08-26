@@ -1,13 +1,14 @@
 import 'dart:io';
 
 import 'package:astral_game/utils/logger.dart';
+import 'package:astral_game/utils/runtime_platform.dart';
 
 const kAliyunNtpHost = 'pool.ntp.org';
 const kAliyunNtpPeer = 'pool.ntp.org,0x9';
 
 /// Windows：启动后校准系统时间源。非 Windows 为空操作。
 Future<void> ensureWindowsAliyunNtp() async {
-  if (!Platform.isWindows) return;
+  if (!RuntimePlatform.isWindows) return;
   try {
     await _ensureAliyunNtp().timeout(const Duration(seconds: 20));
   } catch (e) {

@@ -1,16 +1,31 @@
-using System;
-using System.IO;
-using System.Reflection;
-
+// 共享模板：由两个插件项目通过 Link 方式引用
+// 在 Raft 项目定义 ASTRAL_RAFT，Valheim 项目定义 ASTRAL_VALHEIM
+#if ASTRAL_RAFT
 namespace AstralRaftNet
+#elif ASTRAL_VALHEIM
+namespace AstralValheimNet
+#endif
 {
+    using System;
+    using System.IO;
+    using System.Reflection;
+
     public static class Loader
     {
         private static readonly string[] LogPaths =
         {
-            @"E:\Raft\astral_raft_net.log",
+#if ASTRAL_RAFT
             Path.Combine(Path.GetTempPath(), "astral_raft_net.log")
+#elif ASTRAL_VALHEIM
+            Path.Combine(Path.GetTempPath(), "astral_valheim_net.log")
+#endif
         };
+
+#if ASTRAL_RAFT
+        private const string BootstrapTypeName = "AstralRaftNet.HarmonyBootstrap, AstralRaftNet";
+#elif ASTRAL_VALHEIM
+        private const string BootstrapTypeName = "AstralValheimNet.HarmonyBootstrap, AstralValheimNet";
+#endif
 
         static Loader()
         {
@@ -24,7 +39,7 @@ namespace AstralRaftNet
             {
                 Log("init start");
                 LoadEmbeddedHarmony();
-                Type type = Type.GetType("AstralRaftNet.HarmonyBootstrap, AstralRaftNet", true);
+                Type type = Type.GetType(BootstrapTypeName, true);
                 Log("type " + type.FullName);
                 type.GetMethod("Apply", BindingFlags.Public | BindingFlags.Static).Invoke(null, null);
                 Log("init ok");
@@ -39,7 +54,7 @@ namespace AstralRaftNet
         {
             try
             {
-                Type type = Type.GetType("AstralRaftNet.HarmonyBootstrap, AstralRaftNet", false);
+                Type type = Type.GetType(BootstrapTypeName, false);
                 if (type != null)
                 {
                     type.GetMethod("Remove", BindingFlags.Public | BindingFlags.Static).Invoke(null, null);

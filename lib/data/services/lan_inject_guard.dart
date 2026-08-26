@@ -1,5 +1,8 @@
 import 'dart:io';
 
+import 'package:astral_game/config/network_constants.dart';
+import 'package:astral_game/utils/logger.dart';
+
 /// 防止「本机注入组播 → 再被发现器吃回去」的风暴。
 abstract final class LanInjectGuard {
   static final Set<String> _keys = {};
@@ -20,10 +23,11 @@ abstract final class LanInjectGuard {
   static bool isLoopbackSource(String? ip) {
     final s = (ip ?? '').trim();
     if (s.isEmpty) return false;
-    if (s == '127.0.0.1' || s == '::1' || s == 'localhost') return true;
+    if (kLoopbackIpSet.contains(s)) return true;
     try {
       return InternetAddress(s).isLoopback;
-    } catch (_) {
+    } catch (e) {
+      appLogger.d('[LanInjectGuard] 解析 IP 失败 $s: $e');
       return false;
     }
   }

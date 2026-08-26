@@ -1,36 +1,28 @@
 import 'package:astral_game/data/models/game_assist_rules.dart';
 import 'package:astral_game/utils/net_addr.dart';
+import 'package:freezed_annotation/freezed_annotation.dart';
+
+part 'open_game_listing.freezed.dart';
 
 /// 房间内某条「开放游戏」宣告（自己或同伴经 ET 发来）。
-class OpenGameListing {
-  const OpenGameListing({
-    required this.key,
-    required this.fromPeerId,
-    required this.ownerName,
-    required this.roomGameId,
-    required this.adId,
-    required this.label,
-    required this.ipv4,
-    required this.port,
-    this.motd,
-    required this.expiresAt,
-    this.isSelf = false,
-    this.isRoomHost = false,
-  });
-
-  /// 去重键：`peerId:adId`。
-  final String key;
-  final int fromPeerId;
-  final String ownerName;
-  final String roomGameId;
-  final String adId;
-  final String label;
-  final String ipv4;
-  final int port;
-  final String? motd;
-  final DateTime expiresAt;
-  final bool isSelf;
-  final bool isRoomHost;
+@freezed
+abstract class OpenGameListing with _$OpenGameListing {
+  const OpenGameListing._();
+  const factory OpenGameListing({
+    /// 去重键：`peerId:adId`。
+    required final String key,
+    required final int fromPeerId,
+    required final String ownerName,
+    required final String roomGameId,
+    required final String adId,
+    required final String label,
+    required final String ipv4,
+    required final int port,
+    final String? motd,
+    required final DateTime expiresAt,
+    @Default(false) final bool isSelf,
+    @Default(false) final bool isRoomHost,
+  }) = _OpenGameListing;
 
   String get endpoint => '$ipv4:$port';
 
@@ -75,47 +67,22 @@ class OpenGameListing {
       isRoomHost: isRoomHost,
     );
   }
-
-  OpenGameListing copyWith({
-    String? ownerName,
-    DateTime? expiresAt,
-    bool? isRoomHost,
-  }) {
-    return OpenGameListing(
-      key: key,
-      fromPeerId: fromPeerId,
-      ownerName: ownerName ?? this.ownerName,
-      roomGameId: roomGameId,
-      adId: adId,
-      label: label,
-      ipv4: ipv4,
-      port: port,
-      motd: motd,
-      expiresAt: expiresAt ?? this.expiresAt,
-      isSelf: isSelf,
-      isRoomHost: isRoomHost ?? this.isRoomHost,
-    );
-  }
 }
 
 /// 本机即将经 ET 发出的开放游戏快照。
-class LocalOpenGameAd {
-  const LocalOpenGameAd({
-    required this.entry,
-    required this.ipv4,
-    required this.roomGameId,
-    required this.port,
-    required this.label,
-    this.motd,
-  });
+@freezed
+abstract class LocalOpenGameAd with _$LocalOpenGameAd {
+  const factory LocalOpenGameAd({
+    required final GameAssistLanGameDiscoverEntry entry,
+    required final String ipv4,
+    required final String roomGameId,
+    required final int port,
+    required final String label,
+    final String? motd,
+  }) = _LocalOpenGameAd;
+}
 
-  final GameAssistLanGameDiscoverEntry entry;
-  final String ipv4;
-  final String roomGameId;
-  final int port;
-  final String label;
-  final String? motd;
-
+extension LocalOpenGameAdWire on LocalOpenGameAd {
   Map<String, dynamic> toWire() => {
         'adId': '${entry.id}:$port',
         'gameId': roomGameId,

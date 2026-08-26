@@ -122,48 +122,31 @@ Color parseGameColor(String raw) {
   return Color(value);
 }
 
-IconData resolveGameIcon(String name) {
-  switch (name.trim()) {
-    case 'terrain':
-      return Icons.terrain;
-    case 'forest':
-      return Icons.forest;
-    case 'ac_unit':
-      return Icons.ac_unit;
-    case 'pets':
-      return Icons.pets;
-    case 'precision_manufacturing':
-      return Icons.precision_manufacturing;
-    case 'grass':
-      return Icons.grass;
-    case 'factory':
-      return Icons.factory;
-    case 'outdoors':
-      return Icons.outdoor_grill;
-    case 'coronavirus':
-      return Icons.coronavirus;
-    case 'nightlight':
-      return Icons.nightlight;
-    case 'warning':
-      return Icons.warning_amber_rounded;
-    case 'hardware':
-      return Icons.handyman;
-    case 'sailing':
-      return Icons.sailing;
-    case 'military_tech':
-      return Icons.military_tech;
-    case 'sports_esports':
-      return Icons.sports_esports;
-    case 'sports_esports_outlined':
-      return Icons.sports_esports_outlined;
-    case 'videogame_asset':
-      return Icons.videogame_asset;
-    case 'extension':
-      return Icons.extension;
-    default:
-      return Icons.sports_esports_outlined;
-  }
-}
+const _kGameIconMap = <String, IconData>{
+  'terrain': Icons.terrain,
+  'forest': Icons.forest,
+  'ac_unit': Icons.ac_unit,
+  'pets': Icons.pets,
+  'precision_manufacturing': Icons.precision_manufacturing,
+  'grass': Icons.grass,
+  'factory': Icons.factory,
+  'outdoors': Icons.outdoor_grill,
+  'coronavirus': Icons.coronavirus,
+  'nightlight': Icons.nightlight,
+  'warning': Icons.warning_amber_rounded,
+  'hardware': Icons.handyman,
+  'sailing': Icons.sailing,
+  'military_tech': Icons.military_tech,
+  'sports_esports': Icons.sports_esports,
+  'sports_esports_outlined': Icons.sports_esports_outlined,
+  'videogame_asset': Icons.videogame_asset,
+  'extension': Icons.extension,
+};
+
+const _kDefaultGameIcon = Icons.sports_esports_outlined;
+
+IconData resolveGameIcon(String name) =>
+    _kGameIconMap[name.trim()] ?? _kDefaultGameIcon;
 
 /// `icon_asset` / `grid_asset`：
 /// - 绝对 URL (http/https) → CachedNetworkImage（带磁盘缓存）

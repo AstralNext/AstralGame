@@ -19,6 +19,7 @@ import 'package:astral_game/data/services/vpn_manager.dart';
 import 'package:astral_game/data/state/room_state.dart';
 import 'package:astral_game/utils/logger.dart';
 import 'package:astral_game/utils/room_share.dart';
+import 'package:astral_game/utils/runtime_platform.dart';
 import 'package:astral_rust_core/p2p_service.dart';
 import 'package:signals/signals_core.dart';
 
@@ -64,6 +65,60 @@ class ConnectionService {
 
   /// 递增以作废进行中的乐观连接（例如用户在连接中点了离开）。
   final _link = ConnectionLinkEpoch();
+
+  /// 检查当前连接 epoch 是否仍然有效（未被取消 / 新连接尚未开始）。
+  ///
+  /// 在 [`_connect`] 等长流程中每执行完一步异步操作后调用，
+  /// 返回 false 说明用户在操作中取消了连接，流程应立刻回滚并返回。
+  bool _isLinkActive(int epoch) => _link.isLive(epoch);
+
+  /// 把底层 Rust / Platform 异常翻译成用户可读的错误。
+  ///
+  /// 当前仍通过字符串特征匹配做分类（Rust 侧返回的是错误消息字符串），
+  /// 但集中在此处，便于后续换成结构化错误码后单点升级。
+  Object _translateConnectionError(Object e) {
+    if (!RuntimePlatform.isWindows) return e;
+    final msg = e.toString().toLowerCase();
+    const tunKeywords = {'tun', 'wintun', 'access is denied', 'privilege'};
+    final hit = tunKeywords.any(msg.contains);
+    if (hit) {
+      return StateError('虚拟网卡启动失败，请以管理员身份重新运行 Astral Game');
+    }
+    return e;
+  }
+
+  /// 连接并启动房间辅助服务（create / join / resume 共用流程）。
+  /// 抛出 [ConnectionAbortedException] 表示被取消；抛出 [StateError] 表示连接失败。
+  Future<void> _connectAndStartServices({
+    required String networkName,
+    required String secret,
+    List<PeerEndpoint>? peersOverride,
+    required String purpose,
+    required String gameId,
+    required bool isHost,
+    required int epoch,
+    String failMessage = '连接失败，请重试',
+    bool armGuestWatch = false,
+  }) async {
+    final ok = await _connect(
+      networkName: networkName,
+      secret: secret,
+      peersOverride: peersOverride,
+      purpose: purpose,
+      gameId: gameId,
+      epoch: epoch,
+    );
+    if (!_isLinkActive(epoch)) {
+      throw const ConnectionAbortedException();
+    }
+    if (!ok) {
+      throw StateError(failMessage);
+    }
+    if (armGuestWatch) _armGuestPresenceWatch();
+    await _roomAssist.startForRoom(isHost: isHost, gameId: gameId);
+    await _gameInject.startForRoom(gameId: gameId);
+    await _openGames.startForRoom(isHost: isHost, gameId: gameId);
+  }
 
   EffectCleanup? _guestPresenceDispose;
   DateTime? _hostMissingSince;
@@ -125,33 +180,25 @@ class ConnectionService {
 
     var linked = false;
     try {
-      final ok = await _connect(
+      await _connectAndStartServices(
         networkName: networkName,
         secret: secret,
         purpose: 'create',
         gameId: gameId,
+        isHost: true,
         epoch: epoch,
       );
-      if (!_link.isLive(epoch)) {
-        throw const ConnectionAbortedException();
-      }
-      if (!ok) {
-        throw StateError('连接失败，请重试');
-      }
-      await _roomAssist.startForRoom(isHost: true, gameId: gameId);
-      await _gameInject.startForRoom(gameId: gameId);
-      await _openGames.startForRoom(isHost: true, gameId: gameId);
       linked = true;
       return session;
     } on ConnectionAbortedException {
       rethrow;
     } catch (e) {
-      if (!linked && _link.isLive(epoch)) {
+      if (!linked && _isLinkActive(epoch)) {
         await disconnect(revokeShare: true, clearSession: true);
       }
       rethrow;
     } finally {
-      if (_link.isLive(epoch)) {
+      if (_isLinkActive(epoch)) {
         isLinking.value = false;
       }
     }
@@ -207,34 +254,26 @@ class ConnectionService {
 
     var linked = false;
     try {
-      final ok = await _connect(
+      await _connectAndStartServices(
         networkName: payload.networkName,
         secret: payload.networkSecret,
         peersOverride: invitePeers,
         purpose: 'join',
-        gameId: payload.gameId,
+        gameId: session.gameId,
+        isHost: false,
         epoch: epoch,
       );
-      if (!_link.isLive(epoch)) {
-        throw const ConnectionAbortedException();
-      }
-      if (!ok) {
-        throw StateError('连接失败，请重试');
-      }
-      await _roomAssist.startForRoom(isHost: false, gameId: session.gameId);
-      await _gameInject.startForRoom(gameId: session.gameId);
-      await _openGames.startForRoom(isHost: false, gameId: session.gameId);
       linked = true;
       return session;
     } on ConnectionAbortedException {
       rethrow;
     } catch (e) {
-      if (!linked && _link.isLive(epoch)) {
+      if (!linked && _isLinkActive(epoch)) {
         await disconnect(revokeShare: false, clearSession: true);
       }
       rethrow;
     } finally {
-      if (_link.isLive(epoch)) {
+      if (_isLinkActive(epoch)) {
         isLinking.value = false;
       }
     }
@@ -375,34 +414,27 @@ class ConnectionService {
 
     var linked = false;
     try {
-      final ok = await _connect(
+      await _connectAndStartServices(
         networkName: snap.networkName,
         secret: snap.networkSecret,
         purpose: 'resume-host',
-        gameId: snap.gameId,
+        gameId: session.gameId,
+        isHost: true,
         epoch: epoch,
+        failMessage: '恢复连接失败，请重试',
+        armGuestWatch: true,
       );
-      if (!_link.isLive(epoch)) {
-        throw const ConnectionAbortedException();
-      }
-      if (!ok) {
-        throw StateError('恢复连接失败，请重试');
-      }
-      _armGuestPresenceWatch();
-      await _roomAssist.startForRoom(isHost: true, gameId: session.gameId);
-      await _gameInject.startForRoom(gameId: session.gameId);
-      await _openGames.startForRoom(isHost: true, gameId: session.gameId);
       linked = true;
       return session;
     } on ConnectionAbortedException {
       rethrow;
     } catch (e) {
-      if (!linked && _link.isLive(epoch)) {
+      if (!linked && _isLinkActive(epoch)) {
         await disconnect(revokeShare: true, clearSession: true);
       }
       rethrow;
     } finally {
-      if (_link.isLive(epoch)) {
+      if (_isLinkActive(epoch)) {
         isLinking.value = false;
       }
     }
@@ -432,25 +464,25 @@ class ConnectionService {
           abortLink: false,
         );
       }
-      if (Platform.isAndroid) {
+      if (RuntimePlatform.isAndroid) {
         _vpnManager.startListening();
         if (!await _vpnManager.ensurePermission()) {
           appLogger.w('[ConnectionService] Android VPN 权限未授予');
           return false;
         }
-        if (!_link.isLive(epoch)) return false;
+        if (!_isLinkActive(epoch)) return false;
       }
 
       final fromGame = gameId != null && gameId.isNotEmpty
           ? await _gameRules.wantsUdpBroadcastRelay(gameId)
           : false;
-      if (!_link.isLive(epoch)) return false;
+      if (!_isLinkActive(epoch)) return false;
       final fromUser = _appSettings.isEnableUdpBroadcastRelay();
       final udpRelay = fromGame || fromUser;
       final protocol = gameId != null && gameId.isNotEmpty
           ? await _gameRules.networkProtocol(gameId)
           : GameAssistNetworkProtocol.udp;
-      if (!_link.isLive(epoch)) return false;
+      if (!_isLinkActive(epoch)) return false;
 
       final configToml = _p2pConfig.buildTomlConfig(
         networkName,
@@ -470,14 +502,14 @@ class ConnectionService {
         configToml: configToml,
         watchEvent: true,
       );
-      if (!_link.isLive(epoch)) {
+      if (!_isLinkActive(epoch)) {
         await _p2pService.closeInstance(createdInstanceId);
         createdInstanceId = null;
         return false;
       }
       appLogger.i('[ConnectionService] 实例已创建 id=$createdInstanceId');
       final isRunning = await _p2pService.isEasytierRunning(createdInstanceId);
-      if (!_link.isLive(epoch)) {
+      if (!_isLinkActive(epoch)) {
         await _p2pService.closeInstance(createdInstanceId);
         createdInstanceId = null;
         return false;
@@ -490,7 +522,7 @@ class ConnectionService {
       }
 
       await _bindPeerRpc(createdInstanceId);
-      if (!_link.isLive(epoch)) {
+      if (!_isLinkActive(epoch)) {
         await _unbindPeerRpc();
         await _p2pService.closeInstance(createdInstanceId);
         createdInstanceId = null;
@@ -499,9 +531,9 @@ class ConnectionService {
       _nodeManagement.setRunning(createdInstanceId);
       _roomState.setConnected(true);
       _armGuestPresenceWatch();
-      if (Platform.isAndroid) {
+      if (RuntimePlatform.isAndroid) {
         final vpnOk = await _startAndroidVpnWhenIpReady(createdInstanceId);
-        if (!_link.isLive(epoch)) {
+        if (!_isLinkActive(epoch)) {
           await disconnect(
             revokeShare: false,
             pauseHost: false,
@@ -541,14 +573,8 @@ class ConnectionService {
       }
       _nodeManagement.setStopped();
       _roomState.setConnected(false, clearSession: false);
-      final msg = e.toString().toLowerCase();
-      if (Platform.isWindows &&
-          (msg.contains('tun') ||
-              msg.contains('wintun') ||
-              msg.contains('access is denied') ||
-              msg.contains('privilege'))) {
-        throw StateError('虚拟网卡启动失败，请以管理员身份重新运行 Astral Game');
-      }
+      final translated = _translateConnectionError(e);
+      if (translated != e) throw translated;
       return false;
     } finally {
       _isConnecting = false;
@@ -599,7 +625,7 @@ class ConnectionService {
 
     _disarmGuestPresenceWatch();
     final instanceId = _nodeManagement.instanceId;
-    if (Platform.isAndroid) {
+    if (RuntimePlatform.isAndroid) {
       await _vpnManager.stop();
     }
     if (instanceId != null) {

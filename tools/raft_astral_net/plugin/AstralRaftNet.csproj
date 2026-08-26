@@ -6,9 +6,19 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <OutputPath>..\bin\plugin\</OutputPath>
+    <DefineConstants>$(DefineConstants);ASTRAL_RAFT</DefineConstants>
     <RaftManaged Condition="'$(RaftManaged)' == '' AND Exists('C:\Users\baika\Downloads\cs\Assembly-CSharp.dll')">C:\Users\baika\Downloads\cs</RaftManaged>
     <RaftManaged Condition="'$(RaftManaged)' == '' AND Exists('E:\Raft\Raft_Data\Managed\Assembly-CSharp.dll')">E:\Raft\Raft_Data\Managed</RaftManaged>
   </PropertyGroup>
+  <!-- 引入共享模板，移除同名本地文件（SDK 项目默认包含 ./*.cs） -->
+  <ItemGroup>
+    <Compile Remove="Loader.cs" />
+    <Compile Remove="AstralLog.cs" />
+    <Compile Remove="HarmonyBootstrap.cs" />
+    <Compile Include="..\..\_astral_plugin_shared\Loader.cs" Link="Loader.cs" />
+    <Compile Include="..\..\_astral_plugin_shared\AstralLog.cs" Link="AstralLog.cs" />
+    <Compile Include="..\..\_astral_plugin_shared\HarmonyBootstrap.cs" Link="HarmonyBootstrap.cs" />
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Lib.Harmony" Version="2.2.2" />
     <EmbeddedResource Include="lib\0Harmony.dll" LogicalName="0Harmony.dll" />

@@ -5,6 +5,7 @@ import 'package:astral_game/config/constants.dart';
 import 'package:astral_game/data/models/enhanced_node_info.dart';
 import 'package:astral_game/data/services/app_settings_service.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
+import 'package:astral_game/utils/runtime_platform.dart';
 import 'package:flutter/services.dart';
 
 /// Android 悬浮窗：在线用户头像 / IP / 延迟。
@@ -13,7 +14,7 @@ class FloatingOverlayService {
     'fan.astral.next.game/floating_overlay',
   );
 
-  bool get isSupported => Platform.isAndroid;
+  bool get isSupported => RuntimePlatform.isAndroid;
 
   Future<bool> canDrawOverlays() async {
     if (!isSupported) return false;

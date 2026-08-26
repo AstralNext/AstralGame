@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:astral_game/utils/logger.dart';
+import 'package:astral_game/utils/runtime_platform.dart';
 import 'package:path/path.dart' as p;
 import 'package:signals/signals.dart';
 
@@ -10,7 +11,7 @@ class NetworkOptimizeService {
   final busy = signal(false);
 
   Future<void> refresh() async {
-    if (!Platform.isWindows) {
+    if (!RuntimePlatform.isWindows) {
       installed.value = false;
       return;
     }
@@ -33,7 +34,7 @@ class NetworkOptimizeService {
   }
 
   Future<void> setEnabled(bool enable) async {
-    if (!Platform.isWindows) return;
+    if (!RuntimePlatform.isWindows) return;
     if (busy.value) return;
     busy.value = true;
     try {

@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:astral_game/config/network_constants.dart';
 import 'package:astral_game/utils/net_addr.dart';
 import 'package:astral_rust_core/p2p_service.dart' show KVNodeInfo;
 import 'package:flutter/foundation.dart' show listEquals, mapEquals;
@@ -78,7 +79,7 @@ class EnhancedNodeInfo {
 
   /// 节点是否拥有有效的虚拟网 IPv6（兼容 CIDR）。
   bool get hasValidIpv6 =>
-      stripCidrHost(baseInfo.ipv6, unspecified: const {'::'}) != null;
+      stripCidrHost(baseInfo.ipv6, unspecified: const {kUnspecifiedIpV6}) != null;
 }
 
 /// 成员列表行会用到的字段；不含 rx/tx、时延、丢包（时延走独立 signal）。

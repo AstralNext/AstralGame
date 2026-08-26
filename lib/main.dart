@@ -6,6 +6,7 @@ import 'package:astral_game/data/services/home_widget_sync_service.dart';
 import 'package:astral_game/di.dart';
 import 'package:astral_game/firebase_options.dart';
 import 'package:astral_game/utils/join_protocol.dart';
+import 'package:astral_game/utils/runtime_platform.dart';
 import 'package:astral_game/utils/single_instance_guard.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -26,12 +27,12 @@ Future<void> main() async {
 
   unawaited(_initFirebase());
 
-  if (Platform.isAndroid) {
+  if (RuntimePlatform.isAndroid) {
     HomeWidget.registerInteractivityCallback(homeWidgetBackgroundCallback);
   }
 
   // Initialize window_manager only on desktop platforms
-  if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+  if (RuntimePlatform.isDesktop) {
     await windowManager.ensureInitialized();
 
     WindowOptions windowOptions = const WindowOptions(
@@ -54,18 +55,16 @@ Future<void> main() async {
   final nodeManager = getIt<NodeManagementService>();
   nodeManager.initUserInfo();
 
-  if (Platform.isAndroid) {
+  if (RuntimePlatform.isAndroid) {
     refreshAndroidHomeWidgets();
   }
 
   runApp(const AstralGameApp());
 }
 
-bool get _crashlyticsSupported =>
-    Platform.isAndroid || Platform.isIOS || Platform.isMacOS;
+bool get _crashlyticsSupported => RuntimePlatform.isApple || RuntimePlatform.isAndroid;
 
-bool get _analyticsSupported =>
-    Platform.isAndroid || Platform.isIOS || Platform.isMacOS;
+bool get _analyticsSupported => RuntimePlatform.isApple || RuntimePlatform.isAndroid;
 
 Future<void> _initFirebase() async {
   if (!_analyticsSupported && !_crashlyticsSupported) return;

@@ -1,5 +1,6 @@
 import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/config/constants.dart';
+import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/models/game_catalog.dart';
 import 'package:astral_game/data/services/connection_service.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
@@ -8,7 +9,6 @@ import 'package:astral_game/data/state/room_state.dart';
 import 'package:astral_game/di.dart';
 import 'package:astral_game/ui/pages/dashboard_user_item.dart';
 import 'package:astral_game/ui/widgets/dashboard_home_panel.dart';
-import 'package:astral_game/ui/widgets/dashboard_list_section.dart';
 import 'package:astral_game/ui/widgets/dashboard_members_skeleton.dart';
 import 'package:astral_game/ui/widgets/room_open_games_panel.dart';
 import 'package:flutter/material.dart';
@@ -115,11 +115,9 @@ class DashboardNarrowLayout extends StatelessWidget {
               AppDimensions.pagePaddingH,
               28,
             ),
-            sliver: SliverToBoxAdapter(
-              child: _MembersBlock(
-                roomState: roomState,
-                nodeManagement: nodeManagement,
-              ),
+            sliver: _MembersBlock(
+              roomState: roomState,
+              nodeManagement: nodeManagement,
             ),
           ),
         ],
@@ -238,39 +236,69 @@ class _MembersBlock extends StatelessWidget {
           '成员',
         ].join(' · ');
         final nodes = nodeManagement.userNodes.value;
+        final theme = Theme.of(context).textTheme;
+        final palette = context.astralPalette;
 
-        if (nodes.isEmpty) {
-          return DashboardListSection(
-            title: title,
-            useCard: false,
-            child: const DashboardMembersSkeleton(),
-          );
-        }
+        // 第 0 项：标题行；1..N：用户项。SliverList.builder 懒构建。
+        return SliverList.builder(
+          itemCount: nodes.isEmpty ? 1 : nodes.length + 1,
+          itemBuilder: (context, index) {
+            if (index == 0) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4),
+                    child: Row(
+                      children: [
+                        Text(
+                          title,
+                          style: theme.labelLarge?.copyWith(
+                            color: palette.accent,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                        if (nodes.isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          Text(
+                            '${nodes.length}',
+                            style: theme.labelSmall?.copyWith(
+                              color: palette.textTertiary,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  if (nodes.isEmpty) const DashboardMembersSkeleton(),
+                ],
+              );
+            }
 
-        return DashboardListSection(
-          title: title,
-          count: nodes.length,
-          child: Column(
-            children: [
-              for (var i = 0; i < nodes.length; i++) ...[
+            final i = index - 1;
+            final node = nodes[i];
+            return Column(
+              children: [
                 if (i > 0) const Divider(height: 1, indent: 56),
                 DashboardUserItem(
-                  key: ValueKey<int>(nodes[i].peerId),
-                  node: nodes[i],
+                  key: ValueKey<int>(node.peerId),
+                  node: node,
                   nodeManagement: nodeManagement,
                   grouped: true,
                   index: i,
                   count: nodes.length,
                   isRoomHost: session != null &&
                       nodeManagement.isRoomHostPeer(
-                        nodes[i].peerId,
+                        node.peerId,
                         sessionIsHost: session.isHost,
-                        isCredentialPeer: nodes[i].isCredentialPeer,
+                        isCredentialPeer: node.isCredentialPeer,
                       ),
                 ),
               ],
-            ],
-          ),
+            );
+          },
         );
       },
       dependencies: [

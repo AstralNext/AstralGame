@@ -2,11 +2,12 @@ import 'dart:io';
 
 import 'package:astral_game/utils/logger.dart';
 import 'package:astral_game/utils/room_share.dart';
+import 'package:astral_game/utils/runtime_platform.dart';
 
 /// 运行时注册 `astralgame://`（Windows HKCU）。
 /// Android / iOS / macOS 已在系统清单声明；安装包另写 HKLM。
 Future<void> registerJoinProtocol() async {
-  if (!Platform.isWindows) return;
+  if (!RuntimePlatform.isWindows) return;
   try {
     final exe = Platform.resolvedExecutable;
     final command = '"$exe" "%1"';

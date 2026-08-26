@@ -2,7 +2,7 @@ name: astral_game
 description: "Astral Game Client"
 publish_to: 'none'
 
-version: 1.1.0
+version: 1.1.5
 
 environment:
   sdk: ^3.8.0
@@ -47,12 +47,17 @@ dependencies:
   ffi: ^2.1.0
   firebase_analytics: ^12.4.6
   firebase_crashlytics: ^5.2.7
+  freezed_annotation: ^3.0.0
+  json_annotation: ^4.9.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.4
+  build_runner: ^2.4.15
+  freezed: ^3.0.0
+  json_serializable: ^6.9.0
 
 flutter_launcher_icons:
   android: true

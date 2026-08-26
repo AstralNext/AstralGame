@@ -6,6 +6,7 @@ import 'package:astral_game/data/services/node_management_service.dart';
 import 'package:astral_game/data/state/room_state.dart';
 import 'package:astral_game/data/state/settings_state.dart';
 import 'package:astral_game/di.dart';
+import 'package:astral_game/utils/runtime_platform.dart';
 import 'package:flutter/material.dart';
 import 'package:signals/signals_flutter.dart';
 
@@ -27,7 +28,7 @@ class _HomeWidgetRefreshBinderState extends State<HomeWidgetRefreshBinder>
   @override
   void initState() {
     super.initState();
-    if (!Platform.isAndroid) return;
+    if (!RuntimePlatform.isAndroid) return;
     WidgetsBinding.instance.addObserver(this);
     final roomState = getIt<RoomState>();
     final settings = getIt<SettingsState>();
@@ -63,7 +64,7 @@ class _HomeWidgetRefreshBinderState extends State<HomeWidgetRefreshBinder>
   void dispose() {
     _debounce?.cancel();
     _effectCleanup?.call();
-    if (Platform.isAndroid) {
+    if (RuntimePlatform.isAndroid) {
       WidgetsBinding.instance.removeObserver(this);
     }
     super.dispose();

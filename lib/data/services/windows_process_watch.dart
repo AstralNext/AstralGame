@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:astral_game/data/services/windows_game_process.dart';
+import 'package:astral_game/utils/runtime_platform.dart';
 
 typedef WindowsProcessListener = void Function(List<WindowsGameProcess> procs);
 
@@ -33,7 +34,7 @@ class WindowsProcessWatch {
       ],
       onTick,
     );
-    if (!Platform.isWindows) return;
+    if (!RuntimePlatform.isWindows) return;
     _timer ??= Timer.periodic(interval, (_) => unawaited(_tick()));
     unawaited(_tick());
   }
@@ -58,7 +59,7 @@ class WindowsProcessWatch {
   }
 
   Future<void> _tickOnce() async {
-    if (_disposed || _subs.isEmpty || !Platform.isWindows) return;
+    if (_disposed || _subs.isEmpty || !RuntimePlatform.isWindows) return;
     final names = <String>{};
     final snapshot = List<_WatchSub>.from(_subs.values);
     for (final s in snapshot) {

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:astral_game/utils/logger.dart';
+import 'package:astral_game/utils/runtime_platform.dart';
 import 'package:astral_rust_core/astral_rust_core.dart' as rust;
 import 'package:path/path.dart' as p;
 
@@ -44,7 +45,7 @@ Future<List<WindowsGameProcess>> listWindowsGameProcesses({
   List<String> exeNames = const [],
   List<String> windowNeedles = const [],
 }) async {
-  if (!Platform.isWindows) return const [];
+  if (!RuntimePlatform.isWindows) return const [];
   final exes = [
     for (final e in exeNames)
       if (e.trim().isNotEmpty) e.trim().toLowerCase(),

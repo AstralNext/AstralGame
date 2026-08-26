@@ -1,3 +1,8 @@
+import 'package:freezed_annotation/freezed_annotation.dart';
+
+part 'server_mod.freezed.dart';
+part 'server_mod.g.dart';
+
 class ServerMod {
   final int id;
   final String name;
@@ -59,23 +64,10 @@ class ServerMod {
 }
 
 /// 进网 peer 条目（TOML `[[peer]]` / 短码载荷）。仅 URI，不使用 peer_public_key。
-class PeerEndpoint {
-  const PeerEndpoint({required this.uri});
+@freezed
+abstract class PeerEndpoint with _$PeerEndpoint {
+  const factory PeerEndpoint({required final String uri}) = _PeerEndpoint;
 
-  final String uri;
-
-  Map<String, dynamic> toJson() => {'uri': uri};
-
-  factory PeerEndpoint.fromJson(dynamic raw) {
-    if (raw is String) {
-      return PeerEndpoint(uri: raw.trim());
-    }
-    if (raw is Map) {
-      final map = raw.map((k, v) => MapEntry('$k', v));
-      return PeerEndpoint(
-        uri: '${map['uri'] ?? map['url'] ?? ''}'.trim(),
-      );
-    }
-    return const PeerEndpoint(uri: '');
-  }
+  factory PeerEndpoint.fromJson(Map<String, dynamic> json) =>
+      _$PeerEndpointFromJson(json);
 }

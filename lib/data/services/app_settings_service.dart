@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:astral_game/config/network_constants.dart';
 import 'package:astral_game/utils/avatar_hash.dart';
 import 'package:astral_game/utils/logger.dart';
 import 'package:path/path.dart' as p;
@@ -194,7 +195,7 @@ class AppSettingsService {
       await _prefs.setBool(_keyIsDhcp, value);
 
   /// 获取虚拟 IP
-  String getVirtualIp() => _prefs.getString(_keyVirtualIp) ?? '10.147.18.24';
+  String getVirtualIp() => _prefs.getString(_keyVirtualIp) ?? kDefaultVirtualIpV4;
   Future<void> setVirtualIp(String value) async =>
       await _prefs.setString(_keyVirtualIp, value);
 }

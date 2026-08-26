@@ -38,7 +38,7 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
     return os != 'android' && os != 'ios';
   }
 
-  static bool get _isAndroid => Platform.isAndroid;
+  static bool get _isAndroid => RuntimePlatform.isAndroid;
 
   late TextEditingController _virtualIpController;
   late bool _isDhcp;

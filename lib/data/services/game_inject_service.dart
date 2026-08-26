@@ -6,6 +6,7 @@ import 'package:astral_game/data/services/game_assist_rules_service.dart';
 import 'package:astral_game/data/services/windows_game_process.dart';
 import 'package:astral_game/data/services/windows_process_watch.dart';
 import 'package:astral_game/utils/logger.dart';
+import 'package:astral_game/utils/runtime_platform.dart';
 import 'package:path/path.dart' as p;
 
 /// Windows：进房后按游戏找进程，用共用 Mono 注入器注入该游戏的插件 DLL。
@@ -25,7 +26,7 @@ class GameInjectService {
 
   Future<void> startForRoom({required String gameId}) async {
     await stop();
-    if (!Platform.isWindows) return;
+    if (!RuntimePlatform.isWindows) return;
     await _rules.ensureLoaded();
     final platform = await _rules.platformRules(
       gameId,
@@ -66,7 +67,7 @@ class GameInjectService {
   void _onProcesses(List<WindowsGameProcess> procs) {
     final cfg = _config;
     if (cfg == null) return;
-    if (!Platform.isWindows) return;
+    if (!RuntimePlatform.isWindows) return;
 
     final alive = <int>{};
     final now = DateTime.now();

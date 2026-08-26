@@ -10,6 +10,7 @@ import 'package:astral_game/data/state/room_state.dart';
 import 'package:astral_game/data/state/settings_state.dart';
 import 'package:astral_game/di.dart';
 import 'package:astral_game/utils/room_display.dart';
+import 'package:astral_game/utils/runtime_platform.dart';
 import 'package:flutter/widgets.dart';
 import 'package:home_widget/home_widget.dart';
 
@@ -31,7 +32,7 @@ class HomeWidgetSyncService {
   final RoomPersistenceService? _roomPersistence;
 
   Future<void> syncAll() async {
-    if (!Platform.isAndroid) return;
+    if (!RuntimePlatform.isAndroid) return;
     await syncHomeWidgetTheme(_settings.appThemeId.value);
     await Future.wait([
       syncConnect(),
@@ -41,7 +42,7 @@ class HomeWidgetSyncService {
   }
 
   Future<void> syncConnect() async {
-    if (!Platform.isAndroid) return;
+    if (!RuntimePlatform.isAndroid) return;
     final roomState = _roomState;
     final nodeManagement = _nodeManagement;
     final inRoom = nodeManagement.isRunning;
@@ -107,7 +108,7 @@ class HomeWidgetSyncService {
   }
 
   Future<void> syncRooms() async {
-    if (!Platform.isAndroid) return;
+    if (!RuntimePlatform.isAndroid) return;
     var rooms = _roomState.rooms;
     if (rooms.isEmpty) {
       final persistence = _roomPersistence;
@@ -134,7 +135,7 @@ class HomeWidgetSyncService {
   }
 
   Future<void> syncMembers() async {
-    if (!Platform.isAndroid) return;
+    if (!RuntimePlatform.isAndroid) return;
     final roomState = _roomState;
     final nodeManagement = _nodeManagement;
     final inRoom = nodeManagement.isRunning;

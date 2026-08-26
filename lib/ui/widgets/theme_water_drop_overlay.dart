@@ -76,7 +76,8 @@ class _ThemeWaterDropHostState extends State<ThemeWaterDropHost>
         if (showOverlay && animating.previousThemeId != null)
           Positioned.fill(
             child: IgnorePointer(
-              child: AnimatedBuilder(
+              child: RepaintBoundary(
+                child: AnimatedBuilder(
                 animation: _controller,
                 builder: (context, _) {
                   final size = MediaQuery.sizeOf(context);
@@ -106,6 +107,7 @@ class _ThemeWaterDropHostState extends State<ThemeWaterDropHost>
                     ),
                   );
                 },
+              ),
               ),
             ),
           ),

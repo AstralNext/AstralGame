@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:astral_game/config/network_constants.dart';
 import 'package:astral_game/data/models/active_room_session.dart';
 import 'package:astral_game/utils/room_share.dart';
 import 'package:http/http.dart' as http;
@@ -18,7 +19,7 @@ class ShareCodeService {
   ShareCodeService();
 
   /// 内置短码服务。
-  static const String baseUrl = 'http://103.194.107.25:8080/';
+  static const String baseUrl = kShareCodeServiceBaseUrl;
 
   final http.Client _client = http.Client();
 

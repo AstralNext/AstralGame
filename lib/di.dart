@@ -39,6 +39,7 @@ import 'package:astral_game/data/state/vpn_state.dart';
 import 'package:astral_game/utils/client_runtime_info.dart';
 import 'package:astral_game/utils/logger.dart';
 import 'package:astral_game/utils/ping_util.dart';
+import 'package:astral_game/utils/runtime_platform.dart';
 import 'package:astral_rust_core/p2p_service.dart';
 import 'package:get_it/get_it.dart';
 import 'package:logger/logger.dart';
@@ -48,8 +49,34 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 final getIt = GetIt.instance;
 
+/// 注册在 [disposeDI] 中需要调用的清理回调。按注册逆序执行。
+final List<FutureOr<void> Function()> _disposeCallbacks = [];
+
+/// 注册一个服务的清理回调，在 [disposeDI] 时统一执行。
+///
+/// 使用方式：在 [setupDI] 中 `getIt.registerX<Foo>(...)` 之后立即调用：
+/// ```dart
+/// _registerDispose<Foo>((s) => s.dispose());
+/// _registerDispose<Foo>((s) => s.stop(), async: true);
+/// ```
+///
+/// 这样新增服务不需要再同时改 [setupDI] 和 [disposeDI] 两处。
+void _registerDispose<T extends Object>(
+  FutureOr<void> Function(T service) cleanup, {
+  bool async = false,
+}) {
+  _disposeCallbacks.add(() {
+    if (!getIt.isRegistered<T>()) return null;
+    final service = getIt<T>();
+    return async ? Future.microtask(() => cleanup(service)) : cleanup(service);
+  });
+}
+
 /// 设置依赖注入
 Future<void> setupDI() async {
+  // 为了保证 dispose 顺序（先创建的后销毁），每次 setupDI 前清空列表。
+  _disposeCallbacks.clear();
+
   final prefs = await SharedPreferences.getInstance();
   getIt.registerSingleton<SharedPreferences>(prefs);
 
@@ -70,6 +97,7 @@ Future<void> setupDI() async {
   getIt.registerSingleton<AppSettingsService>(settings);
 
   getIt.registerSingleton<ScreenStateService>(ScreenStateService());
+  _registerDispose<ScreenStateService>((s) => s.dispose());
   getIt.registerSingleton<ShellNavigationService>(ShellNavigationService());
 
   getIt.registerLazySingleton<P2PService>(() => P2PService());
@@ -77,6 +105,7 @@ Future<void> setupDI() async {
   await ClientRuntimeInfo.warmUp();
 
   getIt.registerSingleton<ConnectivityStatusService>(ConnectivityStatusService());
+  _registerDispose<ConnectivityStatusService>((s) => s.dispose(), async: true);
   unawaited(getIt<ConnectivityStatusService>().start());
 
   getIt.registerLazySingleton<FirewallService>(() => FirewallService());
@@ -84,13 +113,15 @@ Future<void> setupDI() async {
   getIt.registerLazySingleton<NetworkOptimizeService>(
     () => NetworkOptimizeService(),
   );
-  if (Platform.isWindows) {
+  if (RuntimePlatform.isWindows) {
     unawaited(getIt<NetworkOptimizeService>().refresh());
     unawaited(ensureWindowsAliyunNtp());
   }
 
   getIt.registerSingleton<PeerRpcRouter>(PeerRpcRouter(getIt<P2PService>()));
+  _registerDispose<PeerRpcRouter>((s) => s.stop());
   getIt.registerSingleton<PeerRpcClient>(PeerRpcClient(getIt<P2PService>()));
+  _registerDispose<PeerRpcClient>((s) => s.dispose());
 
   getIt.registerLazySingleton<NodeManagementService>(
     () => NodeManagementService(
@@ -101,19 +132,24 @@ Future<void> setupDI() async {
       firewall: getIt<FirewallService>(),
     ),
   );
+  _registerDispose<NodeManagementService>((s) => s.dispose());
   getIt.registerSingleton<VpnState>(VpnState());
   getIt<VpnState>().setCustomRoutes(
     getIt<AppSettingsService>().getCustomVpnRoutes(),
   );
 
   getIt.registerLazySingleton<ShareCodeService>(() => ShareCodeService());
+  _registerDispose<ShareCodeService>((s) => s.close());
   getIt.registerLazySingleton<JoinLinkService>(() => JoinLinkService());
+  _registerDispose<JoinLinkService>((s) => s.dispose());
   getIt.registerLazySingleton<GameAssistRulesService>(
     () => GameAssistRulesService(
       cacheDir: Directory(p.join(supportDir.path, 'gamerules_cache')),
     ),
   );
+  _registerDispose<GameAssistRulesService>((s) => s.close());
   getIt.registerLazySingleton<WindowsProcessWatch>(() => WindowsProcessWatch());
+  _registerDispose<WindowsProcessWatch>((s) => s.dispose());
   getIt.registerLazySingleton<RoomAssistService>(
     () => RoomAssistService(
       getIt<P2PService>(),
@@ -121,19 +157,24 @@ Future<void> setupDI() async {
       getIt<WindowsProcessWatch>(),
     ),
   );
+  _registerDispose<RoomAssistService>((s) => s.stopAll(), async: true);
   getIt.registerLazySingleton<GameInjectService>(
     () => GameInjectService(
       getIt<GameAssistRulesService>(),
       getIt<WindowsProcessWatch>(),
     ),
   );
+  _registerDispose<GameInjectService>((s) => s.stop(), async: true);
   // 不阻塞启动：本地 asset → 测试目录 gamerules/ → 远程。
   unawaited(getIt<GameAssistRulesService>().ensureLoaded());
   getIt.registerLazySingleton<HitokotoService>(() => HitokotoService());
+  _registerDispose<HitokotoService>((s) => s.close());
   getIt.registerLazySingleton<AlcyWallpaperService>(() => AlcyWallpaperService());
+  _registerDispose<AlcyWallpaperService>((s) => s.close());
 
   getIt.registerLazySingleton<ServerState>(() => ServerState());
   getIt.registerLazySingleton<ServerStatusState>(() => ServerStatusState());
+  _registerDispose<ServerStatusState>((s) => s.dispose());
   getIt.registerLazySingleton<ServerPersistenceService>(
     () => ServerPersistenceService(),
   );
@@ -161,6 +202,7 @@ Future<void> setupDI() async {
       getIt<AppSettingsService>(),
     ),
   );
+  _registerDispose<OpenGamesService>((s) => s.stop(), async: true);
 
   getIt.registerLazySingleton<SettingsState>(
     () => SettingsState(getIt<AppSettingsService>()),
@@ -186,6 +228,7 @@ Future<void> setupDI() async {
   getIt.registerLazySingleton<VpnManager>(
     () => VpnManager(getIt<VpnState>(), getIt<P2PService>()),
   );
+  _registerDispose<VpnManager>((s) => s.dispose());
   getIt.registerLazySingleton<ConnectionService>(
     () => ConnectionService(
       getIt<P2PService>(),
@@ -203,6 +246,7 @@ Future<void> setupDI() async {
       getIt<PeerRpcRouter>(),
     ),
   );
+  _registerDispose<ConnectionService>((s) => s.disconnect(), async: true);
 
   getIt.registerSingleton<UpdateState>(UpdateState());
   getIt.registerLazySingleton<UpdateService>(
@@ -212,59 +256,20 @@ Future<void> setupDI() async {
   await _initPeerRpcRouter();
 }
 
-/// 释放所有服务资源
+/// 释放所有服务资源（按注册逆序执行清理回调）。
 void disposeDI() {
-  if (getIt.isRegistered<JoinLinkService>()) {
-    getIt<JoinLinkService>().dispose();
+  // 逆序执行：最后注册的最先 dispose，避免依赖项被提前销毁。
+  for (int i = _disposeCallbacks.length - 1; i >= 0; i--) {
+    try {
+      final result = _disposeCallbacks[i].call();
+      if (result is Future) {
+        unawaited(result);
+      }
+    } catch (e) {
+      appLogger.w('[DI] dispose 回调 #$i 执行异常: $e');
+    }
   }
-  if (getIt.isRegistered<ConnectivityStatusService>()) {
-    unawaited(getIt<ConnectivityStatusService>().dispose());
-  }
-  if (getIt.isRegistered<GameInjectService>()) {
-    unawaited(getIt<GameInjectService>().stop());
-  }
-  if (getIt.isRegistered<OpenGamesService>()) {
-    unawaited(getIt<OpenGamesService>().stop());
-  }
-  if (getIt.isRegistered<RoomAssistService>()) {
-    unawaited(getIt<RoomAssistService>().stopAll());
-  }
-  if (getIt.isRegistered<WindowsProcessWatch>()) {
-    getIt<WindowsProcessWatch>().dispose();
-  }
-  if (getIt.isRegistered<ConnectionService>()) {
-    unawaited(getIt<ConnectionService>().disconnect());
-  }
-  if (getIt.isRegistered<VpnManager>()) {
-    getIt<VpnManager>().dispose();
-  }
-  if (getIt.isRegistered<NodeManagementService>()) {
-    getIt<NodeManagementService>().dispose();
-  }
-  if (getIt.isRegistered<ScreenStateService>()) {
-    getIt<ScreenStateService>().dispose();
-  }
-  if (getIt.isRegistered<ServerStatusState>()) {
-    getIt<ServerStatusState>().dispose();
-  }
-  if (getIt.isRegistered<PeerRpcClient>()) {
-    getIt<PeerRpcClient>().dispose();
-  }
-  if (getIt.isRegistered<PeerRpcRouter>()) {
-    getIt<PeerRpcRouter>().stop();
-  }
-  if (getIt.isRegistered<ShareCodeService>()) {
-    getIt<ShareCodeService>().close();
-  }
-  if (getIt.isRegistered<GameAssistRulesService>()) {
-    getIt<GameAssistRulesService>().close();
-  }
-  if (getIt.isRegistered<HitokotoService>()) {
-    getIt<HitokotoService>().close();
-  }
-  if (getIt.isRegistered<AlcyWallpaperService>()) {
-    getIt<AlcyWallpaperService>().close();
-  }
+  _disposeCallbacks.clear();
   unawaited(PingUtil.close());
 }
 

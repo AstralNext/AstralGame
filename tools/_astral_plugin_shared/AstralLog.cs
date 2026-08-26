@@ -1,9 +1,15 @@
-using System;
-using System.Collections.Generic;
-using System.Text;
-
+// 共享模板：由两个插件项目通过 Link 方式引用
+// 在 Raft 项目定义 ASTRAL_RAFT，Valheim 项目定义 ASTRAL_VALHEIM
+#if ASTRAL_RAFT
 namespace AstralRaftNet
+#elif ASTRAL_VALHEIM
+namespace AstralValheimNet
+#endif
 {
+    using System;
+    using System.Collections.Generic;
+    using System.Text;
+
     internal static class AstralLog
     {
         private const int MaxLines = 300;
