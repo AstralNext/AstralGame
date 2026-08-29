@@ -19,13 +19,11 @@ class DashboardHomePanel extends StatelessWidget {
     this.roomShortCode,
     this.isRoomHost = false,
     this.hostOnline = true,
-    this.pausedRoomName,
     this.virtualIp,
     required this.onCreateRoom,
     required this.onJoinRoom,
     required this.onShareRoom,
     required this.onDisconnect,
-    this.onResumeHost,
   });
 
   final bool isConnected;
@@ -39,13 +37,11 @@ class DashboardHomePanel extends StatelessWidget {
   final String? roomShortCode;
   final bool isRoomHost;
   final bool hostOnline;
-  final String? pausedRoomName;
   final String? virtualIp;
   final VoidCallback onCreateRoom;
   final VoidCallback onJoinRoom;
   final VoidCallback onShareRoom;
   final VoidCallback onDisconnect;
-  final VoidCallback? onResumeHost;
 
   @override
   Widget build(BuildContext context) {
@@ -72,10 +68,8 @@ class DashboardHomePanel extends StatelessWidget {
               username: username?.trim().isNotEmpty == true
                   ? username!.trim()
                   : 'Player',
-              pausedRoomName: pausedRoomName,
               onCreate: onCreateRoom,
               onJoin: onJoinRoom,
-              onResumeHost: onResumeHost,
             ),
     );
   }
@@ -85,17 +79,13 @@ class _IdleHome extends StatelessWidget {
   const _IdleHome({
     super.key,
     required this.username,
-    this.pausedRoomName,
     required this.onCreate,
     required this.onJoin,
-    this.onResumeHost,
   });
 
   final String username;
-  final String? pausedRoomName;
   final VoidCallback onCreate;
   final VoidCallback onJoin;
-  final VoidCallback? onResumeHost;
 
   @override
   Widget build(BuildContext context) {
@@ -113,52 +103,6 @@ class _IdleHome extends StatelessWidget {
             Expanded(
               child: DailySceneryCard(username: username),
             ),
-            if (pausedRoomName != null &&
-                pausedRoomName!.trim().isNotEmpty &&
-                onResumeHost != null) ...[
-              const SizedBox(height: 12),
-              AstralCard(
-                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '可重新开启',
-                            style: textTheme.labelMedium?.copyWith(
-                              color: palette.accent,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            pausedRoomName!,
-                            style: textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          Text(
-                            '恢复后请把新短码发给好友',
-                            style: textTheme.bodySmall?.copyWith(
-                              color: palette.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    FilledButton(
-                      onPressed: onResumeHost,
-                      child: const Text('重新开启'),
-                    ),
-                  ],
-                ),
-              ),
-            ],
             const SizedBox(height: 16),
             Text(
               'v$version',

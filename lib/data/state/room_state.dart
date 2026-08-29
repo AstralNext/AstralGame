@@ -10,9 +10,6 @@ class RoomState {
   final isConnected = signal<bool>(false);
   final session = signal<ActiveRoomSession?>(null);
 
-  /// 房主「暂时退出」后的可恢复快照。
-  final pausedHost = signal<HostResumeSnapshot?>(null);
-
   /// 强制结束提示（VPN 失败 / 房主离线等），UI 消费后应 [clearForceEndNotice]。
   final forceEndNotice = signal<String?>(null);
 
@@ -101,10 +98,6 @@ class RoomState {
       }
     }
     setSelectedRoom(selected ?? (next.isNotEmpty ? next.first : null));
-  }
-
-  void setPausedHost(HostResumeSnapshot? value) {
-    pausedHost.value = value;
   }
 
   void setForceEndNotice(String? message) {

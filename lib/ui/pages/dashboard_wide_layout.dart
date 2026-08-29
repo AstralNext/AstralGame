@@ -24,7 +24,6 @@ class DashboardWideLayout extends StatelessWidget {
     required this.onJoinRoom,
     required this.onShareRoom,
     required this.onDisconnect,
-    this.onResumeHost,
   });
 
   final NodeManagementService nodeManagement;
@@ -34,13 +33,11 @@ class DashboardWideLayout extends StatelessWidget {
   final VoidCallback onJoinRoom;
   final VoidCallback onShareRoom;
   final VoidCallback onDisconnect;
-  final VoidCallback? onResumeHost;
 
   @override
   Widget build(BuildContext context) {
     return Watch((context) {
       final session = roomState.session.value;
-      final paused = roomState.pausedHost.value;
       final showRoom = session != null;
 
       if (!showRoom) {
@@ -49,12 +46,10 @@ class DashboardWideLayout extends StatelessWidget {
           child: DashboardHomePanel(
             isConnected: false,
             username: nodeManagement.currentUsername.value,
-            pausedRoomName: paused?.displayName,
             onCreateRoom: onCreateRoom,
             onJoinRoom: onJoinRoom,
             onShareRoom: onShareRoom,
             onDisconnect: onDisconnect,
-            onResumeHost: onResumeHost,
           ),
         );
       }

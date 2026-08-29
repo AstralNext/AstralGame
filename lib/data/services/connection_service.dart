@@ -133,7 +133,6 @@ class ConnectionService {
     String? displayName,
   }) async {
     lastOfflineInvite = null;
-    _roomState.setPausedHost(null);
     final hostPeers = _p2pConfig.enabledPeers();
     if (hostPeers.isEmpty) {
       throw StateError('请先在服务器列表中启用至少一个服务器，再创建房间');
@@ -299,145 +298,9 @@ class ConnectionService {
     return encodeOfflineInvite(payload);
   }
 
-  /// 房主刷新分享：作废旧短码，用同一网名/密码重新上传。
-  Future<({String? shortCode, String offlineInvite})> refreshShareInvite() async {
-    final current = _roomState.session.value;
-    if (current == null || !current.isHost) {
-      throw StateError('仅房主可分享');
-    }
-
-    if (current.shortCode != null && current.adminToken != null) {
-      try {
-        await _shareCodes.revoke(current.shortCode!, current.adminToken!);
-      } catch (e) {
-        appLogger.w('[ConnectionService] 作废旧短码失败: $e');
-      }
-    }
-
-    final hostPeers = _p2pConfig.enabledPeers();
-    if (hostPeers.isEmpty) {
-      throw StateError('请先启用至少一个服务器，再刷新分享');
-    }
-
-    final payload = RoomInvitePayload(
-      gameId: current.gameId,
-      gameName: current.gameName,
-      networkName: current.networkName,
-      networkSecret: current.networkSecret,
-      peers: hostPeers,
-      displayName: current.displayName,
-    );
-    final offline = encodeOfflineInvite(payload);
-    lastOfflineInvite = offline;
-
-    String? shortCode;
-    String? adminToken;
-    try {
-      final created = await _shareCodes.create(payload);
-      shortCode = created.code;
-      adminToken = created.adminToken;
-    } catch (e) {
-      appLogger.w('[ConnectionService] 刷新短码失败，仅离线邀请: $e');
-    }
-
-    _roomState.setSession(
-      current.copyWith(
-        shortCode: shortCode,
-        adminToken: adminToken,
-      ),
-    );
-    return (shortCode: shortCode, offlineInvite: offline);
-  }
-
   /// 离开房间：作废短码（若有）并关闭实例。
   Future<void> leaveRoom() async {
-    await disconnect(revokeShare: true, pauseHost: false);
-  }
-
-  /// 房主暂时退出：保留可恢复快照，并作废旧短码（恢复时会发新码）。
-  Future<void> pauseHostRoom() async {
-    final session = _roomState.session.value;
-    if (session == null || !session.isHost) {
-      await leaveRoom();
-      return;
-    }
-    await disconnect(revokeShare: true, pauseHost: true);
-  }
-
-  /// 房主用快照恢复同房间（同 networkName/secret）；重新上传短码。
-  Future<ActiveRoomSession> resumeHostRoom() async {
-    final snap = _roomState.pausedHost.value;
-    if (snap == null) {
-      throw StateError('没有可恢复的房间');
-    }
-    final hostPeers = _p2pConfig.enabledPeers();
-    if (hostPeers.isEmpty) {
-      throw StateError('请先启用至少一个服务器，再恢复房间');
-    }
-
-    lastOfflineInvite = null;
-
-    final payload = RoomInvitePayload(
-      gameId: snap.gameId,
-      gameName: snap.gameName,
-      networkName: snap.networkName,
-      networkSecret: snap.networkSecret,
-      peers: hostPeers,
-      displayName: snap.displayName,
-    );
-    lastOfflineInvite = encodeOfflineInvite(payload);
-
-    String? shortCode;
-    String? adminToken;
-    try {
-      final created = await _shareCodes.create(payload);
-      shortCode = created.code;
-      adminToken = created.adminToken;
-    } catch (e) {
-      appLogger.w('[ConnectionService] 恢复房间短码失败: $e');
-    }
-
-    final session = ActiveRoomSession(
-      isHost: true,
-      gameId: snap.gameId,
-      gameName: snap.gameName,
-      networkName: snap.networkName,
-      networkSecret: snap.networkSecret,
-      displayName: snap.displayName,
-      shortCode: shortCode,
-      adminToken: adminToken,
-    );
-    _roomState.setPausedHost(null);
-    _roomState.setSession(session);
-    final epoch = _link.begin();
-    isLinking.value = true;
-
-    var linked = false;
-    try {
-      await _connectAndStartServices(
-        networkName: snap.networkName,
-        secret: snap.networkSecret,
-        purpose: 'resume-host',
-        gameId: session.gameId,
-        isHost: true,
-        epoch: epoch,
-        failMessage: '恢复连接失败，请重试',
-        armGuestWatch: true,
-      );
-      linked = true;
-      return session;
-    } on ConnectionAbortedException {
-      rethrow;
-    } catch (e) {
-      if (!linked && _isLinkActive(epoch)) {
-        await disconnect(revokeShare: true, clearSession: true);
-      }
-      rethrow;
-    } finally {
-      if (_isLinkActive(epoch)) {
-        isLinking.value = false;
-      }
-    }
+    await disconnect(revokeShare: true);
   }
 
   Future<bool> _connect({
@@ -459,7 +322,6 @@ class ConnectionService {
       if (_nodeManagement.isRunning) {
         await disconnect(
           revokeShare: false,
-          pauseHost: false,
           clearSession: false,
           abortLink: false,
         );
@@ -536,7 +398,6 @@ class ConnectionService {
         if (!_isLinkActive(epoch)) {
           await disconnect(
             revokeShare: false,
-            pauseHost: false,
             clearSession: false,
             abortLink: false,
           );
@@ -547,7 +408,6 @@ class ConnectionService {
           appLogger.e('[ConnectionService] Android VPN 启动失败，回滚连接');
           await disconnect(
             revokeShare: false,
-            pauseHost: false,
             forceEndNotice: '虚拟网络（VPN）启动失败，请检查权限后重试',
             clearSession: true,
           );
@@ -581,12 +441,11 @@ class ConnectionService {
     }
   }
 
-  /// [revokeShare] 作废当前短码；[pauseHost] 房主保留可恢复快照。
+  /// [revokeShare] 作废当前短码。
   /// [clearSession] 是否清空房间会话（乐观 UI 拆旧实例时可为 false）。
   /// [abortLink] 是否作废进行中的乐观连接（内部拆旧实例时应为 false）。
   Future<void> disconnect({
     bool revokeShare = false,
-    bool pauseHost = false,
     String? forceEndNotice,
     bool clearSession = true,
     bool abortLink = true,
@@ -602,13 +461,6 @@ class ConnectionService {
     }
 
     final session = _roomState.session.value;
-    if (pauseHost && session != null && session.isHost) {
-      _roomState.setPausedHost(HostResumeSnapshot.fromSession(session));
-    } else if (revokeShare || forceEndNotice != null) {
-      if (!pauseHost) {
-        _roomState.setPausedHost(null);
-      }
-    }
 
     if (revokeShare &&
         session != null &&

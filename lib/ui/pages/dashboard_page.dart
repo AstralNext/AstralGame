@@ -40,92 +40,58 @@ class _DashboardPageState extends State<DashboardPage> {
       return;
     }
 
-    var url = _connectionService.currentJoinShareUrl() ?? '';
-    var refreshing = false;
+    final url = _connectionService.currentJoinShareUrl() ?? '';
 
     if (!mounted) return;
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            final hasUrl = url.isNotEmpty;
-            final token = hasUrl ? extractJoinToken(url) : null;
-            final viaShort = token != null && looksLikeShortCode(token);
-            return AlertDialog(
-              title: const Text('分享房间'),
-              content: SizedBox(
-                width: 420,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      viaShort
-                          ? '发给好友这条链接即可加入。短码服务不可用时会自动改用离线链接。'
-                          : '短码服务不可用，已生成离线邀请链接。好友点开即可加入。',
-                    ),
-                    const SizedBox(height: 16),
-                    SelectableText(
-                      hasUrl ? url : '（还没有邀请）',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                    ),
-                  ],
+        final hasUrl = url.isNotEmpty;
+        final token = hasUrl ? extractJoinToken(url) : null;
+        final viaShort = token != null && looksLikeShortCode(token);
+        return AlertDialog(
+          title: const Text('分享房间'),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  viaShort
+                      ? '发给好友这条链接即可加入。短码服务不可用时会自动改用离线链接。'
+                      : '短码服务不可用，已生成离线邀请链接。好友点开即可加入。',
                 ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: refreshing
-                      ? null
-                      : () async {
-                          setState(() => refreshing = true);
-                          try {
-                            await _connectionService.refreshShareInvite();
-                            url = _connectionService.currentJoinShareUrl() ?? '';
-                            if (context.mounted) setState(() {});
-                          } catch (e) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(this.context).showSnackBar(
-                                SnackBar(content: Text('$e')),
-                              );
-                            }
-                          } finally {
-                            if (context.mounted) {
-                              setState(() => refreshing = false);
-                            }
-                          }
-                        },
-                  child: refreshing
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('刷新'),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pop(dialogContext),
-                  child: const Text('关闭'),
-                ),
-                FilledButton(
-                  onPressed: !hasUrl
-                      ? null
-                      : () async {
-                          Navigator.pop(dialogContext);
-                          if (!this.context.mounted) return;
-                          await shareJoinInvite(
-                            context: this.context,
-                            url: url,
-                            gameName: session.gameName,
-                          );
-                        },
-                  child: const Text('分享'),
+                const SizedBox(height: 16),
+                SelectableText(
+                  hasUrl ? url : '（还没有邀请）',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
                 ),
               ],
-            );
-          },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('关闭'),
+            ),
+            FilledButton(
+              onPressed: !hasUrl
+                  ? null
+                  : () async {
+                      Navigator.pop(dialogContext);
+                      if (!this.context.mounted) return;
+                      await shareJoinInvite(
+                        context: this.context,
+                        url: url,
+                        gameName: session.gameName,
+                      );
+                    },
+              child: const Text('分享'),
+            ),
+          ],
         );
       },
     );
@@ -160,65 +126,25 @@ class _DashboardPageState extends State<DashboardPage> {
       return;
     }
 
-    final choice = await showDialog<String>(
+    final leave = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('退出房间'),
-        content: const Text(
-          '离开房间：作废短码，房间结束。\n'
-          '暂时退出：可稍后「重新开启」同一房间；客人需用新短码重进。',
-        ),
+        title: const Text('退出房间？'),
+        content: const Text('离开房间：作废短码，房间结束。'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx),
+            onPressed: () => Navigator.pop(ctx, false),
             child: const Text('取消'),
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, 'pause'),
-            child: const Text('暂时退出'),
-          ),
           FilledButton(
-            onPressed: () => Navigator.pop(ctx, 'leave'),
+            onPressed: () => Navigator.pop(ctx, true),
             child: const Text('离开房间'),
           ),
         ],
       ),
     );
-    if (choice == 'leave') {
+    if (leave == true) {
       await _connectionService.leaveRoom();
-    } else if (choice == 'pause') {
-      await _connectionService.pauseHostRoom();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('已暂时退出，可在首页重新开启房间')),
-        );
-      }
-    }
-  }
-
-  Future<void> _handleResumeHost() async {
-    if (_connectionService.isConnecting) return;
-    try {
-      final session = await _connectionService.resumeHostRoom();
-      if (!mounted) return;
-      final code = session.shortCode;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            code == null || code.isEmpty
-                ? '房间已恢复，请分享离线邀请给好友'
-                : '房间已恢复，请把新短码发给好友：$code',
-          ),
-        ),
-      );
-    } on ConnectionAbortedException {
-      return;
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$e')),
-        );
-      }
     }
   }
 
@@ -357,7 +283,6 @@ class _DashboardPageState extends State<DashboardPage> {
               onJoinRoom: _handleJoinRoom,
               onShareRoom: _handleShareRoom,
               onDisconnect: _handleDisconnect,
-              onResumeHost: _handleResumeHost,
             )
           : Padding(
               padding: const EdgeInsets.all(16),
@@ -369,7 +294,6 @@ class _DashboardPageState extends State<DashboardPage> {
                 onJoinRoom: _handleJoinRoom,
                 onShareRoom: _handleShareRoom,
                 onDisconnect: _handleDisconnect,
-                onResumeHost: _handleResumeHost,
               ),
             );
     });

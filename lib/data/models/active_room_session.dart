@@ -23,28 +23,6 @@ abstract class RoomInvitePayload with _$RoomInvitePayload {
       _$RoomInvitePayloadFromJson(json);
 }
 
-/// 房主暂时退出后可恢复的快照（内存，不落盘）。
-@freezed
-abstract class HostResumeSnapshot with _$HostResumeSnapshot {
-  const factory HostResumeSnapshot({
-    required final String gameId,
-    required final String gameName,
-    required final String networkName,
-    required final String networkSecret,
-    required final String displayName,
-  }) = _HostResumeSnapshot;
-
-  factory HostResumeSnapshot.fromSession(ActiveRoomSession session) {
-    return HostResumeSnapshot(
-      gameId: session.gameId,
-      gameName: session.gameName,
-      networkName: session.networkName,
-      networkSecret: session.networkSecret,
-      displayName: session.displayName,
-    );
-  }
-}
-
 const Object _unset = Object();
 
 /// 当前内存会话（不落盘）。
