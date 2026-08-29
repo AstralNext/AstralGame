@@ -21,16 +21,7 @@ class SettingsState {
 
   void loadFromPersistence() {
     closeMinimize.value = _settings.getCloseMinimize();
-    final storedIndex = _settings.getAppThemeIndex();
-    final AppThemeId resolved;
-    if (_settings.getAppThemeSchema() < AppSettingsService.appThemeSchemaCurrent) {
-      resolved = AppThemeIdCodec.fromLegacyIndex(storedIndex);
-      _settings.setAppThemeSchema(AppSettingsService.appThemeSchemaCurrent);
-      _settings.setAppThemeIndex(resolved.storageIndex);
-    } else {
-      resolved = AppThemeIdCodec.fromIndex(storedIndex);
-    }
-    appThemeId.value = resolved;
+    appThemeId.value = AppThemeIdCodec.fromIndex(_settings.getAppThemeIndex());
     disableP2p.value = _settings.isDisableP2p();
     enableUdpBroadcastRelay.value = _settings.isEnableUdpBroadcastRelay();
     floatingOverlayEnabled.value = _settings.isFloatingOverlayEnabled();
@@ -43,7 +34,6 @@ class SettingsState {
     await Future.wait([
       _settings.setCloseMinimize(closeMinimize.value),
       _settings.setAppThemeIndex(appThemeId.value.storageIndex),
-      _settings.setAppThemeSchema(AppSettingsService.appThemeSchemaCurrent),
       _settings.setDisableP2p(disableP2p.value),
       _settings.setEnableUdpBroadcastRelay(enableUdpBroadcastRelay.value),
       _settings.setFloatingOverlayEnabled(floatingOverlayEnabled.value),

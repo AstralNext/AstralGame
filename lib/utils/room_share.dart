@@ -6,15 +6,12 @@ import 'package:astral_game/data/models/active_room_session.dart';
 const String kOfflineInvitePrefix = 'AG1.';
 
 const String kJoinHttpsHost = 'next.astral.fan';
-const String kJoinLegacyHttpsHost = 'astral.fan';
 const String kJoinHttpsPath = '/j';
 const String kJoinAppScheme = 'astralgame';
 
 /// Crockford Base32，与 astral-share 一致（无 I/L/O/U）。
 const String kShareCodeAlphabet = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 const int kShareCodeLength = 6;
-
-final RegExp _legacyNineDigit = RegExp(r'^\d{9}$');
 
 /// 短码规范化：去空白/连字符、大写，并把 I/L→1、O→0。
 String normalizeShareCode(String raw) {
@@ -35,9 +32,6 @@ String normalizeShareCode(String raw) {
   return b.toString();
 }
 
-bool looksLikeLegacyNineDigit(String raw) =>
-    _legacyNineDigit.hasMatch(raw.trim());
-
 bool looksLikeShortCode(String raw) {
   final t = normalizeShareCode(raw);
   if (t.length == kShareCodeLength) {
@@ -46,7 +40,7 @@ bool looksLikeShortCode(String raw) {
     }
     return true;
   }
-  return looksLikeLegacyNineDigit(raw);
+  return false;
 }
 
 bool looksLikeOfflineInvite(String raw) {
@@ -60,10 +54,7 @@ bool looksLikeJoinToken(String raw) =>
 
 bool isJoinHttpsHost(String host) {
   final h = host.toLowerCase();
-  return h == kJoinHttpsHost ||
-      h == 'www.$kJoinHttpsHost' ||
-      h == kJoinLegacyHttpsHost ||
-      h == 'www.$kJoinLegacyHttpsHost';
+  return h == kJoinHttpsHost || h == 'www.$kJoinHttpsHost';
 }
 
 /// 统一邀请链接：有短码用短码，否则用离线码。各平台同一条 URL。

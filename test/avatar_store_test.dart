@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -22,22 +21,7 @@ void main() {
     }
   });
 
-  test('migrates legacy prefs Base64 into file and drops the old key', () async {
-    final bytes = Uint8List.fromList([1, 2, 3, 9]);
-    SharedPreferences.setMockInitialValues({
-      'avatar': base64Encode(bytes),
-    });
-    final prefs = await SharedPreferences.getInstance();
-    final settings = AppSettingsService(prefs, supportDir: dir);
-    await settings.warmUpAvatar();
-
-    expect(settings.getAvatar(), bytes);
-    expect(settings.getAvatarHash(), avatarContentHash(bytes));
-    expect(prefs.getString('avatar'), isNull);
-    expect(File(p.join(dir.path, 'avatar.bin')).existsSync(), isTrue);
-  });
-
-  test('setAvatar writes file, not prefs blob', () async {
+  test('setAvatar writes file + content hash', () async {
     final prefs = await SharedPreferences.getInstance();
     final settings = AppSettingsService(prefs, supportDir: dir);
     await settings.warmUpAvatar();
@@ -45,7 +29,6 @@ void main() {
     await settings.setAvatar(bytes);
 
     expect(settings.getAvatar(), bytes);
-    expect(prefs.getString('avatar'), isNull);
     expect(prefs.getString('avatar_hash'), avatarContentHash(bytes));
     expect(await File(p.join(dir.path, 'avatar.bin')).readAsBytes(), bytes);
   });

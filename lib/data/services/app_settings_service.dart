@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -11,16 +10,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 class AppSettingsService {
   // 用户信息
   static const String _keyUsername = 'username';
-  /// 旧版：整图 Base64。迁移后删除。
-  static const String _keyAvatar = 'avatar';
   static const String _keyAvatarHash = 'avatar_hash';
   static const String _avatarFileName = 'avatar.bin';
 
   // 通用设置
   static const String _keyCloseMinimize = 'close_minimize';
   static const String _keyAppThemeIndex = 'app_theme_index';
-  static const String _keyAppThemeSchema = 'app_theme_schema';
-  static const int appThemeSchemaCurrent = 2;
 
   static const String _keyIsDhcp = 'is_dhcp';
   static const String _keyVirtualIp = 'virtual_ip';
@@ -41,7 +36,7 @@ class AppSettingsService {
     return File(p.join(dir.path, _avatarFileName));
   }
 
-  /// 从文件加载头像；若只有旧版 prefs Base64 则迁移并删掉。
+  /// 从文件加载头像。
   Future<void> warmUpAvatar() async {
     if (_avatarLoaded) return;
     try {
@@ -56,33 +51,15 @@ class AppSettingsService {
               _prefs.getString(_keyAvatarHash) != _avatarHash) {
             await _prefs.setString(_keyAvatarHash, _avatarHash!);
           }
-          await _prefs.remove(_keyAvatar);
           return;
         }
       }
-      await _migrateLegacyPrefsAvatar();
+      _avatarBytes = null;
+      _avatarHash = _prefs.getString(_keyAvatarHash);
     } catch (e) {
       appLogger.e('[AppSettingsService] 加载头像失败: $e');
     } finally {
       _avatarLoaded = true;
-    }
-  }
-
-  Future<void> _migrateLegacyPrefsAvatar() async {
-    final avatarBase64 = _prefs.getString(_keyAvatar);
-    if (avatarBase64 == null || avatarBase64.isEmpty) {
-      _avatarBytes = null;
-      _avatarHash = _prefs.getString(_keyAvatarHash);
-      return;
-    }
-    try {
-      final bytes = Uint8List.fromList(base64Decode(avatarBase64));
-      await setAvatar(bytes);
-    } catch (e) {
-      appLogger.e('[AppSettingsService] 迁移旧头像失败: $e');
-      await _prefs.remove(_keyAvatar);
-      _avatarBytes = null;
-      _avatarHash = null;
     }
   }
 
@@ -93,12 +70,6 @@ class AppSettingsService {
 
   Future<void> setAppThemeIndex(int index) async =>
       await _prefs.setInt(_keyAppThemeIndex, index);
-
-  /// 主题偏好 schema 版本（当前为 [appThemeSchemaCurrent]）。
-  int getAppThemeSchema() => _prefs.getInt(_keyAppThemeSchema) ?? 1;
-
-  Future<void> setAppThemeSchema(int schema) async =>
-      await _prefs.setInt(_keyAppThemeSchema, schema);
 
   // ---- 网络配置 ----
 
@@ -153,7 +124,7 @@ class AppSettingsService {
   /// 头像内容 hash；无头像为空。
   String? getAvatarHash() => _avatarHash ?? avatarContentHash(_avatarBytes);
 
-  /// 写入文件 + hash；不再把整图放进 SharedPreferences。
+  /// 写入文件 + hash。
   Future<void> setAvatar(Uint8List avatar) async {
     _avatarBytes = avatar;
     _avatarHash = avatarContentHash(avatar);
@@ -166,7 +137,6 @@ class AppSettingsService {
     if (_avatarHash != null) {
       await _prefs.setString(_keyAvatarHash, _avatarHash!);
     }
-    await _prefs.remove(_keyAvatar);
   }
 
   /// 清除头像
@@ -178,7 +148,6 @@ class AppSettingsService {
     if (file != null && await file.exists()) {
       await file.delete();
     }
-    await _prefs.remove(_keyAvatar);
     await _prefs.remove(_keyAvatarHash);
   }
 

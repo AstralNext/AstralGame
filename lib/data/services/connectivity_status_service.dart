@@ -76,13 +76,11 @@ class ConnectivityStatusService {
       ConnectivityResult.wifi,
       ConnectivityResult.mobile,
       ConnectivityResult.bluetooth,
-      // ignore: deprecated_member_use
-      ConnectivityResult.other,
     ];
     for (final p in priority) {
       if (results.contains(p)) return _map(p);
     }
-    // 兜底（满足较新枚举如 satellite）
+    // 兜底（satellite / vpn / 其它新枚举）
     return _map(results.first);
   }
 
@@ -98,10 +96,8 @@ class ConnectivityStatusService {
         return NetworkKind.bluetooth;
       case ConnectivityResult.none:
         return NetworkKind.none;
-      case ConnectivityResult.other:
-        return NetworkKind.other;
       default:
-        // satellite 等较新枚举走名字匹配；未列出的统一兜底为 other。
+        // satellite / vpn 等较新枚举走名字匹配；未列出的统一兜底为 other。
         if (r.name == 'satellite') return NetworkKind.satellite;
         return NetworkKind.other;
     }
