@@ -294,9 +294,18 @@ class ShortcutService {
     final pngBytes = await png.readAsBytes();
     if (pngBytes.length < 24) return;
 
-    // 从 PNG IHDR chunk 读宽高
-    final w = pngBytes.buffer.asByteData(16, 2).getUint32(0);
-    final h = pngBytes.buffer.asByteData(20, 2).getUint32(0);
+    // 从 PNG IHDR chunk 读宽高（都是 4 字节 big-endian）：
+    //   0-7:  PNG签名
+    //   8-11: IHDR chunk length
+    //   12-15: IHDR ASCII tag
+    //   16-19: width (4 bytes, BE)
+    //   20-23: height (4 bytes, BE)
+    final bd = pngBytes.buffer.asByteData(
+      16,
+      8, // width 4 bytes + height 4 bytes = 8 bytes
+    );
+    final w = bd.getUint32(0, Endian.big);
+    final h = bd.getUint32(4, Endian.big);
 
     // ICO header: 6 字节
     final header = ByteData(6);
