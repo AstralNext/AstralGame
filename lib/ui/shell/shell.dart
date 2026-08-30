@@ -11,7 +11,7 @@ import 'package:astral_game/data/services/shell_navigation_service.dart';
 import 'package:astral_game/data/services/update_service.dart';
 import 'package:astral_game/data/state/settings_state.dart';
 import 'package:astral_game/data/state/update_state.dart';
-import 'package:astral_game/di.dart';
+import 'package:astral_game/di.dart' show getIt, disposeDI;
 import 'package:astral_game/ui/widgets/avatar_widget.dart';
 import 'package:astral_game/ui/widgets/edit_profile_dialog.dart';
 import 'package:astral_game/utils/runtime_platform.dart';
@@ -199,18 +199,12 @@ if (closeMinimize) {
 await windowManager.hide();
 return;
 }
-await _quitForReal();
+_quitForReal();
 }
 
-/// 真正"结束软件"而不是只关窗口：
-///   1. 先调用 windowManager.close 让 window_manager 做它的 onClose 回调；
-///   2. 然后 setPreventClose(false) 再 close 一次；
-///   3. 最后 exit(0) 兜底——防止窗口关了但 P2P isolate/Rust 还在跑，进程没退。
-Future<void> _quitForReal() async {
-  try { await windowManager.setPreventClose(false); } catch (_) {}
-  try { await windowManager.destroy(); } catch (_) {}
-  // 200ms 还没退就强制 exit(0)
-  Future.delayed(const Duration(milliseconds: 200), () { exit(0); });
+/// 真正"结束软件"：直接 exit(0)，什么清理都不等，用户点退出就要立刻走。
+void _quitForReal() {
+  exit(0);
 }
 
 @override
@@ -235,7 +229,7 @@ case 'show_window':
 unawaited(_showWindowFromTray());
 break;
 case 'exit':
-unawaited(_quitForReal());
+_quitForReal();
 break;
 }
 }
