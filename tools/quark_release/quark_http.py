@@ -293,44 +293,62 @@ class QuarkDrive:
         return False
 
     def login_by_agent_auth_code(self, code: str) -> bool:
-        """Exchange a CAC-style agent auth code for HTTP Open API access+refresh tokens."""
+        """Exchange a CAC-style agent auth code for HTTP Open API access+refresh tokens.
+
+        Matches the official quark-drive.cjs implementation exactly:
+            GET /agent/v1/oauth/agent_auth_code
+                ?req_id=...&agent_auth_code=...&client_device_id=...&device_name=...
+                &agent_id=...&work_dir=...
+
+        This is an anonymous endpoint: it must NOT carry the old access_token on the URL
+        (which is why we build the request manually instead of going through `_request`).
+        Response envelope: status==0 && data.status=="success" means tokens issued.
+        """
         if not code:
             return False
         code = code.strip()
         print(f"==> exchanging QUARK_AGENT_AUTH_CODE ({len(code)} chars) for HTTP token", flush=True)
-        path = "/agent/v1/oauth/access_token"
-        body: dict[str, Any] = {
-            "client_id": CLIENT_ID,
-            "grant_type": "authorization_code",
-            "code": code,
-            "device_id": self.cfg["device_id"],
-            "platform": self.cfg["platform"],
+        path = "/agent/v1/oauth/agent_auth_code"
+        query: dict[str, str] = {
+            "req_id": str(uuid.uuid4()),
+            "agent_auth_code": code,
+            "client_device_id": self.cfg.get("device_id") or "",
+            "device_name": self.cfg.get("device_name") or f"ASGAME-{self.cfg.get('platform') or 'NIX'}",
+            "agent_id": "",
+            "work_dir": "",
         }
+        qs = "&".join(f"{k}={_quote(v)}" for k, v in query.items() if v != "")
+        url = f"{API}{path}?{qs}"
+        headers = self._headers("GET", path)
+        req = Request(url, data=None, method="GET", headers=headers)
         try:
-            payload = self._request("POST", path, body)
-        except SystemExit as exc:
-            print(f"CAC code exchange failed: {exc}", flush=True)
+            with urlopen(req, timeout=60) as resp:
+                raw = resp.read().decode("utf-8")
+        except HTTPError as exc:
+            try:
+                raw = exc.read().decode("utf-8", errors="replace")
+            except Exception:
+                raw = str(exc)
+            print(f"CAC code exchange failed: HTTP {exc.code} {path}: {raw[:500]}", flush=True)
+            return False
+        except URLError as exc:
+            print(f"CAC code exchange network error: {exc}", flush=True)
+            return False
+        try:
+            payload: dict[str, Any] = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            print(f"CAC code exchange invalid JSON: {exc} raw={raw[:300]}", flush=True)
             return False
         status = payload.get("status")
-        if status is None:
-            # Some OAuth implementations return tokens directly without a status envelope.
-            status = 0 if (payload.get("access_token") or payload.get("accessToken")) else payload.get("code", -1)
-        data = payload.get("data") if isinstance(payload.get("data"), dict) else payload
-        access = data.get("access_token") or data.get("accessToken") or payload.get("access_token") or payload.get("accessToken")
-        refresh = data.get("refresh_token") or data.get("refreshToken") or payload.get("refresh_token") or payload.get("refreshToken")
-        uid = (
-            data.get("user_id")
-            or data.get("userId")
-            or data.get("uid")
-            or payload.get("user_id")
-            or payload.get("userId")
-            or payload.get("uid")
-            or self.cfg.get("user_id")
-            or ""
-        )
-        if int(status or -1) != 0 or not access:
+        data = payload.get("data") if isinstance(payload.get("data"), dict) else None
+        inner_status = data.get("status") if isinstance(data, dict) else None
+        access = data.get("access_token") if isinstance(data, dict) else None
+        refresh = data.get("refresh_token") if isinstance(data, dict) else None
+        uid = data.get("user_id") if isinstance(data, dict) else None
+        new_device = data.get("device_id") if isinstance(data, dict) else None
+        if int(status or -1) != 0 or inner_status != "success" or not access:
             print(
-                f"CAC code exchange rejected: status={status} errno={payload.get('errno')} "
+                f"CAC code exchange rejected: status={status} errno={payload.get('errno')} inner_status={inner_status!r} "
                 f"{payload.get('agent_msg') or payload.get('error_info') or payload.get('msg') or payload}",
                 flush=True,
             )
@@ -341,6 +359,8 @@ class QuarkDrive:
             self.cfg["refresh_token"] = str(refresh)
         if uid:
             self.cfg["user_id"] = str(uid)
+        if new_device:
+            self.cfg["device_id"] = str(new_device)
         _persist_tokens(self.cfg["user_id"] or "", self.access_token, self.cfg.get("refresh_token") or "")
         print(
             f"CAC login ok user_id={self.cfg.get('user_id') or uid or '?'} access_len={len(self.access_token)}",
