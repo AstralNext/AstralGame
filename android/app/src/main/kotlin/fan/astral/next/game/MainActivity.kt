@@ -117,20 +117,28 @@ class MainActivity : FlutterActivity() {
         val size = 96
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        val paint = Paint().apply {
+
+        // 圆形裁剪区域，图标会铺满整个圆
+        val circlePath = android.graphics.Path().apply {
+            addCircle(size / 2f, size / 2f, size / 2f, android.graphics.Path.Direction.CW)
+        }
+        canvas.clipPath(circlePath)
+
+        // 先画背景色（填满圆形）
+        val bgPaint = Paint().apply {
             color = gameColor ?: 0xFF6B7280.toInt()
             isAntiAlias = true
         }
-        // 先画背景色
-        canvas.drawCircle(size / 2f, size / 2f, size / 2f, paint)
+        canvas.drawPaint(bgPaint)
 
-        // Flutter 端已经帮我们解析好了真实图标 bytes（asset→network 兜底都走过了）
+        // Flutter 端已经解析好了真实图标 bytes，直接 decode 并铺满
         iconBytes?.let { bytes ->
             try {
                 val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                 if (bmp != null) {
-                    val scaled = Bitmap.createScaledBitmap(bmp, size - 16, size - 16, true)
-                    canvas.drawBitmap(scaled, 8f, 8f, Paint().apply { isAntiAlias = true })
+                    // 铺满整个 96x96（不再缩小 + 偏移）
+                    val scaled = Bitmap.createScaledBitmap(bmp, size, size, true)
+                    canvas.drawBitmap(scaled, 0f, 0f, Paint().apply { isAntiAlias = true; isFilterBitmap = true })
                 }
             } catch (_: Exception) {}
         }
