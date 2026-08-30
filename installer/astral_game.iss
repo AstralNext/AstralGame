@@ -60,56 +60,74 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}
 
 [Code]
 // ======================================================================
-// 安装/卸载前：强制关闭正在运行的 astral_game.exe 进程。
-// 用 tasklist + taskkill，避免依赖 Win32 API（Inno Setup 没内置）。
+// 安装/卸载前：检测正在运行的 astral_game.exe，询问用户再关闭。
+//   - 不占用启动时间：先快速 tasklist 检测，不在跑直接通过
+//   - 在跑 → 弹 MsgBox 询问用户是否自动关闭
+//   - 用户点"是" → 温和 taskkill → 超时才强杀，避免破坏 Flutter 保存
+//   - 用户点"否" → 取消安装/卸载
 // ======================================================================
 function IsAstralGameRunning(): Boolean;
 var
   ResultCode: Integer;
-  CmdLine: String;
-  Output: String;
 begin
-  // tasklist /FI 过滤进程名；如果找得到会输出多行信息，找不到就只输出表头
-  CmdLine := '/C tasklist /FI "IMAGENAME eq astral_game.exe" /NH 2>nul | findstr /I /C:"astral_game.exe" >nul';
-  Result := Exec('cmd.exe', CmdLine, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  // 快速检测：tasklist 过滤 + findstr 匹配，毫秒级
+  Result := Exec('cmd.exe',
+    '/C tasklist /FI "IMAGENAME eq astral_game.exe" /NH 2>nul | findstr /I /B /C:"astral_game.exe" >nul',
+    '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   if Result then
-    Result := (ResultCode = 0); // findstr 找到 = 0
+    Result := (ResultCode = 0); // findstr 找到即返回 0
 end;
 
-procedure KillAstralGameProcesses(Force: Boolean);
+// 返回 True = 进程已终止（或本来就没在跑），可以继续安装/卸载
+// 返回 False = 用户取消
+function ConfirmAndKillAstralGame(const Caption: String; AskUser, Force: Boolean): Boolean;
 var
+  Res: Integer;
   ResultCode: Integer;
   Retries: Integer;
+  Msg: String;
 begin
-  // 1) 温和关闭：WM_QUERYENDSESSION + WM_CLOSE 级别——用 taskkill 不带 /F
-  //    这样 Flutter 有机会保存 bookmark、断开 P2P、写 SharedPreferences
-  if not Force then
+  Result := True;
+
+  // 1. 不在跑 → 直接通过，一秒都不浪费
+  if not IsAstralGameRunning() then exit;
+
+  // 2. 在跑：先问用户（AskUser=True 时）
+  if AskUser then
   begin
-    Exec('taskkill.exe',
-         '/T /IM astral_game.exe',
-         '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    // 最多等 5 秒确认进程退出
-    for Retries := 0 to 10 do
+    Msg := '检测到 Astral Game 正在运行。' + #13#10 + #13#10
+         + '如果不关闭，安装程序无法覆盖正在使用的文件。' + #13#10 + #13#10
+         + '是否自动关闭它并继续' + Caption + '？' + #13#10
+         + '（选「是」自动关闭；选「否」取消本次操作）';
+    Res := MsgBox(Msg, mbConfirmation, MB_YESNO or MB_DEFBUTTON1);
+    if Res <> IDYES then
     begin
-      if not IsAstralGameRunning() then break;
-      Sleep(500);
+      Result := False;
+      exit;
     end;
   end;
 
-  // 2) 还活着或者 Force=true 直接强杀
+  // 3. 温和关闭（taskkill 不带 /F → 让 Flutter 走 WM_CLOSE 保存数据）
+  Exec('taskkill.exe', '/T /IM astral_game.exe',
+       '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+
+  // 最多等 4 秒自然退出（每次 200ms × 20 次）
+  for Retries := 0 to 20 do
+  begin
+    if not IsAstralGameRunning() then break;
+    Sleep(200);
+  end;
+
+  // 4. 还活着 → 强杀
   if Force or IsAstralGameRunning() then
   begin
-    Exec('taskkill.exe',
-         '/F /T /IM astral_game.exe',
+    Exec('taskkill.exe', '/F /T /IM astral_game.exe',
          '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Sleep(500);
-    // 再兜底一次：如果用户启动了多开或者有残留 zombie，用 PID 通配杀一遍
+    Sleep(400);
     Exec('cmd.exe',
          '/C wmic process where name="astral_game.exe" call terminate 2>nul >nul',
          '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   end;
-
-  Sleep(300);
 end;
 
 function InitializeSetup(): Boolean;
@@ -121,22 +139,24 @@ begin
     exit;
   end;
 
-  // 安装前先关闭正在运行的进程，避免文件占用无法覆盖
-  KillAstralGameProcesses(False);
+  // 启动时快速检测 → 检测到才询问
+  Result := ConfirmAndKillAstralGame('安装', True {AskUser}, False {Force});
 end;
 
 function InitializeUninstall(): Boolean;
 begin
-  Result := True;
-  // 卸载前直接强杀
-  KillAstralGameProcesses(True);
+  // 卸载：检测到就询问，同意后直接 Force 强杀
+  Result := ConfirmAndKillAstralGame('卸载', True {AskUser}, True {Force});
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
+var
+  Dummy: Boolean;
 begin
-  // 真正复制文件之前再最后杀一次（用户可能在安装向导期间又把软件打开了）
+  // 真正复制文件前再检查一次——不用再问用户了，之前问过已经同意
+  // 用户可能在"安装向导步骤停留"那段时间又把软件打开了
   if CurStep = ssInstall then
   begin
-    KillAstralGameProcesses(False);
+    Dummy := ConfirmAndKillAstralGame('安装', False {NoAsk}, False {SoftFirst});
   end;
 end;
