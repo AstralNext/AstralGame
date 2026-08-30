@@ -309,15 +309,26 @@ class QuarkDrive:
         code = code.strip()
         print(f"==> exchanging QUARK_AGENT_AUTH_CODE ({len(code)} chars) for HTTP token", flush=True)
         path = "/agent/v1/oauth/agent_auth_code"
+        # Recognized agent id values accepted by Quark's CAC flow. These come from
+        # the W_ fingerprint whitelist in quark-drive.cjs and must NOT be empty or the
+        # server returns errno 14001 ("CAC安装参数不完整"). We pick "doubao" because
+        # it is the shortest generic id and does not imply a specific runtime.
+        agent_id = self.cfg.get("agent_id") or os.environ.get("QUARK_AGENT_ID") or "doubao"
+        work_dir = self.cfg.get("work_dir") or os.environ.get("QUARK_WORK_DIR") or os.getcwd()
+        device_name = self.cfg.get("device_name") or os.environ.get("QUARK_DEVICE_NAME") or f"ASGAME-{self.cfg.get('platform') or 'NIX'}"
+        client_device_id = self.cfg.get("device_id") or ""
         query: dict[str, str] = {
             "req_id": str(uuid.uuid4()),
             "agent_auth_code": code,
-            "client_device_id": self.cfg.get("device_id") or "",
-            "device_name": self.cfg.get("device_name") or f"ASGAME-{self.cfg.get('platform') or 'NIX'}",
-            "agent_id": "",
-            "work_dir": "",
+            "client_device_id": client_device_id,
+            "device_name": device_name,
+            "agent_id": agent_id,
+            "work_dir": work_dir,
         }
-        qs = "&".join(f"{k}={_quote(v)}" for k, v in query.items() if v != "")
+        # Note: we MUST include agent_id/work_dir query params even when they look like
+        # regular values. The official quark-drive.cjs passes them every time; skipping
+        # either is what triggers errno 14001.
+        qs = "&".join(f"{k}={_quote(str(v))}" for k, v in query.items())
         url = f"{API}{path}?{qs}"
         headers = self._headers("GET", path)
         req = Request(url, data=None, method="GET", headers=headers)
@@ -346,7 +357,11 @@ class QuarkDrive:
         refresh = data.get("refresh_token") if isinstance(data, dict) else None
         uid = data.get("user_id") if isinstance(data, dict) else None
         new_device = data.get("device_id") if isinstance(data, dict) else None
-        if int(status or -1) != 0 or inner_status != "success" or not access:
+        # The official quark-drive.cjs client treats ANY non-"expired" inner status as
+        # success: observed values include "success" (fresh install) and
+        # "install_confirmed" (re-authorize an already-installed agent). Only "expired"
+        # means the user has to generate a new CAC code.
+        if int(status or -1) != 0 or inner_status == "expired" or not access:
             print(
                 f"CAC code exchange rejected: status={status} errno={payload.get('errno')} inner_status={inner_status!r} "
                 f"{payload.get('agent_msg') or payload.get('error_info') or payload.get('msg') or payload}",
