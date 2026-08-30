@@ -1,6 +1,7 @@
 import 'package:astral_game/data/models/active_room_session.dart';
 import 'package:astral_game/data/models/bookmark.dart';
 import 'package:astral_game/data/services/room_persistence_service.dart';
+import 'package:astral_game/utils/logger.dart';
 import 'package:signals/signals_core.dart';
 
 /// 房间会话状态；**不再有自动历史记录**，只暴露用户主动收藏的 bookmarks。
@@ -22,11 +23,15 @@ class RoomState {
 
   void initPersistence(RoomPersistenceService persistence) {
     _persistence = persistence;
+    appLogger.i('[RoomState] initPersistence 完成');
   }
 
   Future<void> loadFromPersistence() async {
-    final list = await _persistence?.loadBookmarks() ?? const <Bookmark>[];
+    final persistence = _persistence;
+    appLogger.i('[RoomState] loadFromPersistence: persistence=${persistence != null}');
+    final list = await persistence?.loadBookmarks() ?? const <Bookmark>[];
     bookmarksList.value = list;
+    appLogger.i('[RoomState] loadFromPersistence: 加载完成，共 ${list.length} 条');
   }
 
   void setConnected(bool value, {bool clearSession = true}) {
@@ -65,6 +70,7 @@ class RoomState {
   /// 新增或覆盖一条收藏；同步 signal 和持久化。
   Future<void> upsertBookmark(Bookmark bookmark) async {
     final persistence = _persistence;
+    appLogger.i('[RoomState] upsertBookmark: id=${bookmark.id}, persistence=${persistence != null}');
     final next = persistence == null
         ? ([bookmark, ...bookmarksList.value.where((b) => b.id != bookmark.id)]
           ..sort(RoomPersistenceService.compare))

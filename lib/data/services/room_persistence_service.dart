@@ -21,22 +21,36 @@ class RoomPersistenceService {
     try {
       final filePath = await _filePath;
       final file = File(filePath);
-      if (!await file.exists()) return const [];
+      final exists = await file.exists();
+      appLogger.d('[RoomPersistenceService] loadBookmarks: path=$filePath, exists=$exists');
+      if (!exists) return const [];
       final content = await file.readAsString();
-      if (content.trim().isEmpty) return const [];
+      if (content.trim().isEmpty) {
+        appLogger.w('[RoomPersistenceService] bookmarks.json 为空文件');
+        return const [];
+      }
       final list = jsonDecode(content) as List;
+      appLogger.d('[RoomPersistenceService] loadBookmarks: json 条目数=${list.length}');
       final result = <Bookmark>[];
       for (final e in list) {
-        if (e is! Map<String, dynamic>) continue;
+        if (e is! Map<String, dynamic>) {
+          appLogger.w('[RoomPersistenceService] 跳过非 Map 条目: ${e.runtimeType}');
+          continue;
+        }
         try {
           result.add(Bookmark.fromJson(e));
-        } catch (_) {
-          // 跳过格式损坏的条目，其余仍可用。
+        } catch (err, stack) {
+          appLogger.w(
+            '[RoomPersistenceService] 跳过损坏条目: ${e['id'] ?? 'unknown'}, err=$err',
+            error: err,
+            stackTrace: stack,
+          );
         }
       }
+      appLogger.i('[RoomPersistenceService] loadBookmarks: 成功解析 ${result.length} / ${list.length} 条');
       return result;
     } catch (e, stackTrace) {
-      appLogger.w('[RoomPersistenceService] 加载收藏失败: $e',
+      appLogger.e('[RoomPersistenceService] 加载收藏整体失败: $e',
           error: e, stackTrace: stackTrace);
       return const [];
     }
@@ -48,6 +62,8 @@ class RoomPersistenceService {
       final file = File(filePath);
       final json = jsonEncode(bookmarks.map((r) => r.toJson()).toList());
       await file.writeAsString(json);
+      final size = await file.length();
+      appLogger.i('[RoomPersistenceService] saveBookmarks: path=$filePath, count=${bookmarks.length}, bytes=$size');
     } catch (e, stackTrace) {
       appLogger.e('[RoomPersistenceService] 保存收藏失败: $e',
           error: e, stackTrace: stackTrace);

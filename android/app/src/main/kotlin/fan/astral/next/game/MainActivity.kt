@@ -21,6 +21,8 @@ import java.net.URL
 class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        // 悬浮窗 channel
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             FloatingOverlayController.channelName(),
@@ -48,9 +50,17 @@ class MainActivity : FlutterActivity() {
                     }
                     result.success(null)
                 }
-                "createPinnedShortcut" -> {
-                    createPinnedShortcut(call, result)
-                }
+                else -> result.notImplemented()
+            }
+        }
+
+        // 桌面快捷方式 channel
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "astral.game/shortcut",
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "createPinnedShortcut" -> createPinnedShortcut(call, result)
                 else -> result.notImplemented()
             }
         }
