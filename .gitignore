@@ -54,3 +54,5 @@ app.*.map.json
 /release/
 /_release_notes.md
 build-artifacts/
+_dl/
+_release/
