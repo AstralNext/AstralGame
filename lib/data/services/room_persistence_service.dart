@@ -1,123 +1,93 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:astral_game/config/constants.dart';
-import 'package:astral_game/data/models/room_mod.dart';
+import 'package:astral_game/data/models/bookmark.dart';
 import 'package:astral_game/utils/logger.dart';
 import 'package:path/path.dart' as path_lib;
 import 'package:path_provider/path_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
+/// 收藏读写：本地 `bookmarks.json`。
+///
+/// 不再有"加入历史（rooms.json）"与"自动写入"；一切皆为用户主动收藏。
 class RoomPersistenceService {
-  static const _fileName = 'rooms.json';
-  static const _selectedRoomKey = 'selected_room_id';
-
-  final SharedPreferences _prefs;
-
-  RoomPersistenceService(this._prefs);
+  static const _fileName = 'bookmarks.json';
 
   Future<String> get _filePath async {
     final dir = await getApplicationSupportDirectory();
     return path_lib.join(dir.path, _fileName);
   }
 
-  Future<List<RoomMod>> loadRooms() async {
+  Future<List<Bookmark>> loadBookmarks() async {
     try {
       final filePath = await _filePath;
       final file = File(filePath);
-      if (!await file.exists()) return [];
+      if (!await file.exists()) return const [];
       final content = await file.readAsString();
-      if (content.trim().isEmpty) return [];
+      if (content.trim().isEmpty) return const [];
       final list = jsonDecode(content) as List;
-      final hadLegacySecrets = list.any((e) {
-        if (e is! Map) return false;
-        final password = e['password']?.toString() ?? '';
-        return password.isNotEmpty;
-      });
-      final rooms = list
-          .map((e) => RoomMod.fromJson(e as Map<String, dynamic>))
-          .toList();
-      final normalized = normalizeJoinHistory(rooms);
-      // 迁移：擦除历史文件里曾写入的明文密钥。
-      if (hadLegacySecrets) {
-        await saveRooms(normalized);
+      final result = <Bookmark>[];
+      for (final e in list) {
+        if (e is! Map<String, dynamic>) continue;
+        try {
+          result.add(Bookmark.fromJson(e));
+        } catch (_) {
+          // 跳过格式损坏的条目，其余仍可用。
+        }
       }
-      return normalized;
-    } catch (e) {
-      return [];
+      return result;
+    } catch (e, stackTrace) {
+      appLogger.w('[RoomPersistenceService] 加载收藏失败: $e',
+          error: e, stackTrace: stackTrace);
+      return const [];
     }
   }
 
-  /// 最新在前；相同 [RoomMod.shareCode] 只保留一条（保留较新的访问时间）。
-  static List<RoomMod> normalizeJoinHistory(List<RoomMod> rooms) {
-    final byShareCode = <String, RoomMod>{};
-    final withoutShareCode = <RoomMod>[];
-
-    for (final room in rooms) {
-      final key = room.shareCode.trim();
-      if (key.isEmpty) {
-        withoutShareCode.add(room);
-        continue;
-      }
-      final existing = byShareCode[key];
-      if (existing == null || room.createdAt.isAfter(existing.createdAt)) {
-        byShareCode[key] = room;
-      }
-    }
-
-    final merged = [...byShareCode.values, ...withoutShareCode]
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-
-    return merged.take(AppConstants.maxJoinHistoryEntries).toList();
-  }
-
-  /// 写入一条加入/创建记录：同分享码移到最前并刷新时间，总数不超过上限。
-  static List<RoomMod> upsertJoinHistory(List<RoomMod> existing, RoomMod incoming) {
-    final key = incoming.shareCode.trim();
-    final rest = key.isEmpty
-        ? List<RoomMod>.from(existing)
-        : existing.where((r) => r.shareCode.trim() != key).toList();
-
-    var entry = incoming;
-    if (key.isNotEmpty) {
-      for (final old in existing) {
-        if (old.shareCode.trim() != key) continue;
-        entry = RoomMod(
-          id: old.id,
-          name: incoming.name,
-          roomName: incoming.roomName,
-          host: incoming.host,
-          port: incoming.port,
-          shareCode: incoming.shareCode,
-          createdAt: DateTime.now(),
-        );
-        break;
-      }
-    }
-
-    return [entry, ...rest].take(AppConstants.maxJoinHistoryEntries).toList();
-  }
-
-  Future<void> saveRooms(List<RoomMod> rooms) async {
+  Future<void> saveBookmarks(List<Bookmark> bookmarks) async {
     try {
       final filePath = await _filePath;
       final file = File(filePath);
-      final json = jsonEncode(rooms.map((r) => r.toJson()).toList());
+      final json = jsonEncode(bookmarks.map((r) => r.toJson()).toList());
       await file.writeAsString(json);
     } catch (e, stackTrace) {
-      appLogger.e('[RoomPersistenceService] 保存房间失败: $e', error: e, stackTrace: stackTrace);
+      appLogger.e('[RoomPersistenceService] 保存收藏失败: $e',
+          error: e, stackTrace: stackTrace);
     }
   }
 
-  int? loadSelectedRoomId() {
-    return _prefs.getInt(_selectedRoomKey);
+  /// 新收藏：末尾追加或覆盖同 id；置顶项排在前，其余按 sortKey 倒序。
+  Future<List<Bookmark>> upsert(List<Bookmark> existing, Bookmark incoming) async {
+    final rest = existing.where((b) => b.id != incoming.id).toList();
+    final next = <Bookmark>[incoming, ...rest]..sort(_compare);
+    await saveBookmarks(next);
+    return next;
   }
 
-  Future<void> saveSelectedRoomId(int? id) async {
-    if (id == null) {
-      await _prefs.remove(_selectedRoomKey);
-    } else {
-      await _prefs.setInt(_selectedRoomKey, id);
-    }
+  Future<List<Bookmark>> removeById(List<Bookmark> existing, int id) async {
+    final next = existing.where((b) => b.id != id).toList()..sort(_compare);
+    await saveBookmarks(next);
+    return next;
   }
+
+  /// 刷新 lastUsedAt（用户点"加入"时调用）。
+  Future<List<Bookmark>> touchUsed(
+    List<Bookmark> existing,
+    int id, {
+    DateTime? at,
+  }) async {
+    final now = at ?? DateTime.now();
+    final next = existing.map((b) {
+      if (b.id != id) return b;
+      return b.copyWith(lastUsedAt: now);
+    }).toList()
+      ..sort(_compare);
+    await saveBookmarks(next);
+    return next;
+  }
+
+  static int compare(Bookmark a, Bookmark b) {
+    if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
+    return b.sortKey.compareTo(a.sortKey);
+  }
+
+  static int _compare(Bookmark a, Bookmark b) => compare(a, b);
 }

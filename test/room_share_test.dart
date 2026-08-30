@@ -66,7 +66,8 @@ void main() {
   test('extractJoinToken short code and offline', () {
     expect(extractJoinToken('JHJM8Z'), 'JHJM8Z');
     expect(extractJoinToken('jhjm8z'), 'jhjm8z');
-    expect(extractJoinToken('123456789'), '123456789');
+    // 9 位短码为旧版兼容格式，已移除，不再识别
+    expect(extractJoinToken('123456789'), isNull);
     expect(extractJoinToken('AG1.offlineToken'), 'AG1.offlineToken');
   });
 
@@ -85,7 +86,8 @@ void main() {
   test('looksLikeJoinToken', () {
     expect(looksLikeJoinToken('JHJM8Z'), isTrue);
     expect(looksLikeJoinToken('jhjm8z'), isTrue);
-    expect(looksLikeJoinToken('123456789'), isTrue);
+    // 9 位短码为旧版兼容格式，已移除，不再识别
+    expect(looksLikeJoinToken('123456789'), isFalse);
     expect(looksLikeJoinToken('AG1.offlineToken'), isTrue);
     expect(looksLikeJoinToken('hello'), isFalse);
   });

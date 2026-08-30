@@ -38,6 +38,7 @@ abstract class ActiveRoomSession with _$ActiveRoomSession {
     required final String displayName,
     final String? shortCode,
     final String? adminToken,
+    required final List<PeerEndpoint> peers,
   }) = _ActiveRoomSession;
 
   String get roleLabel => isHost ? '房主' : '成员';

@@ -24,6 +24,7 @@ class DashboardWideLayout extends StatelessWidget {
     required this.onJoinRoom,
     required this.onShareRoom,
     required this.onDisconnect,
+    required this.onBookmarkRoom,
   });
 
   final NodeManagementService nodeManagement;
@@ -33,6 +34,7 @@ class DashboardWideLayout extends StatelessWidget {
   final VoidCallback onJoinRoom;
   final VoidCallback onShareRoom;
   final VoidCallback onDisconnect;
+  final VoidCallback onBookmarkRoom;
 
   @override
   Widget build(BuildContext context) {
@@ -50,6 +52,7 @@ class DashboardWideLayout extends StatelessWidget {
             onJoinRoom: onJoinRoom,
             onShareRoom: onShareRoom,
             onDisconnect: onDisconnect,
+            onBookmarkRoom: onBookmarkRoom,
           ),
         );
       }
@@ -74,6 +77,7 @@ class DashboardWideLayout extends StatelessWidget {
               onJoinRoom: onJoinRoom,
               onShareRoom: onShareRoom,
               onDisconnect: onDisconnect,
+              onBookmarkRoom: onBookmarkRoom,
             ),
           ),
         ],
@@ -166,6 +170,7 @@ class _RoomPane extends StatelessWidget {
     required this.onJoinRoom,
     required this.onShareRoom,
     required this.onDisconnect,
+    required this.onBookmarkRoom,
   });
 
   final NodeManagementService nodeManagement;
@@ -174,6 +179,7 @@ class _RoomPane extends StatelessWidget {
   final VoidCallback onJoinRoom;
   final VoidCallback onShareRoom;
   final VoidCallback onDisconnect;
+  final VoidCallback onBookmarkRoom;
 
   @override
   Widget build(BuildContext context) {
@@ -203,6 +209,7 @@ class _RoomPane extends StatelessWidget {
             onJoinRoom: onJoinRoom,
             onShareRoom: onShareRoom,
             onDisconnect: onDisconnect,
+            onBookmarkRoom: onBookmarkRoom,
           ),
           const SizedBox(height: AppDimensions.sectionGap),
           Expanded(

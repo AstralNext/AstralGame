@@ -23,6 +23,7 @@ class DashboardNarrowLayout extends StatelessWidget {
     required this.onJoinRoom,
     required this.onShareRoom,
     required this.onDisconnect,
+    required this.onBookmarkRoom,
   });
 
   final NodeManagementService nodeManagement;
@@ -31,6 +32,7 @@ class DashboardNarrowLayout extends StatelessWidget {
   final VoidCallback onJoinRoom;
   final VoidCallback onShareRoom;
   final VoidCallback onDisconnect;
+  final VoidCallback onBookmarkRoom;
 
   @override
   Widget build(BuildContext context) {
@@ -56,6 +58,7 @@ class DashboardNarrowLayout extends StatelessWidget {
             onJoinRoom: onJoinRoom,
             onShareRoom: onShareRoom,
             onDisconnect: onDisconnect,
+            onBookmarkRoom: onBookmarkRoom,
           ),
         );
       }
@@ -86,6 +89,7 @@ class DashboardNarrowLayout extends StatelessWidget {
                 onJoinRoom: onJoinRoom,
                 onShareRoom: onShareRoom,
                 onDisconnect: onDisconnect,
+                onBookmarkRoom: onBookmarkRoom,
               ),
             ),
           ),
@@ -135,6 +139,7 @@ class _NarrowRoomHeader extends StatelessWidget {
     required this.onJoinRoom,
     required this.onShareRoom,
     required this.onDisconnect,
+    required this.onBookmarkRoom,
   });
 
   final NodeManagementService nodeManagement;
@@ -149,6 +154,7 @@ class _NarrowRoomHeader extends StatelessWidget {
   final VoidCallback onJoinRoom;
   final VoidCallback onShareRoom;
   final VoidCallback onDisconnect;
+  final VoidCallback onBookmarkRoom;
 
   @override
   Widget build(BuildContext context) {
@@ -171,6 +177,7 @@ class _NarrowRoomHeader extends StatelessWidget {
         onJoinRoom: onJoinRoom,
         onShareRoom: onShareRoom,
         onDisconnect: onDisconnect,
+        onBookmarkRoom: onBookmarkRoom,
       );
     });
   }

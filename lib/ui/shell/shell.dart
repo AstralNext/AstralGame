@@ -1,4 +1,4 @@
-﻿import 'package:astral_game/utils/logger.dart';
+import 'package:astral_game/utils/logger.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
@@ -9,9 +9,11 @@ import 'package:astral_game/data/services/node_management_service.dart';
 import 'package:astral_game/data/services/screen_state_service.dart';
 import 'package:astral_game/data/services/shell_navigation_service.dart';
 import 'package:astral_game/data/services/update_service.dart';
+import 'package:astral_game/data/state/room_state.dart';
 import 'package:astral_game/data/state/settings_state.dart';
 import 'package:astral_game/data/state/update_state.dart';
 import 'package:astral_game/di.dart';
+import 'package:astral_game/ui/pages/bookmarks_page.dart';
 import 'package:astral_game/ui/widgets/avatar_widget.dart';
 import 'package:astral_game/ui/widgets/edit_profile_dialog.dart';
 import 'package:astral_game/utils/runtime_platform.dart';
@@ -238,6 +240,12 @@ if (index == _selectedIndex) return;
 setState(() => _selectedIndex = index);
 }
 
+void _openBookmarks(BuildContext context) {
+  Navigator.of(context).push<void>(
+    MaterialPageRoute(builder: (_) => const BookmarksPage()),
+  );
+}
+
 Widget _buildTabBody(bool isCompact) {
 final pages = [
 for (final item in _navigationItems) item.page,
@@ -301,15 +309,15 @@ color: palette.canvas,
 child: Column(
 children: [
 if (_isDesktopPlatform)
-_DesktopTitleBar(
-onClose: () => unawaited(_handleCloseRequested()),
-)
+  _DesktopTitleBar(
+    onClose: () => unawaited(_handleCloseRequested()),
+  )
 else if (isCompact)
 Watch((context) {
-return _MobileChromeBar(
-avatar: nodes.currentUserAvatar.value,
-onAvatarTap: () => showEditProfileDialog(context),
-);
+  return _MobileChromeBar(
+    avatar: nodes.currentUserAvatar.value,
+    onAvatarTap: () => showEditProfileDialog(context),
+  );
 }),
 Expanded(
 child: ClipRRect(
@@ -393,9 +401,11 @@ onTap: onAvatarTap,
 }
 }
 
-/// 桌面窗口标题栏（仅拖拽与窗口按钮，不参与页面返回）。
+/// 桌面窗口标题栏（拖拽 + 窗口按钮）。
 class _DesktopTitleBar extends StatefulWidget {
-const _DesktopTitleBar({required this.onClose});
+const _DesktopTitleBar({
+required this.onClose,
+});
 
 final VoidCallback onClose;
 

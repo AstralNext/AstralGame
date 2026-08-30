@@ -1,9 +1,9 @@
 import 'package:astral_game/data/models/active_room_session.dart';
-import 'package:astral_game/data/models/room_mod.dart';
+import 'package:astral_game/data/models/bookmark.dart';
 import 'package:astral_game/data/services/room_persistence_service.dart';
 import 'package:signals/signals_core.dart';
 
-/// 房间会话状态；加入历史供桌面小部件与备份使用。
+/// 房间会话状态；**不再有自动历史记录**，只暴露用户主动收藏的 bookmarks。
 class RoomState {
   RoomPersistenceService? _persistence;
 
@@ -16,8 +16,8 @@ class RoomState {
   /// 客人侧：房主当前是否在线（基于成员列表推断）。
   final hostOnline = signal<bool>(true);
 
-  final roomsList = signal<List<RoomMod>>([]);
-  final selectedRoom = signal<RoomMod?>(null);
+  /// 全部收藏（已按 pinned + sortKey 排序）。UI 消费前可再搜索/分页。
+  final bookmarksList = signal<List<Bookmark>>([]);
   final connectedRoomName = signal<String?>(null);
 
   void initPersistence(RoomPersistenceService persistence) {
@@ -25,16 +25,8 @@ class RoomState {
   }
 
   Future<void> loadFromPersistence() async {
-    final rooms = await _persistence?.loadRooms() ?? const <RoomMod>[];
-    roomsList.value = rooms;
-  }
-
-  void restoreSelectedRoom(int? roomId) {
-    if (roomId == null) {
-      selectedRoom.value = null;
-      return;
-    }
-    selectedRoom.value = _findById(roomId);
+    final list = await _persistence?.loadBookmarks() ?? const <Bookmark>[];
+    bookmarksList.value = list;
   }
 
   void setConnected(bool value, {bool clearSession = true}) {
@@ -53,51 +45,7 @@ class RoomState {
     connectedRoomName.value = value?.networkName;
     if (value != null) {
       hostOnline.value = true;
-      unawaitedRecordHistory(value);
     }
-  }
-
-  /// 将当前会话写入加入历史（供小部件「我的房间」）。
-  void unawaitedRecordHistory(ActiveRoomSession session) {
-    // ignore: discarded_futures
-    recordSessionHistory(session);
-  }
-
-  Future<void> recordSessionHistory(ActiveRoomSession session) async {
-    final persistence = _persistence;
-    if (persistence == null) return;
-
-    final code = (session.shortCode ?? session.networkName).trim();
-    if (code.isEmpty) return;
-
-    final existing = roomsList.value;
-    final now = DateTime.now();
-    final incoming = RoomMod(
-      id: now.millisecondsSinceEpoch,
-      name: session.displayName.isNotEmpty
-          ? session.displayName
-          : (session.gameName.isNotEmpty ? session.gameName : code),
-      roomName: session.networkName,
-      host: '',
-      port: 0,
-      shareCode: session.shortCode ?? '',
-      createdAt: now,
-    );
-
-    final next = RoomPersistenceService.upsertJoinHistory(existing, incoming);
-    roomsList.value = next;
-    await persistence.saveRooms(next);
-
-    RoomMod? selected;
-    final short = session.shortCode?.trim();
-    for (final room in next) {
-      if ((short != null && short.isNotEmpty && room.shareCode.trim() == short) ||
-          room.roomName == session.networkName) {
-        selected = room;
-        break;
-      }
-    }
-    setSelectedRoom(selected ?? (next.isNotEmpty ? next.first : null));
   }
 
   void setForceEndNotice(String? message) {
@@ -112,45 +60,87 @@ class RoomState {
     hostOnline.value = value;
   }
 
-  void setSelectedRoom(RoomMod? room) {
-    selectedRoom.value = room;
+  // ---------------- Bookmark 操作 ----------------
+
+  /// 新增或覆盖一条收藏；同步 signal 和持久化。
+  Future<void> upsertBookmark(Bookmark bookmark) async {
     final persistence = _persistence;
-    if (persistence != null) {
-      // ignore: discarded_futures
-      persistence.saveSelectedRoomId(room?.id);
+    final next = persistence == null
+        ? ([bookmark, ...bookmarksList.value.where((b) => b.id != bookmark.id)]
+          ..sort(RoomPersistenceService.compare))
+        : await persistence.upsert(bookmarksList.value, bookmark);
+    bookmarksList.value = next;
+  }
+
+  Future<void> removeBookmark(int id) async {
+    final persistence = _persistence;
+    final next = persistence == null
+        ? bookmarksList.value.where((b) => b.id != id).toList()
+        : await persistence.removeById(bookmarksList.value, id);
+    bookmarksList.value = next;
+  }
+
+  /// 用户从收藏点「加入」后：刷新 lastUsedAt。
+  Future<void> touchBookmarkUsed(int id) async {
+    final persistence = _persistence;
+    final next = persistence == null
+        ? bookmarksList.value
+        : await persistence.touchUsed(bookmarksList.value, id);
+    bookmarksList.value = next;
+  }
+
+  /// 查找给定 [payload] 是否已经被收藏（按 payload 内容哈希匹配）。
+  Bookmark? findBookmarkForPayload(RoomInvitePayload payload) {
+    final hash = hashInviteContent(payload);
+    for (final b in bookmarksList.value) {
+      if (b.contentHash == hash) return b;
     }
+    return null;
   }
 
-  void selectRoomById(int id) {
-    final room = _findById(id);
-    if (room != null) setSelectedRoom(room);
+  /// 把刚自动 create 的短码回写到匹配的收藏里（加入房间那一刻拿到的短码，
+  /// 之后在收藏页点分享就能直接复用了）。
+  Future<void> refreshBookmarkShareCode(
+    RoomInvitePayload payload, {
+    required String shortCode,
+    String? adminToken,
+  }) async {
+    final existing = findBookmarkForPayload(payload);
+    if (existing == null) return;
+    if (existing.originalShortCode?.trim() == shortCode) return;
+    final updated = existing.copyWith(
+      originalShortCode: shortCode,
+      originalOfflineToken: adminToken ?? existing.originalOfflineToken,
+    );
+    await upsertBookmark(updated);
   }
 
-  void selectRoomByCode(String code) {
-    final key = code.trim();
-    if (key.isEmpty) return;
-    for (final room in roomsList.value) {
-      if (room.shareCode.trim() == key || room.roomName == key) {
-        setSelectedRoom(room);
-        return;
+  /// 查找当前会话是否已被收藏。
+  ///
+  /// - 优先用 [payload] 做完整哈希匹配（最准，游戏名+网络名+密码+服务器列表都对上）。
+  /// - 没有 payload 时 fallback 到 `shortCode` 或 `networkName + secret`。
+  Bookmark? findBookmarkForCurrentSession({RoomInvitePayload? payload}) {
+    if (payload != null) return findBookmarkForPayload(payload);
+    final s = session.value;
+    if (s == null) return null;
+    final short = s.shortCode?.trim();
+    if (short != null && short.isNotEmpty) {
+      for (final b in bookmarksList.value) {
+        if (b.originalShortCode?.trim() == short) return b;
       }
     }
+    for (final b in bookmarksList.value) {
+      if (b.payload.networkName == s.networkName &&
+          b.payload.networkSecret == s.networkSecret) {
+        return b;
+      }
+    }
+    return null;
   }
 
-  void removeRoom(int roomId) {
-    final next = roomsList.value.where((r) => r.id != roomId).toList();
-    roomsList.value = next;
-    if (selectedRoom.value?.id == roomId) {
-      setSelectedRoom(null);
-    }
-    final persistence = _persistence;
-    if (persistence != null) {
-      // ignore: discarded_futures
-      persistence.saveRooms(next);
-    }
-  }
+  // ---------------- UI 快捷访问 ----------------
 
-  List<RoomMod> get rooms => roomsList.value;
+  List<Bookmark> get bookmarks => bookmarksList.value;
 
   String? get activeShareCode => session.value?.shortCode;
 
@@ -159,12 +149,5 @@ class RoomState {
     if (s == null) return null;
     if (s.displayName.isNotEmpty) return s.displayName;
     return s.gameName.isNotEmpty ? s.gameName : s.networkName;
-  }
-
-  RoomMod? _findById(int id) {
-    for (final room in roomsList.value) {
-      if (room.id == id) return room;
-    }
-    return null;
   }
 }

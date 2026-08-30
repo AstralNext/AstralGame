@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:astral_game/data/models/game_catalog.dart';
 import 'package:astral_game/data/services/connection_service.dart';
 import 'package:astral_game/data/services/game_assist_rules_service.dart';
@@ -6,7 +8,9 @@ import 'package:astral_game/data/services/screen_state_service.dart';
 import 'package:astral_game/data/services/share_code_service.dart';
 import 'package:astral_game/data/state/room_state.dart';
 import 'package:astral_game/config/constants.dart';
+import 'package:astral_game/data/models/bookmark.dart';
 import 'package:astral_game/di.dart';
+import 'package:astral_game/ui/pages/bookmarks_page.dart';
 import 'package:astral_game/ui/pages/dashboard_narrow_layout.dart';
 import 'package:astral_game/ui/pages/dashboard_wide_layout.dart';
 import 'package:astral_game/ui/widgets/create_room_dialog.dart';
@@ -31,68 +35,123 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Future<void> _handleShareRoom() async {
     final session = _roomState.session.value;
-    if (session == null || !session.isHost) {
+    if (session == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('仅房主可分享邀请')),
+          const SnackBar(content: Text('未连接房间，无法分享邀请')),
         );
       }
       return;
     }
 
-    final url = _connectionService.currentJoinShareUrl() ?? '';
+    // 每次 create 新短码（旧的可能过期了），存回 session 复用
+    String? shareCode;
+    try {
+      final result =
+          await _connectionService.createShareCodeForCurrentSession();
+      shareCode = result.code;
+      final updated = session.copyWithNullable(shortCode: result.code);
+      _roomState.setSession(updated);
+      // 同时回写到匹配的收藏
+      final payload = _connectionService.payloadFromCurrentSession();
+      if (payload != null) {
+        unawaited(_roomState.refreshBookmarkShareCode(
+          payload,
+          shortCode: result.code,
+          adminToken: result.adminToken,
+        ));
+      }
+    } on ShareCodeException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('短码服务暂不可用（${e.message}）'),
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('无法生成短码：$e'),
+        ));
+      }
+    }
 
     if (!mounted) return;
+
+    final payload = _connectionService.payloadFromCurrentSession();
+    final offlineInvite =
+        payload != null ? encodeOfflineInvite(payload) : null;
+    final url = buildJoinShareUrl(
+      shortCode: shareCode,
+      offlineInvite: offlineInvite,
+    );
+    final hasUrl = url.isNotEmpty;
+    final token = hasUrl ? extractJoinToken(url) : null;
+    final viaShort = token != null && looksLikeShortCode(token);
+
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
-        final hasUrl = url.isNotEmpty;
-        final token = hasUrl ? extractJoinToken(url) : null;
-        final viaShort = token != null && looksLikeShortCode(token);
-        return AlertDialog(
-          title: const Text('分享房间'),
-          content: SizedBox(
-            width: 420,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+        return Watch((_) {
+          return AlertDialog(
+            title: Row(
               children: [
-                Text(
-                  viaShort
-                      ? '发给好友这条链接即可加入。短码服务不可用时会自动改用离线链接。'
-                      : '短码服务不可用，已生成离线邀请链接。好友点开即可加入。',
-                ),
-                const SizedBox(height: 16),
-                SelectableText(
-                  hasUrl ? url : '（还没有邀请）',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
+                const Expanded(child: Text('分享房间')),
+                IconButton(
+                  tooltip: '⭐ 收藏当前房间',
+                  onPressed: () {
+                    Navigator.pop(dialogContext);
+                    _handleBookmarkRoom();
+                  },
+                  icon: Icon(
+                    Icons.bookmark_border_rounded,
+                    color: Theme.of(dialogContext).colorScheme.primary,
+                  ),
                 ),
               ],
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('关闭'),
+            content: SizedBox(
+              width: 420,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    viaShort
+                        ? '发给好友这条链接即可加入。短码服务不可用时会自动改用离线链接。'
+                        : '短码服务不可用，已生成离线邀请链接。好友点开即可加入。',
+                  ),
+                  const SizedBox(height: 16),
+                  SelectableText(
+                    hasUrl ? url : '（无法生成邀请）',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                ],
+              ),
             ),
-            FilledButton(
-              onPressed: !hasUrl
-                  ? null
-                  : () async {
-                      Navigator.pop(dialogContext);
-                      if (!this.context.mounted) return;
-                      await shareJoinInvite(
-                        context: this.context,
-                        url: url,
-                        gameName: session.gameName,
-                      );
-                    },
-              child: const Text('分享'),
-            ),
-          ],
-        );
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('关闭'),
+              ),
+              FilledButton(
+                onPressed: !hasUrl
+                    ? null
+                    : () async {
+                        Navigator.pop(dialogContext);
+                        if (!this.context.mounted) return;
+                        await shareJoinInvite(
+                          context: this.context,
+                          url: url,
+                          gameName: session.gameName,
+                        );
+                      },
+                child: const Text('分享'),
+              ),
+            ],
+          );
+        });
       },
     );
   }
@@ -146,6 +205,62 @@ class _DashboardPageState extends State<DashboardPage> {
     if (leave == true) {
       await _connectionService.leaveRoom();
     }
+  }
+
+  Future<void> _handleBookmarkRoom() async {
+    final payload = _connectionService.payloadFromCurrentSession();
+    final existing = _roomState.findBookmarkForCurrentSession(payload: payload);
+    if (existing != null) {
+      // 已收藏 → 点击取消
+      final removed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('取消收藏？'),
+          content: Text('将「${existing.customName}」从收藏中移除'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('再想想'),
+            ),
+            FilledButton.tonal(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('取消收藏'),
+            ),
+          ],
+        ),
+      );
+      if (removed == true && mounted) {
+        await _roomState.removeBookmark(existing.id);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('已从收藏中移除')),
+        );
+      }
+      return;
+    }
+    // 未收藏 → 打开编辑 Sheet
+    if (payload == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('还没有可收藏的房间配置')),
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
+    final session = _roomState.session.value;
+    final bookmark = await showBookmarkEditSheet(
+      context,
+      payload: payload,
+      existing: null,
+      originalShortCode: session?.shortCode,
+    );
+    if (bookmark == null || !mounted) return;
+    await _roomState.upsertBookmark(bookmark);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('已加入收藏：${bookmark.customName}')),
+    );
   }
 
   void _consumeForceEndNotice() {
@@ -225,40 +340,80 @@ class _DashboardPageState extends State<DashboardPage> {
     final codeController = TextEditingController();
     final result = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('加入房间'),
-        content: SizedBox(
-          width: 420,
-          child: TextField(
-            controller: codeController,
-            keyboardType: TextInputType.text,
-            maxLines: 4,
-            minLines: 1,
-            decoration: const InputDecoration(
-              labelText: '邀请链接 / 短码',
-              hintText: '粘贴 next.astral.fan/j 链接，或短码',
-              alignLabelWithHint: true,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('加入房间'),
+          content: SizedBox(
+            width: 420,
+            child: TextField(
+              controller: codeController,
+              keyboardType: TextInputType.text,
+              maxLines: 4,
+              minLines: 1,
+              decoration: const InputDecoration(
+                labelText: '邀请链接 / 短码',
+                hintText: '粘贴 next.astral.fan/j 链接，或短码',
+                alignLabelWithHint: true,
+              ),
+              onSubmitted: (v) => Navigator.pop(dialogContext, v.trim()),
             ),
-            onSubmitted: (v) => Navigator.pop(context, v.trim()),
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, codeController.text.trim()),
-            child: const Text('加入'),
-          ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('取消'),
+            ),
+            FilledButton.tonal(
+              onPressed: () async {
+                final raw = codeController.text.trim();
+                if (raw.isEmpty) return;
+                Navigator.pop(dialogContext);
+                await _parseAndBookmark(raw);
+              },
+              child: const Text('解析并收藏'),
+            ),
+            FilledButton(
+              onPressed: () =>
+                  Navigator.pop(dialogContext, codeController.text.trim()),
+              child: const Text('加入'),
+            ),
+          ],
+        );
+      },
     );
     if (result == null || result.isEmpty) return;
     try {
       await _connectionService.joinWithInviteInput(result);
     } on ConnectionAbortedException {
       return;
+    } on ShareCodeException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    }
+  }
+
+  Future<void> _parseAndBookmark(String raw) async {
+    try {
+      final resolved = await _connectionService.resolveInvitePayload(raw);
+      if (!mounted) return;
+      final bookmark = await showBookmarkEditSheet(
+        context,
+        payload: resolved.payload,
+        existing: null,
+        originalShortCode: resolved.shortCode,
+        originalOfflineToken: resolved.offlineToken,
+      );
+      if (bookmark == null || !mounted) return;
+      await _roomState.upsertBookmark(bookmark);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已加入收藏：${bookmark.customName}')),
+      );
     } on ShareCodeException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
@@ -283,6 +438,7 @@ class _DashboardPageState extends State<DashboardPage> {
               onJoinRoom: _handleJoinRoom,
               onShareRoom: _handleShareRoom,
               onDisconnect: _handleDisconnect,
+              onBookmarkRoom: _handleBookmarkRoom,
             )
           : Padding(
               padding: const EdgeInsets.all(16),
@@ -294,6 +450,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 onJoinRoom: _handleJoinRoom,
                 onShareRoom: _handleShareRoom,
                 onDisconnect: _handleDisconnect,
+                onBookmarkRoom: _handleBookmarkRoom,
               ),
             );
     });

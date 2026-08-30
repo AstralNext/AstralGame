@@ -4,7 +4,7 @@ import 'package:astral_game/ui/widgets/astral_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// 已连接房间卡：游戏封面、房间名、短码、IP、分享/离开按钮。
+/// 已连接房间卡：游戏封面、房间名、短码、IP、分享/收藏/离开按钮。
 class ConnectedRoomCard extends StatelessWidget {
   const ConnectedRoomCard({
     super.key,
@@ -18,6 +18,8 @@ class ConnectedRoomCard extends StatelessWidget {
     this.virtualIp,
     required this.onShare,
     required this.onDisconnect,
+    required this.onBookmark,
+    this.isBookmarked = false,
   });
 
   final String roomDisplayName;
@@ -30,6 +32,8 @@ class ConnectedRoomCard extends StatelessWidget {
   final String? virtualIp;
   final VoidCallback onShare;
   final VoidCallback onDisconnect;
+  final VoidCallback onBookmark;
+  final bool isBookmarked;
 
   @override
   Widget build(BuildContext context) {
@@ -199,15 +203,25 @@ class ConnectedRoomCard extends StatelessWidget {
           const SizedBox(height: 14),
           Row(
             children: [
-              if (isRoomHost) ...[
-                Expanded(
-                  child: FilledButton.tonal(
-                    onPressed: onShare,
-                    child: const Text('分享'),
-                  ),
+              IconButton(
+                tooltip: isBookmarked ? '取消收藏' : '收藏当前房间',
+                onPressed: onBookmark,
+                icon: Icon(
+                  isBookmarked
+                      ? Icons.bookmark_rounded
+                      : Icons.bookmark_border_rounded,
+                  color: isBookmarked ? palette.accent : palette.accent,
+                  fill: isBookmarked ? 1 : 0,
                 ),
-                const SizedBox(width: 8),
-              ],
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: FilledButton.tonal(
+                  onPressed: onShare,
+                  child: const Text('分享'),
+                ),
+              ),
+              const SizedBox(width: 8),
               Expanded(
                 child: OutlinedButton(
                   onPressed: onDisconnect,

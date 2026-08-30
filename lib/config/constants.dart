@@ -29,9 +29,6 @@ class AppConstants {
   /// 服务器列表 ICMP ping 周期。过短会对节点形成持续探测。
   static const Duration serverPingInterval = Duration(minutes: 2);
 
-  /// 加入历史最多保留条数（最新在前，按分享码去重）。
-  static const int maxJoinHistoryEntries = 15;
-
   // 主机名过滤（中继节点不进成员列表）
   static const String publicServerHostname = 'PublicServer';
 

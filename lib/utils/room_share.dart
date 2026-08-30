@@ -54,7 +54,10 @@ bool looksLikeJoinToken(String raw) =>
 
 bool isJoinHttpsHost(String host) {
   final h = host.toLowerCase();
-  return h == kJoinHttpsHost || h == 'www.$kJoinHttpsHost';
+  if (h == kJoinHttpsHost || h == 'www.$kJoinHttpsHost') return true;
+  // 兼容旧域名 astral.fan（没有 next 前缀），仍可解析旧链接。
+  if (h == 'astral.fan' || h == 'www.astral.fan') return true;
+  return false;
 }
 
 /// 统一邀请链接：有短码用短码，否则用离线码。各平台同一条 URL。
@@ -128,6 +131,9 @@ String? tokenFromJoinUri(Uri uri) {
   final segs = uri.pathSegments.where((s) => s.isNotEmpty).toList();
 
   String? fromQueryOrFragment() {
+    // 书签快捷方式专用：bookmark=<id> → 返回 "bookmark:<id>"
+    final bm = uri.queryParameters['bookmark']?.trim();
+    if (bm != null && bm.isNotEmpty) return 'bookmark:$bm';
     final c = uri.queryParameters['c'] ?? uri.queryParameters['code'];
     final q = (c ?? '').trim();
     if (q.isNotEmpty) return q;
@@ -157,6 +163,14 @@ String? tokenFromJoinUri(Uri uri) {
     }
   }
   return null;
+}
+
+/// 提取 bookmark id（纯数字），如果 token 是 bookmark: 前缀的话。
+int? extractBookmarkId(String token) {
+  final t = token.trim();
+  if (!t.startsWith('bookmark:')) return null;
+  final id = int.tryParse(t.substring('bookmark:'.length).trim());
+  return id;
 }
 
 /// 将邀请载荷编码为可粘贴的离线串（无需短码服务器）。

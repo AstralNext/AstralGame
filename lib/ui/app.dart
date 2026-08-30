@@ -24,7 +24,6 @@ class _AstralGameAppState extends State<AstralGameApp> with WidgetsBindingObserv
   bool _disposed = false;
   final _widgetLaunchHandler = HomeWidgetLaunchHandler(
     navigation: getIt<ShellNavigationService>(),
-    roomState: getIt<RoomState>(),
   );
 
   @override

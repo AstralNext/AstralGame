@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:astral_game/config/home_widget_keys.dart';
-import 'package:astral_game/data/models/room_mod.dart';
+import 'package:astral_game/data/models/bookmark.dart';
 import 'package:astral_game/data/services/home_widget_theme_sync.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
 import 'package:astral_game/data/services/room_persistence_service.dart';
@@ -14,7 +14,7 @@ import 'package:astral_game/utils/runtime_platform.dart';
 import 'package:flutter/widgets.dart';
 import 'package:home_widget/home_widget.dart';
 
-/// 将连接状态、房间列表、在线成员写入 Android 桌面小部件缓存。
+/// 将连接状态、收藏列表、在线成员写入 Android 桌面小部件缓存。
 class HomeWidgetSyncService {
   HomeWidgetSyncService({
     required SettingsState settings,
@@ -46,20 +46,20 @@ class HomeWidgetSyncService {
     final roomState = _roomState;
     final nodeManagement = _nodeManagement;
     final inRoom = nodeManagement.isRunning;
-    final selected = roomState.selectedRoom.value;
-    final roomLabel = _resolveRoomLabel(roomState, selected, inRoom);
+    final first = _firstBookmark(roomState);
+    final roomLabel = _resolveRoomLabel(roomState, first, inRoom);
     final memberCount = nodeManagement.onlinePeersForDisplay.length;
 
     if (!inRoom) {
       await HomeWidget.saveWidgetData<String>(
         HomeWidgetKeys.connectRoomLabel,
-        selected == null ? '未选择房间' : roomLabel,
+        first == null ? '未选择房间' : roomLabel,
       );
       await HomeWidget.saveWidgetData<String>(
         HomeWidgetKeys.connectRoomCode,
-        selected?.shareCode.isNotEmpty == true
-            ? selected!.shareCode
-            : (selected?.roomName ?? ''),
+        first?.originalShortCode?.isNotEmpty == true
+            ? first!.originalShortCode!
+            : first?.payload.networkName ?? '',
       );
       await HomeWidget.saveWidgetData<String>(
         HomeWidgetKeys.connectStatus,
@@ -71,14 +71,14 @@ class HomeWidgetSyncService {
       );
       await HomeWidget.saveWidgetData<String>(
         HomeWidgetKeys.connectHint,
-        selected == null
+        first == null
             ? '点击打开应用加入或创建房间'
             : '已选中 · 打开应用连接',
       );
     } else {
       final code = roomState.activeShareCode ??
           roomState.connectedRoomName.value ??
-          selected?.shareCode ??
+          first?.originalShortCode ??
           '';
       await HomeWidget.saveWidgetData<String>(
         HomeWidgetKeys.connectRoomLabel,
@@ -109,14 +109,14 @@ class HomeWidgetSyncService {
 
   Future<void> syncRooms() async {
     if (!RuntimePlatform.isAndroid) return;
-    var rooms = _roomState.rooms;
+    var rooms = _roomState.bookmarks;
     if (rooms.isEmpty) {
       final persistence = _roomPersistence;
       if (persistence != null) {
-        rooms = await persistence.loadRooms();
+        rooms = await persistence.loadBookmarks();
       }
     }
-    final preview = rooms.take(4).map(_roomToWidgetJson).toList();
+    final preview = rooms.take(4).map(_bookmarkToWidgetJson).toList();
 
     await HomeWidget.saveWidgetData<String>(
       HomeWidgetKeys.roomsJson,
@@ -125,7 +125,7 @@ class HomeWidgetSyncService {
     await HomeWidget.saveWidgetData<String>(
       HomeWidgetKeys.roomsSummary,
       rooms.isEmpty
-          ? '加入或创建房间后会出现在这里'
+          ? '收藏的房间会显示在这里'
           : '共 ${rooms.length} 个 · 点击一行选中',
     );
 
@@ -139,7 +139,7 @@ class HomeWidgetSyncService {
     final roomState = _roomState;
     final nodeManagement = _nodeManagement;
     final inRoom = nodeManagement.isRunning;
-    final selected = roomState.selectedRoom.value;
+    final first = _firstBookmark(roomState);
     final members = nodeManagement.onlinePeersForDisplay;
     final preview = members
         .take(6)
@@ -149,7 +149,7 @@ class HomeWidgetSyncService {
 
     await HomeWidget.saveWidgetData<String>(
       HomeWidgetKeys.membersRoomLabel,
-      inRoom ? _resolveRoomLabel(roomState, selected, true) : '未在房间',
+      inRoom ? _resolveRoomLabel(roomState, first, true) : '未在房间',
     );
     await HomeWidget.saveWidgetData<int>(
       HomeWidgetKeys.membersCount,
@@ -173,26 +173,33 @@ class HomeWidgetSyncService {
     );
   }
 
+  static Bookmark? _firstBookmark(RoomState roomState) {
+    final list = roomState.bookmarksList.value;
+    return list.isEmpty ? null : list.first;
+  }
+
   static String _resolveRoomLabel(
     RoomState roomState,
-    RoomMod? selected,
+    Bookmark? first,
     bool inRoom,
   ) {
     if (inRoom) {
       final active = roomState.activeRoomDisplayLabel;
       if (active != null && active.isNotEmpty) return active;
     }
-    if (selected == null) {
+    if (first == null) {
       return inRoom ? '已连接' : '未在房间';
     }
-    return roomDisplayLabel(selected);
+    return bookmarkDisplayLabel(first);
   }
 
-  static Map<String, dynamic> _roomToWidgetJson(RoomMod room) => {
-        'label': roomDisplayLabel(room),
-        'code': room.shareCode.isNotEmpty ? room.shareCode : room.roomName,
-        'network': room.roomName,
-        'id': room.id,
+  static Map<String, dynamic> _bookmarkToWidgetJson(Bookmark b) => {
+        'label': bookmarkDisplayLabel(b),
+        'code': b.originalShortCode?.isNotEmpty == true
+            ? b.originalShortCode!
+            : b.payload.networkName,
+        'network': b.payload.networkName,
+        'id': b.id,
       };
 
   static String _formatMemberPreview(List<String> names, int total) {
@@ -227,9 +234,6 @@ Future<void> homeWidgetBackgroundCallback(Uri? uri) async {
     final roomState = getIt<RoomState>();
     roomState.initPersistence(getIt<RoomPersistenceService>());
     await roomState.loadFromPersistence();
-    roomState.restoreSelectedRoom(
-      getIt<RoomPersistenceService>().loadSelectedRoomId(),
-    );
     getIt<SettingsState>().loadFromPersistence();
   }
   await _homeWidgetSyncFromGetIt().syncAll();

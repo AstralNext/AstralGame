@@ -35,10 +35,9 @@ class _HomeWidgetRefreshBinderState extends State<HomeWidgetRefreshBinder>
     final nodes = getIt<NodeManagementService>();
 
     _effectCleanup = effect(() {
-      roomState.selectedRoom.value;
       roomState.connectedRoomName.value;
       nodes.isRunning;
-      roomState.roomsList.value.length;
+      roomState.bookmarksList.value.length;
       settings.appThemeId.value;
       nodes.userNodes.value.length;
       _scheduleSync();

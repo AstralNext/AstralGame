@@ -1,15 +1,17 @@
 import 'dart:async';
 
+import 'package:astral_game/data/models/bookmark.dart';
 import 'package:astral_game/data/services/connection_service.dart';
 import 'package:astral_game/data/services/join_link_service.dart';
 import 'package:astral_game/data/services/share_code_service.dart';
 import 'package:astral_game/data/services/shell_navigation_service.dart';
 import 'package:astral_game/data/state/room_state.dart';
 import 'package:astral_game/di.dart';
+import 'package:astral_game/utils/room_share.dart';
 import 'package:flutter/material.dart';
 import 'package:signals/signals_flutter.dart';
 
-/// 收到邀请链接后自动进房。
+/// 收到邀请链接后自动进房（支持短码/离线串/本地收藏）。
 class JoinLinkBinder extends StatefulWidget {
   const JoinLinkBinder({super.key, required this.child});
 
@@ -60,6 +62,20 @@ class _JoinLinkBinderState extends State<JoinLinkBinder> {
         await connection.leaveRoom();
       }
       getIt<ShellNavigationService>().openDashboardTab();
+
+      // 识别 bookmark: 前缀 → 从本地收藏找 payload 直接加入
+      final bmId = extractBookmarkId(token);
+      if (bmId != null) {
+        final bookmark = _findBookmarkById(room, bmId);
+        if (bookmark == null) {
+          _toast('本地未找到对应收藏（id=$bmId），可能已被删除');
+          return;
+        }
+        _toast('正在通过收藏加入：${bookmark.displayName}');
+        await connection.joinWithPayload(bookmark.payload);
+        return;
+      }
+
       _toast('正在通过链接加入…');
       await connection.joinWithInviteInput(token);
     } on ConnectionAbortedException {
@@ -71,6 +87,13 @@ class _JoinLinkBinderState extends State<JoinLinkBinder> {
     } finally {
       _busy = false;
     }
+  }
+
+  Bookmark? _findBookmarkById(RoomState room, int id) {
+    for (final b in room.bookmarksList.value) {
+      if (b.id == id) return b;
+    }
+    return null;
   }
 
   Future<bool?> _confirmLeave() {

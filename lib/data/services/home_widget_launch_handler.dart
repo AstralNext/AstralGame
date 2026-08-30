@@ -3,20 +3,19 @@ import 'dart:io';
 
 import 'package:astral_game/config/home_widget_uris.dart';
 import 'package:astral_game/data/services/shell_navigation_service.dart';
-import 'package:astral_game/data/state/room_state.dart';
 import 'package:astral_game/utils/runtime_platform.dart';
 import 'package:home_widget/home_widget.dart';
 
-/// 处理从小部件启动 / 点击带来的 URI，切换 Tab 或选中房间。
+/// 处理从小部件启动 / 点击带来的 URI，切换 Tab。
+///
+/// 收藏（Rooms）路径：跳到 Dashboard 首页，用户在首页收藏预览卡/⭐入口
+/// 进入「我的收藏」页查看详情，不再"自动选中某个收藏"（避免误操作触发连接）。
 class HomeWidgetLaunchHandler {
   HomeWidgetLaunchHandler({
     required ShellNavigationService navigation,
-    required RoomState roomState,
-  })  : _navigation = navigation,
-        _roomState = roomState;
+  }) : _navigation = navigation;
 
   final ShellNavigationService _navigation;
-  final RoomState _roomState;
   StreamSubscription<Uri?>? _sub;
 
   Future<void> start() async {
@@ -37,29 +36,11 @@ class HomeWidgetLaunchHandler {
       return;
     }
 
-    final nav = _navigation;
     final path = uri.path;
-
     if (path == HomeWidgetUris.pathMembers ||
         path == HomeWidgetUris.pathConnect ||
         path == HomeWidgetUris.pathRooms) {
-      nav.openDashboardTab();
-    }
-
-    if (path == HomeWidgetUris.pathRooms) {
-      final idRaw = uri.queryParameters['id'];
-      final code = uri.queryParameters['code'];
-      final roomState = _roomState;
-      if (idRaw != null) {
-        final id = int.tryParse(idRaw);
-        if (id != null) {
-          roomState.selectRoomById(id);
-          return;
-        }
-      }
-      if (code != null && code.isNotEmpty) {
-        roomState.selectRoomByCode(code);
-      }
+      _navigation.openDashboardTab();
     }
   }
 }

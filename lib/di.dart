@@ -27,6 +27,7 @@ import 'package:astral_game/data/services/room_persistence_service.dart';
 import 'package:astral_game/data/services/screen_state_service.dart';
 import 'package:astral_game/data/services/shell_navigation_service.dart';
 import 'package:astral_game/data/services/server_persistence_service.dart';
+import 'package:astral_game/data/services/shortcut_service.dart';
 import 'package:astral_game/data/services/share_code_service.dart';
 import 'package:astral_game/data/state/room_state.dart';
 import 'package:astral_game/data/state/server_state.dart';
@@ -99,6 +100,7 @@ Future<void> setupDI() async {
   getIt.registerSingleton<ScreenStateService>(ScreenStateService());
   _registerDispose<ScreenStateService>((s) => s.dispose());
   getIt.registerSingleton<ShellNavigationService>(ShellNavigationService());
+  getIt.registerSingleton<ShortcutService>(const ShortcutService());
 
   getIt.registerLazySingleton<P2PService>(() => P2PService());
   unawaited(getIt<P2PService>().ensureInitialized());
@@ -215,15 +217,12 @@ Future<void> setupDI() async {
   getIt.registerLazySingleton<RoomState>(() => RoomState());
 
   getIt.registerLazySingleton<RoomPersistenceService>(
-    () => RoomPersistenceService(prefs),
+    () => RoomPersistenceService(),
   );
 
   final roomState = getIt<RoomState>();
   roomState.initPersistence(getIt<RoomPersistenceService>());
   await roomState.loadFromPersistence();
-  roomState.restoreSelectedRoom(
-    getIt<RoomPersistenceService>().loadSelectedRoomId(),
-  );
 
   getIt.registerLazySingleton<VpnManager>(
     () => VpnManager(getIt<VpnState>(), getIt<P2PService>()),

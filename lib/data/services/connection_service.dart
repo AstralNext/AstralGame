@@ -172,6 +172,7 @@ class ConnectionService {
       displayName: label,
       shortCode: shortCode,
       adminToken: adminToken,
+      peers: hostPeers,
     );
     _roomState.setSession(session);
     final epoch = _link.begin();
@@ -203,13 +204,26 @@ class ConnectionService {
     }
   }
 
-  Future<ActiveRoomSession> joinWithInviteInput(String raw) async {
+  /// 解析邀请输入（短码/离线）并返回完整 payload，**不真正加入房间**。
+  /// 用于「⭐ 解析并收藏」等场景。
+  Future<({RoomInvitePayload payload, String? shortCode, String? offlineToken})>
+      resolveInvitePayload(String raw) async {
     final token = requireJoinInviteToken(raw);
     if (looksLikeShortCode(token)) {
-      return joinWithShortCode(token);
+      final normalized = normalizeShareCode(token);
+      final payload = await _shareCodes.fetch(normalized);
+      return (payload: payload, shortCode: normalized, offlineToken: null);
     }
     final payload = decodeOfflineInvite(token);
-    return _joinWithPayload(payload, shortCode: null);
+    return (payload: payload, shortCode: null, offlineToken: token);
+  }
+
+  Future<ActiveRoomSession> joinWithInviteInput(String raw) async {
+    final resolved = await resolveInvitePayload(raw);
+    return joinWithPayload(
+      resolved.payload,
+      shortCode: resolved.shortCode,
+    );
   }
 
   /// 当前应分享的一条 URL（短码优先，否则离线）。
@@ -223,11 +237,55 @@ class ConnectionService {
     return url.isEmpty ? null : url;
   }
 
-  /// 加入房间：6 位 32 进制短码（也接受旧 9 位数字）。
+  /// 为任意 [RoomInvitePayload] 动态创建一条新短码（不需要 adminToken，任何人都能调）。
+  ///
+  /// 收藏页分享、成员侧临时分享都走这个入口。创建成功后**不会**自动写入 session，
+  /// 调用方决定是否持久化（如 bookmark.lastShareCode）。
+  Future<({String code, String adminToken, String expiresAt})>
+      createShareCodeForPayload(RoomInvitePayload payload) {
+    return _shareCodes.create(payload);
+  }
+
+  /// 为当前会话动态创建一条新短码（房主/成员均可调）。
+  Future<({String code, String adminToken, String expiresAt})>
+      createShareCodeForCurrentSession() {
+    final session = _roomState.session.value;
+    if (session == null) {
+      throw StateError('未连接房间，无法生成短码');
+    }
+    final payload = payloadFromCurrentSession();
+    if (payload == null) {
+      throw StateError('当前会话缺少配置，无法生成短码');
+    }
+    return _shareCodes.create(payload);
+  }
+
+  /// 加入房间：6 位 32 进制短码。
   Future<ActiveRoomSession> joinWithShortCode(String code) async {
     final normalized = normalizeShareCode(code);
     final payload = await _shareCodes.fetch(normalized);
-    return _joinWithPayload(payload, shortCode: normalized);
+    return joinWithPayload(payload, shortCode: normalized);
+  }
+
+  /// 从任意 [RoomInvitePayload] 加入；收藏功能用它跳过短码服务。
+  Future<ActiveRoomSession> joinWithPayload(
+    RoomInvitePayload payload, {
+    String? shortCode,
+  }) =>
+      _joinWithPayload(payload, shortCode: shortCode);
+
+  /// 依据当前会话生成一条完整 payload（用于「收藏当前房间」）。
+  RoomInvitePayload? payloadFromCurrentSession() {
+    final session = _roomState.session.value;
+    if (session == null) return null;
+    return RoomInvitePayload(
+      gameId: session.gameId,
+      gameName: session.gameName,
+      networkName: session.networkName,
+      networkSecret: session.networkSecret,
+      peers: session.peers,
+      displayName: session.displayName,
+    );
   }
 
   Future<ActiveRoomSession> _joinWithPayload(
@@ -235,6 +293,19 @@ class ConnectionService {
     String? shortCode,
   }) async {
     final invitePeers = joinableInvitePeers(payload);
+
+    // 如果没有短码（从收藏/离线加入），自动 create 一条存进 session，方便后续分享
+    String? resolvedShortCode = shortCode;
+    String? adminToken;
+    if (resolvedShortCode == null || resolvedShortCode.isEmpty) {
+      try {
+        final created = await _shareCodes.create(payload);
+        resolvedShortCode = created.code;
+        adminToken = created.adminToken;
+      } catch (e) {
+        appLogger.w('[ConnectionService] 自动创建短码失败: $e');
+      }
+    }
 
     final session = ActiveRoomSession(
       isHost: false,
@@ -245,7 +316,9 @@ class ConnectionService {
       displayName: payload.displayName?.isNotEmpty == true
           ? payload.displayName!
           : (payload.gameName.isEmpty ? payload.networkName : payload.gameName),
-      shortCode: shortCode,
+      shortCode: resolvedShortCode,
+      adminToken: adminToken,
+      peers: invitePeers,
     );
     _roomState.setSession(session);
     final epoch = _link.begin();
@@ -263,6 +336,15 @@ class ConnectionService {
         epoch: epoch,
       );
       linked = true;
+      // 加入成功：如果 session 里有新 create 的短码（从收藏/离线加入的情况），
+      // 回写到匹配的 bookmark，之后在收藏页点分享就能直接复用
+      if (resolvedShortCode != null && resolvedShortCode.isNotEmpty) {
+        unawaited(_roomState.refreshBookmarkShareCode(
+          payload,
+          shortCode: resolvedShortCode!,
+          adminToken: adminToken,
+        ));
+      }
       return session;
     } on ConnectionAbortedException {
       rethrow;
