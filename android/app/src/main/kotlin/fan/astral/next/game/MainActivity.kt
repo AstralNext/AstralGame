@@ -99,12 +99,7 @@ class MainActivity : FlutterActivity() {
                 .setIntent(pinIntent)
                 .build()
 
-            val successCallback = IntentSender.forResult(
-                this, 0, Intent(),
-                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE,
-            )
-
-            val pinned = sm.requestPinShortcut(shortcut, successCallback)
+            val pinned = sm.requestPinShortcut(shortcut, null)
             result.success(pinned)
         } catch (e: Exception) {
             result.error("NO_PERMISSION", e.message, null)
