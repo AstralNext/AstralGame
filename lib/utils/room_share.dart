@@ -193,14 +193,14 @@ RoomInvitePayload decodeOfflineInvite(String raw) {
   final bytes = base64Url.decode(text);
   final map = jsonDecode(utf8.decode(bytes));
   if (map is! Map<String, dynamic>) {
-    throw FormatException('离线邀请不是 JSON 对象');
+    throw const FormatException('离线邀请不是 JSON 对象');
   }
   final payload = RoomInvitePayload.fromJson(map);
   if (payload.networkName.isEmpty) {
-    throw FormatException('离线邀请缺少 network_name');
+    throw const FormatException('离线邀请缺少 network_name');
   }
   if (payload.networkSecret.isEmpty) {
-    throw FormatException('离线邀请缺少房间密码');
+    throw const FormatException('离线邀请缺少房间密码');
   }
   return payload;
 }

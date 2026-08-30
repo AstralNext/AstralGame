@@ -12,11 +12,11 @@
 ///   - `-32601` 收到了未注册的 channel。
 ///   - `-32603` 收端 handler 抛出了非 [`RpcException`] 类型的异常。
 class RpcException implements Exception {
+
+  RpcException(this.code, this.message, {this.data});
   final int code;
   final String message;
   final dynamic data;
-
-  RpcException(this.code, this.message, {this.data});
 
   @override
   String toString() => 'RpcException($code): $message';

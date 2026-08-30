@@ -1,7 +1,6 @@
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/services/home_widget_launch_handler.dart';
 import 'package:astral_game/data/services/shell_navigation_service.dart';
-import 'package:astral_game/data/state/room_state.dart';
 import 'package:astral_game/data/state/settings_state.dart';
 import 'package:astral_game/di.dart';
 import 'package:astral_game/ui/shell/shell.dart';
@@ -76,7 +75,6 @@ class _AstralGameAppState extends State<AstralGameApp> with WidgetsBindingObserv
         ],
         theme: theme,
         themeAnimationDuration: AppThemeAnimation.duration,
-        themeAnimationCurve: AppThemeAnimation.curve,
         builder: (context, child) => JoinLinkBinder(
           child: FloatingOverlayBinder(
             child: HomeWidgetRefreshBinder(

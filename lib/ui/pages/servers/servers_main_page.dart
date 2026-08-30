@@ -109,7 +109,6 @@ class _ServersMainPageState extends State<ServersMainPage> {
         buildDefaultDragHandles: false,
         proxyDecorator: (child, index, animation) {
           return Material(
-            elevation: 0,
             color: Colors.transparent,
             child: child,
           );

@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -218,7 +218,7 @@ dirs.add(Directory('$localApp\\Gas Powered Games'));
 final files = <File>[];
 for (final dir in dirs) {
 if (!await dir.exists()) continue;
-await for (final ent in dir.list(recursive: false, followLinks: false)) {
+await for (final ent in dir.list(followLinks: false)) {
 if (ent is! File) continue;
 final name = ent.uri.pathSegments.isEmpty
 ? ''

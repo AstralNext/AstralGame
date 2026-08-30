@@ -1,4 +1,4 @@
-﻿import 'package:astral_game/utils/logger.dart';
+import 'package:astral_game/utils/logger.dart';
 import 'package:astral_game/utils/room_share.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -30,7 +30,6 @@ subject: name.isEmpty ? 'Astral Game' : name,
 );
 } catch (e) {
       appLogger.w('[ShareActions] 操作失败', error: e);
-await copyJoinInvite(context, url);
-
+      if (context.mounted) await copyJoinInvite(context, url);
     }
 }

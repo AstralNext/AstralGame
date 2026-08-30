@@ -87,9 +87,7 @@ Future<void> setupDI() async {
       methodCount: 0,
       errorMethodCount: 5,
       lineLength: 80,
-      colors: true,
       printEmojis: false,
-      dateTimeFormat: DateTimeFormat.none,
     ),
   );
   setAppLogger(appLog);

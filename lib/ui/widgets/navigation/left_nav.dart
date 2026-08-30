@@ -65,8 +65,6 @@ class LeftNav extends StatelessWidget {
                   padding: const EdgeInsets.all(4),
                   child: AvatarWidget(
                     avatar: avatar,
-                    size: 40,
-                    shape: AvatarShape.circle,
                     onTap: onAvatarTap,
                   ),
                 ),

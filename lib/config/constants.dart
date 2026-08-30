@@ -3,9 +3,9 @@ import 'package:flutter/painting.dart';
 /// Material 3 圆角令牌。
 class AppRadius {
   AppRadius._();
-  static final brSmall = BorderRadius.all(Radius.circular(16));
-  static final brMedium = BorderRadius.all(Radius.circular(18));
-  static final brLarge = BorderRadius.all(Radius.circular(20));
+  static const brSmall = BorderRadius.all(Radius.circular(16));
+  static const brMedium = BorderRadius.all(Radius.circular(18));
+  static const brLarge = BorderRadius.all(Radius.circular(20));
 }
 
 /// MD3 设计规范 - 状态颜色（语义色）

@@ -42,7 +42,6 @@ class ConnectedRoomCard extends StatelessWidget {
     final game = GameCatalog.byId(roomGameId);
     final code = roomShortCode?.trim() ?? '';
     final ip = virtualIp?.trim() ?? '';
-    final showHostOffline = false; // 不再显示"房主离线"提示
 
     return AstralCard(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
@@ -81,36 +80,12 @@ class ConnectedRoomCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-          ] else if (showHostOffline) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: palette.error.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.wifi_off_rounded, size: 18, color: palette.error),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      '房主已离线，可等待其恢复或自行离开',
-                      style: textTheme.bodySmall?.copyWith(
-                        color: palette.error,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
           ],
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (game != null)
-                GameGridCover(game: game, width: 72, height: 108)
+                GameGridCover(game: game)
               else
                 Container(
                   width: 56,

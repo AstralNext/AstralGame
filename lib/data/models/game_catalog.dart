@@ -8,6 +8,23 @@ const kAstralGameMediaBaseUrl = 'https://astral.fan/';
 
 /// 可选游戏目录项（由远程 / 本地规则填充，见 [GameCatalog]）。
 class GameInfo {
+
+  factory GameInfo.fromRules(GameAssistGameRules rules) {
+    return GameInfo(
+      id: rules.id,
+      name: rules.name,
+      icon: resolveGameIcon(rules.iconName),
+      color: parseGameColor(rules.colorHex),
+      steamAppId: rules.steamAppId,
+      sgdbGameId: rules.sgdbGameId,
+      iconAsset: rules.iconAsset,
+      gridAsset: rules.gridAsset,
+      showInPicker: rules.showInPicker,
+      sort: rules.sort,
+      description: rules.description,
+      nameZh: rules.nameZh,
+    );
+  }
   const GameInfo({
     required this.id,
     required this.name,
@@ -66,23 +83,6 @@ class GameInfo {
     final g = iconAsset?.trim() ?? '';
     if (g.isNotEmpty) return g;
     return 'games/$id/icon.png';
-  }
-
-  factory GameInfo.fromRules(GameAssistGameRules rules) {
-    return GameInfo(
-      id: rules.id,
-      name: rules.name,
-      icon: resolveGameIcon(rules.iconName),
-      color: parseGameColor(rules.colorHex),
-      steamAppId: rules.steamAppId,
-      sgdbGameId: rules.sgdbGameId,
-      iconAsset: rules.iconAsset,
-      gridAsset: rules.gridAsset,
-      showInPicker: rules.showInPicker,
-      sort: rules.sort,
-      description: rules.description,
-      nameZh: rules.nameZh,
-    );
   }
 }
 
@@ -279,7 +279,7 @@ class GameMediaImage extends StatelessWidget {
           : null,
       errorWidget: errorBuilder != null
           ? (context, u, e) =>
-              errorBuilder!(context, e ?? 'load failed', StackTrace.empty)
+              errorBuilder(context, e, StackTrace.empty)
           : (context, u, e) => const SizedBox.shrink(),
     );
   }
@@ -303,7 +303,6 @@ class GameLogo extends StatelessWidget {
         source: game.resolvedIconAsset,
         width: size,
         height: size,
-        fit: BoxFit.cover,
         errorBuilder: (context, error, stackTrace) => _fallback(radius),
       ),
     );
@@ -347,7 +346,6 @@ class GameGridCover extends StatelessWidget {
         source: game.resolvedGridAsset,
         width: width,
         height: height,
-        fit: BoxFit.cover,
         errorBuilder: (context, error, stackTrace) => SizedBox(
           width: width,
           height: height,

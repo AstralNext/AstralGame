@@ -8,6 +8,9 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AppSettingsService {
+
+  AppSettingsService(this._prefs, {Directory? supportDir})
+      : _supportDir = supportDir;
   // 用户信息
   static const String _keyUsername = 'username';
   static const String _keyAvatarHash = 'avatar_hash';
@@ -19,9 +22,6 @@ class AppSettingsService {
 
   static const String _keyIsDhcp = 'is_dhcp';
   static const String _keyVirtualIp = 'virtual_ip';
-
-  AppSettingsService(this._prefs, {Directory? supportDir})
-      : _supportDir = supportDir;
 
   final SharedPreferences _prefs;
   final Directory? _supportDir;

@@ -1,4 +1,3 @@
-import 'dart:io';
 
 import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/config/theme.dart';
@@ -7,7 +6,6 @@ import 'package:astral_game/data/services/app_settings_service.dart';
 import 'package:astral_game/data/state/settings_state.dart';
 import 'package:astral_game/data/state/update_state.dart';
 import 'package:astral_game/data/state/theme_reveal_state.dart';
-import 'package:astral_game/ui/widgets/astral_card.dart';
 import 'package:astral_game/ui/widgets/astral_settings_section.dart';
 import 'package:astral_game/ui/widgets/fade_in_section.dart';
 import 'package:astral_game/ui/navigation/astral_page_route.dart';
@@ -73,7 +71,6 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
       ),
       children: [
         FadeInSection(
-          order: 0,
           child: Watch((context) {
             final id = settingsState.appThemeId.value;
             return AstralSettingsSection(

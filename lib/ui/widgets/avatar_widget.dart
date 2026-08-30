@@ -12,6 +12,18 @@ enum AvatarShape {
 ///
 /// 统一的头像显示组件，支持圆形和圆角方形
 class AvatarWidget extends StatelessWidget {
+
+  const AvatarWidget({
+    super.key,
+    this.avatar,
+    this.size = 40,
+    this.onTap,
+    this.shape = AvatarShape.circle,
+    this.borderRadius,
+    this.placeholderIcon = Icons.person,
+    this.borderWidth = 1,
+    this.showBorder = true,
+  });
   /// 头像数据
   final Uint8List? avatar;
   
@@ -36,23 +48,11 @@ class AvatarWidget extends StatelessWidget {
   /// 是否显示边框
   final bool showBorder;
 
-  const AvatarWidget({
-    super.key,
-    this.avatar,
-    this.size = 40,
-    this.onTap,
-    this.shape = AvatarShape.circle,
-    this.borderRadius,
-    this.placeholderIcon = Icons.person,
-    this.borderWidth = 1,
-    this.showBorder = true,
-  });
-
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    Widget avatarContent = Container(
+    final Widget avatarContent = Container(
       width: size,
       height: size,
       decoration: BoxDecoration(

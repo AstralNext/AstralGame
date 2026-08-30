@@ -113,7 +113,6 @@ void main() {
       platforms: {
         'windows': GameAssistPlatformRules(
           magicWall: GameAssistMagicWallConfig.disabled,
-          forwards: [],
           inject: GameAssistInjectConfig(
             type: 'mono',
             process: ['valheim.exe'],
@@ -169,7 +168,6 @@ void main() {
       selectScfaLobbyPorts(
         udpPorts: [57431, 50122, 49801],
         probedOk: {57431},
-        lastLobbyPort: null,
       ),
       [57431],
     );
@@ -185,7 +183,6 @@ void main() {
       selectScfaLobbyPorts(
         udpPorts: [59179],
         probedOk: {},
-        lastLobbyPort: null,
       ),
       [59179],
     );

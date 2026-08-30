@@ -25,9 +25,6 @@ Future<void> showEditServerDialog(
 }
 
 class ServerDialog extends StatefulWidget {
-  final String title;
-  final String confirmText;
-  final ServerMod? server;
 
   const ServerDialog({
     super.key,
@@ -35,6 +32,9 @@ class ServerDialog extends StatefulWidget {
     required this.confirmText,
     this.server,
   });
+  final String title;
+  final String confirmText;
+  final ServerMod? server;
 
   @override
   State<ServerDialog> createState() => _ServerDialogState();

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:astral_game/config/home_widget_uris.dart';
 import 'package:astral_game/data/services/shell_navigation_service.dart';

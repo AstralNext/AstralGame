@@ -1,5 +1,4 @@
-﻿import 'package:astral_game/utils/logger.dart';
-import 'dart:io';
+import 'package:astral_game/utils/logger.dart';
 
 import 'package:astral_game/utils/runtime_platform.dart';
 import 'package:astral_rust_core/astral_rust_core.dart' as ffi;
@@ -37,7 +36,7 @@ await ffi.setFirewallStatus(profileIndex: profileIndex, enable: enable);
 
 /// 获取专用网络防火墙状态（最常用）
 Future<bool> getPrivateFirewallStatus() async {
-return getFirewallStatus(profileIndex: 2);
+return getFirewallStatus();
 }
 
 /// 从系统读取并写入 [`privateProfileEnabled`]（供 RPC / 在线列表共享）。

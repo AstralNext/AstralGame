@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:astral_game/data/models/active_room_session.dart';
 import 'package:crypto/crypto.dart';
@@ -12,10 +11,10 @@ part 'bookmark.g.dart';
 ///
 /// 仅用户主动触发「⭐ 收藏」写入；不再有"加入历史"这套自动写入机制。
 @freezed
+@JsonSerializable(explicitToJson: true)
 abstract class Bookmark with _$Bookmark {
   const Bookmark._();
 
-  @JsonSerializable(explicitToJson: true)
   const factory Bookmark({
     required final int id,
     required final String customName,

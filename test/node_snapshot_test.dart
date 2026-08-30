@@ -37,7 +37,7 @@ KVNodeInfo _kv({
 
 void main() {
   test('UI snapshot ignores latency and traffic jitter', () {
-    final a = EnhancedNodeInfo(baseInfo: _kv(latencyMs: 40, lossRate: 0.1));
+    final a = EnhancedNodeInfo(baseInfo: _kv(lossRate: 0.1));
     final b = EnhancedNodeInfo(
       baseInfo: _kv(latencyMs: 48, lossRate: 1.5).copyWithTx(),
     );
@@ -74,7 +74,7 @@ void main() {
   });
 
   test('user list snapshot requires same peer order and length', () {
-    final a = EnhancedNodeInfo(baseInfo: _kv(peerId: 1));
+    final a = EnhancedNodeInfo(baseInfo: _kv());
     final b = EnhancedNodeInfo(baseInfo: _kv(peerId: 2, hostname: 'bob'));
     expect(sameUserNodesUiSnapshot([a, b], [a, b]), isTrue);
     expect(sameUserNodesUiSnapshot([a, b], [b, a]), isFalse);

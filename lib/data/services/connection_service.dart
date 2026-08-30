@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:math';
 
 import 'package:astral_game/data/models/active_room_session.dart';
@@ -194,7 +193,7 @@ class ConnectionService {
       rethrow;
     } catch (e) {
       if (!linked && _isLinkActive(epoch)) {
-        await disconnect(revokeShare: true, clearSession: true);
+        await disconnect(revokeShare: true);
       }
       rethrow;
     } finally {
@@ -341,7 +340,7 @@ class ConnectionService {
       if (resolvedShortCode != null && resolvedShortCode.isNotEmpty) {
         unawaited(_roomState.refreshBookmarkShareCode(
           payload,
-          shortCode: resolvedShortCode!,
+          shortCode: resolvedShortCode,
           adminToken: adminToken,
         ));
       }
@@ -350,7 +349,7 @@ class ConnectionService {
       rethrow;
     } catch (e) {
       if (!linked && _isLinkActive(epoch)) {
-        await disconnect(revokeShare: false, clearSession: true);
+        await disconnect();
       }
       rethrow;
     } finally {
@@ -403,7 +402,6 @@ class ConnectionService {
       await _p2pService.ensureInitialized();
       if (_nodeManagement.isRunning) {
         await disconnect(
-          revokeShare: false,
           clearSession: false,
           abortLink: false,
         );
@@ -479,7 +477,6 @@ class ConnectionService {
         final vpnOk = await _startAndroidVpnWhenIpReady(createdInstanceId);
         if (!_isLinkActive(epoch)) {
           await disconnect(
-            revokeShare: false,
             clearSession: false,
             abortLink: false,
           );
@@ -489,9 +486,7 @@ class ConnectionService {
         if (!vpnOk) {
           appLogger.e('[ConnectionService] Android VPN 启动失败，回滚连接');
           await disconnect(
-            revokeShare: false,
             forceEndNotice: '虚拟网络（VPN）启动失败，请检查权限后重试',
-            clearSession: true,
           );
           createdInstanceId = null;
           return false;

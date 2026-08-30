@@ -29,8 +29,6 @@ Future<void> showEditProfileDialog(BuildContext context) async {
                   child: AvatarWidget(
                     avatar: avatar,
                     size: 72,
-                    shape: AvatarShape.circle,
-                    borderWidth: 1,
                   ),
                 ),
                 const SizedBox(height: 20),

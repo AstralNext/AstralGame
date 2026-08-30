@@ -4,6 +4,22 @@ part 'server_mod.freezed.dart';
 part 'server_mod.g.dart';
 
 class ServerMod {
+
+  ServerMod({
+    int? id,
+    this.enable = false,
+    required this.name,
+    required this.url,
+    this.sortOrder = 0,
+  }) : id = id ?? generateNextId();
+
+  factory ServerMod.fromJson(Map<String, dynamic> json) => ServerMod(
+        id: (json['id'] as num).toInt(),
+        name: json['name'] as String? ?? '',
+        url: json['url'] as String? ?? '',
+        enable: json['enable'] as bool? ?? false,
+        sortOrder: (json['sortOrder'] as num?)?.toInt() ?? 0,
+      );
   final int id;
   final String name;
   final String url;
@@ -22,14 +38,6 @@ class ServerMod {
   static int generateNextId() {
     return _nextId++;
   }
-
-  ServerMod({
-    int? id,
-    this.enable = false,
-    required this.name,
-    required this.url,
-    this.sortOrder = 0,
-  }) : id = id ?? generateNextId();
 
   ServerMod copyWith({
     String? name,
@@ -53,14 +61,6 @@ class ServerMod {
         'enable': enable,
         'sortOrder': sortOrder,
       };
-
-  factory ServerMod.fromJson(Map<String, dynamic> json) => ServerMod(
-        id: (json['id'] as num).toInt(),
-        name: json['name'] as String? ?? '',
-        url: json['url'] as String? ?? '',
-        enable: json['enable'] as bool? ?? false,
-        sortOrder: (json['sortOrder'] as num?)?.toInt() ?? 0,
-      );
 }
 
 /// 进网 peer 条目（TOML `[[peer]]` / 短码载荷）。仅 URI，不使用 peer_public_key。

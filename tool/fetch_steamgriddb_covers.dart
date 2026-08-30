@@ -13,6 +13,7 @@ library;
 
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 const _apiBase = 'https://www.steamgriddb.com/api/v2';
 const _steamCdn =
@@ -139,7 +140,6 @@ Future<void> main(List<String> args) async {
           outFile: File('${dir.path}/grid.png'),
           force: force,
           query: 'dimensions=600x900&types=static',
-          preferFormats: const ['.png', '.jpg', '.jpeg', '.webp'],
         );
         // Flutter 不支持 ICO：若 icon 缺失则用 grid 顶上
         await _ensureRasterIcon(dir);

@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -344,7 +344,6 @@ try {
 final socket = await RawDatagramSocket.bind(
 InternetAddress.anyIPv4,
 port,
-reuseAddress: true,
 );
 socket.broadcastEnabled = true;
 socket.readEventsEnabled = true;

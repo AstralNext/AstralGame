@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:io';
 
 import 'package:astral_game/config/network_constants.dart';
@@ -93,7 +93,6 @@ try {
 final socket = await RawDatagramSocket.bind(
 InternetAddress.anyIPv4,
 port,
-reuseAddress: true,
 );
 socket.broadcastEnabled = true;
 socket.readEventsEnabled = true;
@@ -146,7 +145,6 @@ try {
 sock = await RawDatagramSocket.bind(
 InternetAddress(ip),
 _port,
-reuseAddress: true,
 );
 } catch (e) {
       appLogger.d('[ScfaBeacon] 操作失败', error: e);

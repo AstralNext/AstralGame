@@ -6,9 +6,9 @@ import 'package:astral_game/data/services/peer_rpc/peer_rpc_router.dart';
 ///
 /// peer-RPC 仅按 `peerId` 寻址；不再返回 `port`。
 class NodeMethods {
-  final NodeManagementService _nodeManagement;
 
   NodeMethods(this._nodeManagement);
+  final NodeManagementService _nodeManagement;
 
   /// 获取节点列表
   List<Map<String, dynamic>> list(dynamic params) {

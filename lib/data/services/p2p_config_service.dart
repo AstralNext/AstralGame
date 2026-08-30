@@ -8,10 +8,10 @@ import 'package:astral_game/utils/logger.dart';
 import 'package:astral_game/utils/runtime_platform.dart';
 
 class P2PConfigService {
-  final AppSettingsService _appSettings;
-  final ServerState _serverState;
 
   P2PConfigService(this._appSettings, this._serverState);
+  final AppSettingsService _appSettings;
+  final ServerState _serverState;
 
   String generateRoomCode({int length = 10}) {
     const alphabet = '23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz';

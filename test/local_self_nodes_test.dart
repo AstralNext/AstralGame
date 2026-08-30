@@ -50,7 +50,7 @@ void main() {
     final collapsed = collapseLocalSelfNodes(
       [
         _node(peerId: 0, ipv4: '10.126.126.1'),
-        _node(peerId: 42, ipv4: ''),
+        _node(peerId: 42),
         _node(peerId: 7, ipv4: '10.126.126.9', customName: 'friend'),
       ],
       isLocalPeer: (id) => id == 0 || id == 42,
@@ -67,7 +67,7 @@ void main() {
   test('collapse prefers IP from real local when synthetic is empty', () {
     final collapsed = collapseLocalSelfNodes(
       [
-        _node(peerId: 0, ipv4: ''),
+        _node(peerId: 0),
         _node(peerId: 99, ipv4: '10.126.126.1/24'),
       ],
       isLocalPeer: (id) => id == 0 || id == 99,
@@ -81,7 +81,7 @@ void main() {
   test('virtualIpv4FromNodes reads collapsed self', () {
     final nodes = collapseLocalSelfNodes(
       [
-        _node(peerId: 0, ipv4: ''),
+        _node(peerId: 0),
         _node(peerId: 3, ipv4: '10.1.2.3'),
       ],
       isLocalPeer: (id) => id == 0 || id == 3,

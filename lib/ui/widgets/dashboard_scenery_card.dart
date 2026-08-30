@@ -1,6 +1,5 @@
-﻿import 'package:astral_game/utils/logger.dart';
+import 'package:astral_game/utils/logger.dart';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/services/alcy_wallpaper_service.dart';

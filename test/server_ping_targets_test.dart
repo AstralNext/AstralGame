@@ -6,7 +6,7 @@ void main() {
   test('only enabled idle servers are ping targets', () {
     final servers = [
       ServerMod(id: 1, name: 'a', url: 'tcp://1.1.1.1:1', enable: true),
-      ServerMod(id: 2, name: 'b', url: 'tcp://2.2.2.2:1', enable: false),
+      ServerMod(id: 2, name: 'b', url: 'tcp://2.2.2.2:1'),
       ServerMod(id: 3, name: 'c', url: 'tcp://3.3.3.3:1', enable: true),
     ];
     expect(

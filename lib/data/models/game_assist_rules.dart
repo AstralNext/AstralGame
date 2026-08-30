@@ -1,4 +1,4 @@
-﻿import 'package:astral_game/utils/logger.dart';
+import 'package:astral_game/utils/logger.dart';
 import 'dart:typed_data';
 
 import 'package:astral_game/utils/net_addr.dart';
@@ -58,6 +58,38 @@ for (final g in games) g.id: g,
 
 @freezed
 abstract class GameAssistGameRules with _$GameAssistGameRules {
+
+factory GameAssistGameRules.fromJson(String id, Map<String, dynamic> json) {
+final raw = json['platforms'];
+final platforms = <String, GameAssistPlatformRules>{};
+if (raw is Map) {
+raw.forEach((key, value) {
+if (value is Map) {
+platforms['$key'] = GameAssistPlatformRules.fromJson(
+Map<String, dynamic>.from(value),
+);
+}
+});
+}
+
+return GameAssistGameRules(
+id: id,
+name: '${json['name'] ?? id}'.trim().isEmpty
+? id
+: '${json['name'] ?? id}'.trim(),
+colorHex: '${json['color'] ?? '#6B7280'}'.trim(),
+iconName: '${json['icon'] ?? 'sports_esports_outlined'}'.trim(),
+steamAppId: (json['steam_app_id'] as num?)?.toInt(),
+sgdbGameId: (json['sgdb_game_id'] as num?)?.toInt(),
+iconAsset: _optionalString(json['icon_asset']),
+gridAsset: _optionalString(json['grid_asset']),
+showInPicker: json['show_in_picker'] != false,
+sort: (json['sort'] as num?)?.toInt() ?? 100,
+description: _optionalString(json['description']) ?? '',
+nameZh: _optionalString(json['name_zh']) ?? '',
+platforms: platforms,
+);
+}
 const GameAssistGameRules._();
 
 const factory GameAssistGameRules({
@@ -103,38 +135,6 @@ return platformOrFallback(platform)?.network ??
 const GameAssistNetworkConfig();
 }
 
-factory GameAssistGameRules.fromJson(String id, Map<String, dynamic> json) {
-final raw = json['platforms'];
-final platforms = <String, GameAssistPlatformRules>{};
-if (raw is Map) {
-raw.forEach((key, value) {
-if (value is Map) {
-platforms['$key'] = GameAssistPlatformRules.fromJson(
-Map<String, dynamic>.from(value),
-);
-}
-});
-}
-
-return GameAssistGameRules(
-id: id,
-name: '${json['name'] ?? id}'.trim().isEmpty
-? id
-: '${json['name'] ?? id}'.trim(),
-colorHex: '${json['color'] ?? '#6B7280'}'.trim(),
-iconName: '${json['icon'] ?? 'sports_esports_outlined'}'.trim(),
-steamAppId: (json['steam_app_id'] as num?)?.toInt(),
-sgdbGameId: (json['sgdb_game_id'] as num?)?.toInt(),
-iconAsset: _optionalString(json['icon_asset']),
-gridAsset: _optionalString(json['grid_asset']),
-showInPicker: json['show_in_picker'] != false,
-sort: (json['sort'] as num?)?.toInt() ?? 100,
-description: _optionalString(json['description']) ?? '',
-nameZh: _optionalString(json['name_zh']) ?? '',
-platforms: platforms,
-);
-}
-
 /// 远程覆盖元数据；本机独有的 `inject` / 发现 / 广播标志保留。
 GameAssistGameRules mergeFromRemote(GameAssistGameRules remote) {
 final merged = <String, GameAssistPlatformRules>{...platforms};
@@ -169,14 +169,14 @@ platforms: merged,
 /// JSON：对象 = 一条；数组 = 多条。有块即启用。
 @freezed
 abstract class GameAssistLanGameDiscoverConfig with _$GameAssistLanGameDiscoverConfig {
-const GameAssistLanGameDiscoverConfig._();
-
-static const int intervalMs = 4000;
-static const int ttlMs = 18000;
 
 const factory GameAssistLanGameDiscoverConfig({
 @Default([]) final List<GameAssistLanGameDiscoverEntry> entries,
 }) = _GameAssistLanGameDiscoverConfig;
+const GameAssistLanGameDiscoverConfig._();
+
+static const int intervalMs = 4000;
+static const int ttlMs = 18000;
 
 static GameAssistLanGameDiscoverConfig? tryParse(Object? raw) {
 final maps = <Map<String, dynamic>>[];
@@ -199,6 +199,26 @@ return GameAssistLanGameDiscoverConfig(entries: entries);
 
 @freezed
 abstract class GameAssistLanGameDiscoverEntry with _$GameAssistLanGameDiscoverEntry {
+
+factory GameAssistLanGameDiscoverEntry.fromJson(Map<String, dynamic> json) {
+final type = '${json['type'] ?? ''}'.trim().toLowerCase();
+final id = '${json['id'] ?? type}'.trim();
+final mcast = parseHostPort(_optionalString(json['multicast']));
+return GameAssistLanGameDiscoverEntry(
+id: id.isEmpty ? 'lan' : id,
+label: '${json['label'] ?? ''}'.trim(),
+type: type,
+port: (json['port'] as num?)?.toInt() ?? 0,
+multicast: mcast?.host,
+multicastPort: mcast?.port ?? 0,
+parser: _optionalString(json['parser']),
+probe: _optionalString(json['probe']),
+title: _optionalString(json['title']),
+process: _stringList(json['process']),
+window: _stringList(json['window']),
+beaconPort: (json['beacon_port'] as num?)?.toInt() ?? 0,
+);
+}
 const GameAssistLanGameDiscoverEntry._();
 
 const factory GameAssistLanGameDiscoverEntry({
@@ -248,26 +268,6 @@ return out;
 return null;
 
     }
-}
-
-factory GameAssistLanGameDiscoverEntry.fromJson(Map<String, dynamic> json) {
-final type = '${json['type'] ?? ''}'.trim().toLowerCase();
-final id = '${json['id'] ?? type}'.trim();
-final mcast = parseHostPort(_optionalString(json['multicast']));
-return GameAssistLanGameDiscoverEntry(
-id: id.isEmpty ? 'lan' : id,
-label: '${json['label'] ?? ''}'.trim(),
-type: type,
-port: (json['port'] as num?)?.toInt() ?? 0,
-multicast: mcast?.host,
-multicastPort: mcast?.port ?? 0,
-parser: _optionalString(json['parser']),
-probe: _optionalString(json['probe']),
-title: _optionalString(json['title']),
-process: _stringList(json['process']),
-window: _stringList(json['window']),
-beaconPort: (json['beacon_port'] as num?)?.toInt() ?? 0,
-);
 }
 }
 
@@ -323,26 +323,6 @@ protocolSpecified: json.containsKey('protocol'),
 
 @freezed
 abstract class GameAssistPlatformRules with _$GameAssistPlatformRules {
-const GameAssistPlatformRules._();
-
-const factory GameAssistPlatformRules({
-@Default(GameAssistNetworkConfig()) final GameAssistNetworkConfig network,
-required final GameAssistMagicWallConfig magicWall,
-@Default([]) final List<GameAssistForwardRule> forwards,
-
-/// 发现本机开放游戏并经 ET 宣告。
-final GameAssistLanGameDiscoverConfig? lanGameDiscover,
-
-/// 进房后自动检测进程并注入（Windows / Unity Mono）。
-final GameAssistInjectConfig? inject,
-}) = _GameAssistPlatformRules;
-
-/// 魔法墙：按 exe 各自套规则。
-List<GameAssistMagicWallExe> get magicWallTargets => magicWall.targets;
-
-List<String> get magicWallProcessNames => [
-for (final t in magicWallTargets) t.process,
-];
 
 factory GameAssistPlatformRules.fromJson(Map<String, dynamic> json) {
 final mw = json['magic_wall'];
@@ -366,6 +346,26 @@ inject: inject is Map
 : null,
 );
 }
+const GameAssistPlatformRules._();
+
+const factory GameAssistPlatformRules({
+@Default(GameAssistNetworkConfig()) final GameAssistNetworkConfig network,
+required final GameAssistMagicWallConfig magicWall,
+@Default([]) final List<GameAssistForwardRule> forwards,
+
+/// 发现本机开放游戏并经 ET 宣告。
+final GameAssistLanGameDiscoverConfig? lanGameDiscover,
+
+/// 进房后自动检测进程并注入（Windows / Unity Mono）。
+final GameAssistInjectConfig? inject,
+}) = _GameAssistPlatformRules;
+
+/// 魔法墙：按 exe 各自套规则。
+List<GameAssistMagicWallExe> get magicWallTargets => magicWall.targets;
+
+List<String> get magicWallProcessNames => [
+for (final t in magicWallTargets) t.process,
+];
 
 /// 远程优先；缺项回退本地（CDN 尚未带 inject 时仍能注入）。
 GameAssistPlatformRules mergePreferRemote(GameAssistPlatformRules remote) {
@@ -391,6 +391,24 @@ inject: remote.inject ?? inject,
 /// `platforms.<os>.inject`：自动找游戏进程并注入插件。
 @freezed
 abstract class GameAssistInjectConfig with _$GameAssistInjectConfig {
+
+factory GameAssistInjectConfig.fromJson(Map<String, dynamic> json) {
+final method = '${json['method'] ?? 'Init'}'.trim();
+final delayRaw = json['delay_seconds'] ?? json['delaySeconds'];
+final delay = delayRaw is num
+? delayRaw.toInt()
+: int.tryParse('${delayRaw ?? ''}') ?? 5;
+return GameAssistInjectConfig(
+type: '${json['type'] ?? ''}'.trim().toLowerCase(),
+process: _stringList(json['process']),
+window: _stringList(json['window']),
+dll: '${json['dll'] ?? ''}'.trim(),
+namespace: '${json['namespace'] ?? ''}'.trim(),
+className: '${json['class'] ?? ''}'.trim(),
+method: method.isEmpty ? 'Init' : method,
+delaySeconds: delay < 0 ? 0 : delay,
+);
+}
 const GameAssistInjectConfig._();
 
 const factory GameAssistInjectConfig({
@@ -410,33 +428,11 @@ required final String type,
 }) = _GameAssistInjectConfig;
 
 bool get isMono => type == 'mono' && dll.isNotEmpty && className.isNotEmpty;
-
-factory GameAssistInjectConfig.fromJson(Map<String, dynamic> json) {
-final method = '${json['method'] ?? 'Init'}'.trim();
-final delayRaw = json['delay_seconds'] ?? json['delaySeconds'];
-final delay = delayRaw is num
-? delayRaw.toInt()
-: int.tryParse('${delayRaw ?? ''}') ?? 5;
-return GameAssistInjectConfig(
-type: '${json['type'] ?? ''}'.trim().toLowerCase(),
-process: _stringList(json['process']),
-window: _stringList(json['window']),
-dll: '${json['dll'] ?? ''}'.trim(),
-namespace: '${json['namespace'] ?? ''}'.trim(),
-className: '${json['class'] ?? ''}'.trim(),
-method: method.isEmpty ? 'Init' : method,
-delaySeconds: delay < 0 ? 0 : delay,
-);
-}
 }
 
 /// `platforms.<os>.magic_wall`：按 exe 各自写防火墙规则。
 @freezed
 abstract class GameAssistMagicWallConfig with _$GameAssistMagicWallConfig {
-const GameAssistMagicWallConfig._();
-
-static const GameAssistMagicWallConfig disabled = GameAssistMagicWallConfig();
-static const Set<String> _reservedKeys = {'enabled', 'process', 'rules'};
 
 const factory GameAssistMagicWallConfig({
 @Default(false) final bool enabled,
@@ -444,8 +440,6 @@ const factory GameAssistMagicWallConfig({
 /// 每个 exe 一套规则。
 @Default([]) final List<GameAssistMagicWallExe> targets,
 }) = _GameAssistMagicWallConfig;
-
-bool get isActive => enabled && targets.isNotEmpty;
 
 factory GameAssistMagicWallConfig.parse(Object? raw) {
 if (raw == null || raw == false || raw == true) return disabled;
@@ -509,6 +503,12 @@ GameAssistMagicWallExe(process: name, rules: rules),
 ],
 );
 }
+const GameAssistMagicWallConfig._();
+
+static const GameAssistMagicWallConfig disabled = GameAssistMagicWallConfig();
+static const Set<String> _reservedKeys = {'enabled', 'process', 'rules'};
+
+bool get isActive => enabled && targets.isNotEmpty;
 }
 
 /// 单个 exe 的魔法墙。规则只作用在这个进程上。
@@ -566,9 +566,6 @@ return null;
 
 @freezed
 abstract class GameAssistMagicWallRule with _$GameAssistMagicWallRule {
-const GameAssistMagicWallRule._();
-
-static const GameAssistMagicWallRule defaultAllow = GameAssistMagicWallRule();
 
 const factory GameAssistMagicWallRule({
 @Default('') final String id,
@@ -583,18 +580,6 @@ final String? remotePort,
 final String? localPort,
 final String? description,
 }) = _GameAssistMagicWallRule;
-
-static List<GameAssistMagicWallRule> parseList(Object? raw) {
-final maps = <Map<String, dynamic>>[];
-if (raw is List) {
-for (final e in raw) {
-if (e is Map) maps.add(Map<String, dynamic>.from(e));
-}
-} else if (raw is Map) {
-maps.add(Map<String, dynamic>.from(raw));
-}
-return [for (final m in maps) GameAssistMagicWallRule.fromJson(m)];
-}
 
 factory GameAssistMagicWallRule.fromJson(Map<String, dynamic> json) {
 return GameAssistMagicWallRule(
@@ -612,6 +597,21 @@ remotePort: _optionalString(json['remote_port']),
 localPort: _optionalString(json['local_port']),
 description: _optionalString(json['description']),
 );
+}
+const GameAssistMagicWallRule._();
+
+static const GameAssistMagicWallRule defaultAllow = GameAssistMagicWallRule();
+
+static List<GameAssistMagicWallRule> parseList(Object? raw) {
+final maps = <Map<String, dynamic>>[];
+if (raw is List) {
+for (final e in raw) {
+if (e is Map) maps.add(Map<String, dynamic>.from(e));
+}
+} else if (raw is Map) {
+maps.add(Map<String, dynamic>.from(raw));
+}
+return [for (final m in maps) GameAssistMagicWallRule.fromJson(m)];
 }
 }
 

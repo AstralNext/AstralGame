@@ -1,4 +1,4 @@
-﻿import 'package:astral_game/utils/logger.dart';
+import 'package:astral_game/utils/logger.dart';
 import 'dart:io';
 
 import 'package:astral_game/utils/runtime_platform.dart';
@@ -27,9 +27,9 @@ final file = File(lockPath);
 try {
 await file.parent.create(recursive: true);
 _lockHandle = await file.open(mode: FileMode.write);
-await _lockHandle!.lock(FileLock.exclusive);
+await _lockHandle!.lock();
 await _lockHandle!.setPosition(0);
-await _lockHandle!.writeString('${pid}\n');
+await _lockHandle!.writeString('$pid\n');
 await _lockHandle!.flush();
 return true;
 } on FileSystemException {

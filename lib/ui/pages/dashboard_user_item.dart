@@ -1,9 +1,7 @@
 import 'package:astral_game/config/constants.dart';
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/models/enhanced_node_info.dart';
-import 'package:astral_game/data/services/isp_info_service.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
-import 'package:astral_game/di.dart';
 import 'package:astral_game/ui/widgets/grouped_tile_shape.dart';
 import 'package:astral_game/utils/firewall_presentation.dart';
 import 'package:astral_game/utils/network_presentation.dart';
@@ -398,7 +396,7 @@ class _UserIpAndMetaRow extends StatelessWidget {
             if (isDirect)
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   color: AppColors.online,
                   borderRadius: AppRadius.brSmall,
                 ),

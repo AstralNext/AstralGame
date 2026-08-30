@@ -44,7 +44,7 @@ void main() {
     );
     expect(bytes, isNotNull);
     expect(bytes![0], 0x8D);
-    final parsed = parseScfaLanReply(bytes, fallbackPort: 0);
+    final parsed = parseScfaLanReply(bytes);
     expect(parsed, isNotNull);
     expect(parsed!.lobbyPort, 58336);
     expect(parsed.gameName, 'a * Astral');

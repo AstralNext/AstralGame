@@ -24,7 +24,6 @@ class NetworkOptimizeService {
       final result = await Process.run(
         exe,
         const ['status'],
-        runInShell: false,
       );
       installed.value = parseInstalled(result.stdout.toString());
     } catch (e) {
@@ -45,7 +44,6 @@ class NetworkOptimizeService {
       final result = await Process.run(
         exe,
         [enable ? 'install' : 'uninstall'],
-        runInShell: false,
       );
       final stdout = result.stdout.toString();
       final stderr = result.stderr.toString();

@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
 
 class EmptyStateWidget extends StatelessWidget {
-  final IconData icon;
-  final String message;
-  final String? subtitle;
 
   const EmptyStateWidget({
     super.key,
@@ -11,6 +8,9 @@ class EmptyStateWidget extends StatelessWidget {
     required this.message,
     this.subtitle,
   });
+  final IconData icon;
+  final String message;
+  final String? subtitle;
 
   @override
   Widget build(BuildContext context) {

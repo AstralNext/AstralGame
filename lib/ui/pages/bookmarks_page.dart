@@ -1,7 +1,5 @@
-﻿import 'dart:async';
 import 'dart:async';
 
-import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/models/active_room_session.dart';
 import 'package:astral_game/data/models/bookmark.dart';
@@ -492,7 +490,6 @@ class _BookmarkCard extends StatelessWidget {
     return AstralCard(
       onTap: onJoin,
       padding: const EdgeInsets.all(14),
-      radius: AppDimensions.radiusMd,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

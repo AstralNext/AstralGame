@@ -10,7 +10,7 @@ Future<ThemePickResult?> showAppThemePickerSheet(
   BuildContext context, {
   required AppThemeId current,
 }) {
-  final themes = AppThemeId.values;
+  const themes = AppThemeId.values;
 
   return showModalBottomSheet<ThemePickResult>(
     context: context,

@@ -8,7 +8,6 @@ import 'package:astral_game/data/services/screen_state_service.dart';
 import 'package:astral_game/data/services/share_code_service.dart';
 import 'package:astral_game/data/state/room_state.dart';
 import 'package:astral_game/config/constants.dart';
-import 'package:astral_game/data/models/bookmark.dart';
 import 'package:astral_game/di.dart';
 import 'package:astral_game/ui/pages/bookmarks_page.dart';
 import 'package:astral_game/ui/pages/dashboard_narrow_layout.dart';
@@ -140,9 +139,9 @@ class _DashboardPageState extends State<DashboardPage> {
                     ? null
                     : () async {
                         Navigator.pop(dialogContext);
-                        if (!this.context.mounted) return;
+                        if (!context.mounted) return;
                         await shareJoinInvite(
-                          context: this.context,
+                          context: context,
                           url: url,
                           gameName: session.gameName,
                         );
@@ -252,7 +251,6 @@ class _DashboardPageState extends State<DashboardPage> {
     final bookmark = await showBookmarkEditSheet(
       context,
       payload: payload,
-      existing: null,
       originalShortCode: session?.shortCode,
     );
     if (bookmark == null || !mounted) return;
@@ -404,7 +402,6 @@ class _DashboardPageState extends State<DashboardPage> {
       final bookmark = await showBookmarkEditSheet(
         context,
         payload: resolved.payload,
-        existing: null,
         originalShortCode: resolved.shortCode,
         originalOfflineToken: resolved.offlineToken,
       );

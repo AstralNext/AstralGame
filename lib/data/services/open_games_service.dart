@@ -479,8 +479,6 @@ class OpenGamesService {
           port: item.port,
           motd: item.motd,
           expiresAt: item.expiresAt,
-          isSelf: false,
-          isRoomHost: false,
         ),
       );
     }

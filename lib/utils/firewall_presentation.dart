@@ -2,17 +2,6 @@ import 'package:flutter/material.dart';
 
 /// 在线列表中展示的 Windows 专用网络防火墙状态（RPC `firewall` 字段）。
 class FirewallPresentation {
-  const FirewallPresentation({
-    required this.shortLabel,
-    required this.icon,
-    this.isEnabled,
-  });
-
-  final String shortLabel;
-  final IconData icon;
-
-  /// `null` 表示非 Windows 或未知。
-  final bool? isEnabled;
 
   factory FirewallPresentation.fromWire(String? raw) {
     switch (raw) {
@@ -33,10 +22,20 @@ class FirewallPresentation {
         return const FirewallPresentation(
           shortLabel: '',
           icon: Icons.shield_outlined,
-          isEnabled: null,
         );
     }
   }
+  const FirewallPresentation({
+    required this.shortLabel,
+    required this.icon,
+    this.isEnabled,
+  });
+
+  final String shortLabel;
+  final IconData icon;
+
+  /// `null` 表示非 Windows 或未知。
+  final bool? isEnabled;
 
   bool get hasLabel => shortLabel.isNotEmpty;
 }

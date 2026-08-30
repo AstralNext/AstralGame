@@ -16,9 +16,9 @@ import 'package:win32_registry/win32_registry.dart';
 ///   图标支持 PNG-in-ICO（Windows Vista+ 原生支持），纯 Dart 写 ICO 头。
 /// - Android：用 ShortcutManager.requestPinShortcut()。
 class ShortcutService {
-  static const _channel = MethodChannel('astral.game/shortcut');
 
   const ShortcutService();
+  static const _channel = MethodChannel('astral.game/shortcut');
 
   Future<bool> createDesktopShortcut({required Bookmark bookmark}) async {
     if (Platform.isAndroid) return _createAndroidShortcut(bookmark);
@@ -36,7 +36,7 @@ class ShortcutService {
       'id': 'room_${bookmark.id}',
       'label': bookmark.displayName,
       'url': 'astralgame://join?bookmark=${bookmark.id}',
-      'gameColor': game?.color.value,
+      'gameColor': game?.color.toARGB32(),
     };
 
     // Flutter 端先解析真正的图标 bytes（完整的 asset→network hybrid 兜底），
@@ -325,9 +325,9 @@ class ShortcutService {
 }
 
 class ShortcutException implements Exception {
+  ShortcutException(this.message, {this.code});
   final String message;
   final ShortcutErrorCode? code;
-  ShortcutException(this.message, {this.code});
   @override
   String toString() => message;
 }

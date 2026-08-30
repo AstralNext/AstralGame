@@ -42,7 +42,6 @@ class AstralCard extends StatelessWidget {
         color: bg,
         borderRadius: borderRadius,
         clipBehavior: Clip.antiAlias,
-        elevation: 0,
         shadowColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
         child: InkWell(
@@ -59,7 +58,6 @@ class AstralCard extends StatelessWidget {
         color: bg,
         borderRadius: borderRadius,
         clipBehavior: Clip.antiAlias,
-        elevation: 0,
         shadowColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
         child: inner,

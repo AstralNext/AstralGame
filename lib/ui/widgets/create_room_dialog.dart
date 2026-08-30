@@ -214,7 +214,7 @@ class _GameListTile extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(
               children: [
-                GameLogo(game: game, size: 40),
+                GameLogo(game: game),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(

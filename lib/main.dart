@@ -28,7 +28,7 @@ Future<void> main() async {
   if (RuntimePlatform.isDesktop) {
     await windowManager.ensureInitialized();
 
-    WindowOptions windowOptions = const WindowOptions(
+    const WindowOptions windowOptions = WindowOptions(
       size: Size(940, 560),
       center: true,
       backgroundColor: Colors.transparent,

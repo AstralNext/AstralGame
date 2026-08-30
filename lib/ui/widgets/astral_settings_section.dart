@@ -1,5 +1,4 @@
 import 'package:astral_game/config/app_dimensions.dart';
-import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/ui/widgets/astral_card.dart';
 import 'package:astral_game/ui/widgets/astral_grouped_tile.dart';
 import 'package:flutter/material.dart';
@@ -34,7 +33,6 @@ class AstralSettingsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final palette = context.astralPalette;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

@@ -9,11 +9,9 @@ import 'package:astral_game/data/services/node_management_service.dart';
 import 'package:astral_game/data/services/screen_state_service.dart';
 import 'package:astral_game/data/services/shell_navigation_service.dart';
 import 'package:astral_game/data/services/update_service.dart';
-import 'package:astral_game/data/state/room_state.dart';
 import 'package:astral_game/data/state/settings_state.dart';
 import 'package:astral_game/data/state/update_state.dart';
 import 'package:astral_game/di.dart';
-import 'package:astral_game/ui/pages/bookmarks_page.dart';
 import 'package:astral_game/ui/widgets/avatar_widget.dart';
 import 'package:astral_game/ui/widgets/edit_profile_dialog.dart';
 import 'package:astral_game/utils/runtime_platform.dart';
@@ -62,23 +60,23 @@ getIt<ShellNavigationService>().clearPending();
 });
 
 _navigationItems = [
-NavigationItem(
+const NavigationItem(
 icon: Icons.sports_esports_outlined,
 activeIcon: Icons.sports_esports,
 label: '联机',
-page: const DashboardPage(key: PageStorageKey('dashboard')),
+page: DashboardPage(key: PageStorageKey('dashboard')),
 ),
-NavigationItem(
+const NavigationItem(
 icon: Icons.dns_outlined,
 activeIcon: Icons.dns,
 label: '服务器',
-page: const ServersMainPage(key: PageStorageKey('servers')),
+page: ServersMainPage(key: PageStorageKey('servers')),
 ),
-NavigationItem(
+const NavigationItem(
 icon: Icons.settings_outlined,
 activeIcon: Icons.settings,
 label: '设置',
-page: const SettingsMainPage(key: PageStorageKey('settings')),
+page: SettingsMainPage(key: PageStorageKey('settings')),
 ),
 ];
 
@@ -240,12 +238,6 @@ if (index == _selectedIndex) return;
 setState(() => _selectedIndex = index);
 }
 
-void _openBookmarks(BuildContext context) {
-  Navigator.of(context).push<void>(
-    MaterialPageRoute(builder: (_) => const BookmarksPage()),
-  );
-}
-
 Widget _buildTabBody(bool isCompact) {
 final pages = [
 for (final item in _navigationItems) item.page,
@@ -389,7 +381,6 @@ fontWeight: FontWeight.w600,
 AvatarWidget(
 avatar: avatar,
 size: 36,
-shape: AvatarShape.circle,
 onTap: onAvatarTap,
 ),
 ],

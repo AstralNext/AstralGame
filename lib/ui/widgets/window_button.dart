@@ -1,11 +1,6 @@
 import 'package:flutter/material.dart';
 
 class WindowButton extends StatelessWidget {
-  final IconData icon;
-  final double iconSize;
-  final Color hoverColor;
-  final Color iconColor;
-  final VoidCallback onTap;
 
   const WindowButton({
     super.key,
@@ -15,6 +10,11 @@ class WindowButton extends StatelessWidget {
     required this.iconColor,
     required this.onTap,
   });
+  final IconData icon;
+  final double iconSize;
+  final Color hoverColor;
+  final Color iconColor;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {

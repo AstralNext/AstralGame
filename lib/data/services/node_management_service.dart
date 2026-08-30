@@ -153,7 +153,7 @@ _firewallRefreshTimer = Timer.periodic(
 const Duration(seconds: 15),
 (_) {
 if (currentInstanceId.value == null) return;
-unawaited(_firewall!.refreshPrivateProfile());
+unawaited(_firewall.refreshPrivateProfile());
 },
 );
 }
@@ -175,7 +175,6 @@ final prev = userNodes.value;
 final collapsed = collapseLocalSelfNodes(
 prev,
 isLocalPeer: _isLocalPeer,
-canonicalPeerId: _localSyntheticPeerId,
 ).map((n) {
 if (!_isLocalPeer(n.peerId)) return n;
 return _enrichLocalNode(n);
@@ -343,7 +342,8 @@ _updateVirtualIpSignal(myIp, nodes: collapsed);
 _trackMissingVirtualIp(myIp, published);
 
 if (_verbosePollLogs) {
-_verboseLogPublishedNodes(published, totalRaw: status.totalNodes is BigInt ? (status.totalNodes as BigInt).toInt() : status.totalNodes as int);
+  final total = (status.totalNodes).toInt();
+  _verboseLogPublishedNodes(published, totalRaw: total);
 }
 
 // 拉取对端资料（昵称/头像/客户端环境）：节流，避免每秒打一遍 RPC。
@@ -414,7 +414,6 @@ final normalized = normalizedMap.values.toList()
 final collapsed = collapseLocalSelfNodes(
 normalized,
 isLocalPeer: _isLocalPeer,
-canonicalPeerId: _localSyntheticPeerId,
 ).map((n) {
 if (!_isLocalPeer(n.peerId)) return n;
 return _enrichLocalNode(n);
@@ -536,7 +535,7 @@ final meta = <String, dynamic>{
 'peerOsVersion': ClientRuntimeInfo.operatingSystemVersion,
 'peerAppName': ClientRuntimeInfo.appName,
 'peerAppVersion': ClientRuntimeInfo.appVersion,
-if (localNetwork != null) 'peerNetwork': localNetwork,
+'peerNetwork': ?localNetwork,
 'peerFirewall': localFirewall,
 if (localIsp != null && localIsp.isNotEmpty) 'peerIsp': localIsp,
 };
@@ -604,7 +603,7 @@ final result = await _peerRpc.call(
 node.peerId,
 'user.getInfo',
 params: {
-if (knownHash != null) 'avatarHash': knownHash,
+'avatarHash': ?knownHash,
 },
 );
 
@@ -684,7 +683,7 @@ if (before == null) return;
 
 final mergedMeta = {
 ...before.metadata,
-if (metadataPatch != null) ...metadataPatch,
+...?metadataPatch,
 };
 final merged = before.copyWith(
 customName: name ?? before.customName,

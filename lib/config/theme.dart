@@ -206,12 +206,12 @@ abstract final class AstralGameTheme {
         // 透明描边保留 outline 缺口，避免浮动标签被填充色裁掉汉字上半截。
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
-          borderSide: const BorderSide(color: Colors.transparent, width: 1),
+          borderSide: const BorderSide(color: Colors.transparent),
           gapPadding: 6,
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
-          borderSide: const BorderSide(color: Colors.transparent, width: 1),
+          borderSide: const BorderSide(color: Colors.transparent),
           gapPadding: 6,
         ),
         focusedBorder: OutlineInputBorder(

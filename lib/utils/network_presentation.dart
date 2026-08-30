@@ -4,6 +4,12 @@ import 'package:astral_game/data/services/connectivity_status_service.dart';
 
 /// 在线列表中展示的「网络承载」短标签 + Material 图标。
 class NetworkPresentation {
+
+  factory NetworkPresentation.forKind(NetworkKind kind) =>
+      _kPresentationMap[kind] ?? _kPresentationMap[NetworkKind.unknown]!;
+
+  factory NetworkPresentation.fromWire(String? raw) =>
+      NetworkPresentation.forKind(NetworkKindWire.fromWire(raw));
   const NetworkPresentation({
     required this.kind,
     required this.shortLabel,
@@ -56,12 +62,6 @@ class NetworkPresentation {
       icon: Icons.network_check,
     ),
   };
-
-  factory NetworkPresentation.forKind(NetworkKind kind) =>
-      _kPresentationMap[kind] ?? _kPresentationMap[NetworkKind.unknown]!;
-
-  factory NetworkPresentation.fromWire(String? raw) =>
-      NetworkPresentation.forKind(NetworkKindWire.fromWire(raw));
 
   bool get hasLabel => shortLabel.isNotEmpty;
 }

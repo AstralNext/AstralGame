@@ -7,10 +7,6 @@ import 'package:flutter/foundation.dart' show listEquals, mapEquals;
 
 /// 在 [`KVNodeInfo`] 上叠加 peer-RPC（`user.getInfo`）返回的昵称与头像等资料。
 class EnhancedNodeInfo {
-  final KVNodeInfo baseInfo;
-  final Map<String, dynamic> metadata;
-  final String? customName;
-  final Uint8List? avatar;
 
   EnhancedNodeInfo({
     required this.baseInfo,
@@ -22,6 +18,10 @@ class EnhancedNodeInfo {
   factory EnhancedNodeInfo.fromKVNodeInfo(KVNodeInfo info) {
     return EnhancedNodeInfo(baseInfo: info);
   }
+  final KVNodeInfo baseInfo;
+  final Map<String, dynamic> metadata;
+  final String? customName;
+  final Uint8List? avatar;
 
   EnhancedNodeInfo copyWith({
     KVNodeInfo? baseInfo,

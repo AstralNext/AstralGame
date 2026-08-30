@@ -60,7 +60,7 @@ Future<void> _ensureAliyunNtp() async {
 }
 
 Future<ProcessResult> _run(String exe, List<String> args) {
-  return Process.run(exe, args, runInShell: false);
+  return Process.run(exe, args);
 }
 
 /// `reg query` 单行：`NtpServer    REG_SZ    time.windows.com,0x9`

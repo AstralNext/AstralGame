@@ -138,7 +138,6 @@ class GameInjectService {
           '--method',
           cfg.method,
         ],
-        runInShell: false,
       );
       final out = '${result.stdout}\n${result.stderr}'.trim();
       if (result.exitCode == 0) {

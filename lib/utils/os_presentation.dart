@@ -4,13 +4,6 @@ import 'package:astral_game/data/models/enhanced_node_info.dart';
 
 /// 在线列表等处展示的「系统」短标签 + Material 图标。
 class OsPresentation {
-  const OsPresentation({
-    required this.shortLabel,
-    required this.icon,
-  });
-
-  final String shortLabel;
-  final IconData icon;
 
   /// 优先 [`EnhancedNodeInfo.peerOs`]（RPC `user.getInfo`），否则解析 EasyTier `version` 管道串。
   factory OsPresentation.forNode(EnhancedNodeInfo node) {
@@ -33,6 +26,13 @@ class OsPresentation {
     }
     return const OsPresentation(shortLabel: '', icon: Icons.devices_outlined);
   }
+  const OsPresentation({
+    required this.shortLabel,
+    required this.icon,
+  });
+
+  final String shortLabel;
+  final IconData icon;
 
   static String _humanizeOsKey(String key) {
     if (key.contains('windows')) return 'Windows';

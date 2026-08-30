@@ -27,8 +27,6 @@ bool isNewer(String candidate, String current) {
   final latest = normalize(candidate);
   final curr = normalize(current);
   if (latest.isEmpty || curr.isEmpty) return false;
-  final a = curr.split('.')[0];
-  // 简化：用 split 主版本比较（与 AppVersion 主路径一致足够测 1.0.x）
   List<int> parts(String v) =>
       normalize(v).split('-').first.split('.').map((e) => int.tryParse(e) ?? 0).toList();
   final c = parts(curr);
