@@ -81,7 +81,7 @@ class MainActivity : FlutterActivity() {
             result.error("BAD_ARGS", "缺少 url", null); return
         }
         val iconAsset = call.argument<String>("iconAsset")
-        val gameColor = call.argument<Int>("gameColor")
+        val gameColor = call.argument<Number>("gameColor")?.toInt()
 
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             result.error("UNSUPPORTED", "Android 8.0 以下不支持 requestPinShortcut", null)
