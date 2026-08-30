@@ -14,9 +14,6 @@ import androidx.annotation.RequiresApi
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
-import java.io.File
-import java.io.FileOutputStream
-import java.net.URL
 
 class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -80,7 +77,7 @@ class MainActivity : FlutterActivity() {
         val url = call.argument<String>("url") ?: run {
             result.error("BAD_ARGS", "缺少 url", null); return
         }
-        val iconAsset = call.argument<String>("iconAsset")
+        val iconBytes = call.argument<ByteArray>("iconBytes")
         val gameColor = call.argument<Number>("gameColor")?.toInt()
 
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
@@ -100,7 +97,7 @@ class MainActivity : FlutterActivity() {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }
 
-            val icon = buildShortcutIcon(iconAsset, gameColor)
+            val icon = buildShortcutIcon(iconBytes, gameColor)
 
             val shortcut = ShortcutInfo.Builder(this, id)
                 .setShortLabel(label)
@@ -116,7 +113,7 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun buildShortcutIcon(iconAsset: String?, gameColor: Int?): Icon {
+    private fun buildShortcutIcon(iconBytes: ByteArray?, gameColor: Int?): Icon {
         val size = 96
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
@@ -127,14 +124,10 @@ class MainActivity : FlutterActivity() {
         // 先画背景色
         canvas.drawCircle(size / 2f, size / 2f, size / 2f, paint)
 
-        // 尝试下载并叠加游戏图标
-        iconAsset?.let { asset ->
+        // Flutter 端已经帮我们解析好了真实图标 bytes（asset→network 兜底都走过了）
+        iconBytes?.let { bytes ->
             try {
-                val ref = parseMediaRef(asset)
-                val bmp = when (ref) {
-                    is MediaRef.Network -> downloadBitmap(ref.url)
-                    is MediaRef.Asset -> loadAssetBitmap(ref.path)
-                }
+                val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                 if (bmp != null) {
                     val scaled = Bitmap.createScaledBitmap(bmp, size - 16, size - 16, true)
                     canvas.drawBitmap(scaled, 8f, 8f, Paint().apply { isAntiAlias = true })
@@ -143,36 +136,6 @@ class MainActivity : FlutterActivity() {
         }
 
         return Icon.createWithBitmap(bitmap)
-    }
-
-    private fun parseMediaRef(raw: String): MediaRef {
-        val s = raw.trim()
-        return when {
-            s.startsWith("http://") || s.startsWith("https://") -> MediaRef.Network(s)
-            else -> MediaRef.Asset(s)
-        }
-    }
-
-    private fun downloadBitmap(url: String): Bitmap? {
-        return try {
-            val conn = URL(url).openConnection()
-            conn.connectTimeout = 5000
-            conn.readTimeout = 5000
-            BitmapFactory.decodeStream(conn.getInputStream())
-        } catch (_: Exception) { null }
-    }
-
-    private fun loadAssetBitmap(path: String): Bitmap? {
-        return try {
-            val normalized = if (path.startsWith("assets/")) path else "assets/$path"
-            val stream = assets.open(normalized)
-            BitmapFactory.decodeStream(stream)
-        } catch (_: Exception) { null }
-    }
-
-    sealed class MediaRef {
-        data class Network(val url: String) : MediaRef()
-        data class Asset(val path: String) : MediaRef()
     }
 }
 

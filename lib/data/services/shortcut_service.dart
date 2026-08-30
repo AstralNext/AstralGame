@@ -36,9 +36,16 @@ class ShortcutService {
       'id': 'room_${bookmark.id}',
       'label': bookmark.displayName,
       'url': 'astralgame://join?bookmark=${bookmark.id}',
-      'iconAsset': game?.resolvedIconAsset,
       'gameColor': game?.color.value,
     };
+
+    // Flutter 端先解析真正的图标 bytes（完整的 asset→network hybrid 兜底），
+    // 直接传给 Android，避免 Kotlin 端自己处理 asset/network 路径问题。
+    final iconBytes = await _resolveAndroidIconBytes(game);
+    if (iconBytes != null) {
+      args['iconBytes'] = iconBytes;
+    }
+
     try {
       final result = await _channel.invokeMethod<bool>(
         'createPinnedShortcut',
@@ -60,6 +67,53 @@ class ShortcutService {
       }
       rethrow;
     }
+  }
+
+  /// 拿到 Android 快捷方式需要的 PNG bytes。
+  /// 优先尝试 Flutter 打包的 asset → 失败再走远程 CDN。
+  Future<Uint8List?> _resolveAndroidIconBytes(GameInfo? game) async {
+    if (game == null) return null;
+    final ref = GameMediaRef.tryParse(game.resolvedIconAsset);
+    if (ref == null) return null;
+
+    // 1) asset 或 hybrid 本地路径
+    if (ref.kind == GameMediaKind.asset ||
+        ref.kind == GameMediaKind.hybrid) {
+      final assetPath = ref.path;
+      if (assetPath != null) {
+        try {
+          final bytes = await rootBundle.load(assetPath);
+          final list = bytes.buffer.asUint8List(
+            bytes.offsetInBytes,
+            bytes.lengthInBytes,
+          );
+          if (list.isNotEmpty) return list;
+        } catch (_) {}
+      }
+    }
+
+    // 2) network 或 hybrid 远程兜底
+    final url = ref.kind == GameMediaKind.network
+        ? ref.url
+        : ref.kind == GameMediaKind.hybrid
+            ? ref.url
+            : null;
+    if (url != null) {
+      try {
+        final client = HttpClient();
+        final request = await client.getUrl(Uri.parse(url));
+        final response = await request.close();
+        if (response.statusCode == 200) {
+          final sink = BytesBuilder();
+          await for (final chunk in response) {
+            sink.add(chunk);
+          }
+          final result = sink.toBytes();
+          if (result.isNotEmpty) return result;
+        }
+      } catch (_) {}
+    }
+    return null;
   }
 
   // ======================================================================
