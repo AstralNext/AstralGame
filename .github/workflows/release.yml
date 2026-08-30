@@ -1,16 +1,12 @@
 # 发布 Astral Game
 #
 # 仅手动：Actions → 发布 → Run workflow。须先有对应 tag 的 Build 产物。
-# 推送 v* 标签只会触发编译，不会创建 GitHub Release / 夸克上传。
+# 推送 v* 标签只会触发编译，不会创建 GitHub Release。
 #
 # Secret：
-# - GOOGLE 或 GOOGLE_API_KEY（Gemini，可选；无则回退为提交列表）
 # - ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_PASSWORD / ANDROID_KEY_ALIAS
 #   （Build 工作流正式签名 Android APK；PR 无密钥时回退 debug）
-# - QUARK_DRIVE_CONFIG_JSON（夸克官方 CLI config.json）
-# - QUARK_PARENT_FID（建议，AstralGame 目录 FID）
-# - ASTRAL_SITE_TOKEN（repo 写权限 PAT：创建 Release + 更新 next.astral.github.io）
-# 夸克：OPENCLAW_CLI=1 + 官方 skill zip 里的 quark-drive.cjs（见 tools/quark_release/upload.sh）
+# - ASTRAL_SITE_TOKEN（repo 写权限 PAT：创建 Release）
 # 附件命名：astral-game-<semver>-<platform>-<arch>.<ext>
 
 name: 发布
@@ -19,33 +15,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Git 标签（如 v1.0.0）'
+        description: 'Git 标签（如 v1.3.7）'
         required: true
         type: string
-      base_ref:
-        description: 'changelog 起点（上一 tag 或 SHA）'
-        required: true
-        type: string
-      head_ref:
-        description: 'changelog 终点'
-        required: false
-        default: 'main'
-        type: string
-      package_version:
-        description: '包文件名版本（留空则从 tag 去 v）'
-        required: false
-        default: ''
-        type: string
-      draft:
-        description: '草稿 Release'
-        required: false
-        default: true
-        type: boolean
-      prerelease:
-        description: '预发布'
-        required: false
-        default: true
-        type: boolean
 
 permissions:
   contents: write
@@ -59,7 +31,6 @@ jobs:
       - name: 检出
         uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.head_ref }}
           fetch-depth: 0
 
       - name: 解析发布参数
@@ -69,39 +40,21 @@ jobs:
         run: |
           set -euxo pipefail
           TAG="${{ inputs.tag_name }}"
-          BASE="${{ inputs.base_ref }}"
-          HEAD="${{ inputs.head_ref }}"
-          DRAFT="${{ inputs.draft }}"
-          PRE="${{ inputs.prerelease }}"
-          TARGET="${{ inputs.head_ref }}"
+          VER="${TAG#v}"
 
           echo "skip=false" >> "$GITHUB_OUTPUT"
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "release_exists=true" >> "$GITHUB_OUTPUT"
-            echo "Release $TAG 已存在，将跳过创建并继续夸克上传"
-          else
-            echo "release_exists=false" >> "$GITHUB_OUTPUT"
-          fi
-
-          PV="${{ inputs.package_version }}"
-          if [ -n "$PV" ]; then VER="$PV"; else VER="${TAG#v}"; fi
-
           {
             echo "tag=$TAG"
             echo "version=$VER"
-            echo "base=$BASE"
-            echo "head=$HEAD"
-            echo "draft=$DRAFT"
-            echo "prerelease=$PRE"
-            echo "target=$TARGET"
+            echo "target=main"
+            echo "draft=true"
+            echo "prerelease=true"
             echo "run_id="
             echo "search=true"
           } >> "$GITHUB_OUTPUT"
 
           echo "PKG_VER=$VER" >> "$GITHUB_ENV"
           echo "TAG_NAME=$TAG" >> "$GITHUB_ENV"
-          echo "BASE_REF=$BASE" >> "$GITHUB_ENV"
-          echo "HEAD_REF=$HEAD" >> "$GITHUB_ENV"
 
       - name: 拉取 Windows zip
         if: steps.cfg.outputs.skip != 'true'
@@ -165,62 +118,6 @@ jobs:
           f=$(find _dl/installer -name '*.exe' 2>/dev/null | head -1); [ -n "$f" ] && cp -f "$f" "release/astral-game-${PKG_VER}-windows-x64-setup.exe"
           ls -la release/ || true
 
-      - name: 导出 commits & 生成 Release 说明
-        if: steps.cfg.outputs.skip != 'true'
-        id: changelog
-        env:
-          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-          GOOGLE: ${{ secrets.GOOGLE }}
-          REPO_FULL: ${{ github.repository }}
-          SERVER_URL: ${{ github.server_url }}
-        run: |
-          set -euxo pipefail
-          git log --reverse --pretty=format:'%H%x1f%h%x1f%s%x1f%an%x1f%ae%x1f%ci' \
-            "${{ steps.cfg.outputs.base }}..${{ steps.cfg.outputs.head }}" > commits.tsv || true
-
-          export GOOGLE_API_KEY="${GOOGLE_API_KEY:-$GOOGLE}"
-          pip install --quiet google-generativeai 2>/dev/null || true
-
-          python3 <<'PY'
-          import os, pathlib
-          repo = os.environ.get("REPO_FULL", "")
-          server = os.environ.get("SERVER_URL", "https://github.com").rstrip("/")
-          tag = os.environ.get("TAG_NAME", "")
-          ver = os.environ.get("PKG_VER", "")
-          base = os.environ.get("BASE_REF", "")
-          head = os.environ.get("HEAD_REF", "")
-          rows = []
-          p = pathlib.Path("commits.tsv")
-          if p.is_file():
-              for line in p.read_text(encoding="utf-8").splitlines():
-                  parts = line.split("\x1f")
-                  if len(parts) >= 6:
-                      rows.append(f"- {parts[1]} | {parts[2]} | {parts[3]}")
-          block = "\n".join(rows) if rows else "(无提交)"
-          body = None
-          key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GOOGLE")
-          if key:
-              try:
-                  import google.generativeai as genai
-                  genai.configure(api_key=key)
-                  m = genai.GenerativeModel("gemini-2.0-flash")
-                  prompt = (
-                      f"为 Astral Game {tag} 写 GitHub Release 正文（Markdown，简体中文）。\n"
-                      f"包版本 {ver}，对比 {base}..{head}，仓库 {server}/{repo}。\n"
-                      f"含亮点、变更分组、安装包平台说明（windows/linux/android）。\n"
-                      f"只输出 Markdown，不要代码围栏。\n提交：\n{block}"
-                  )
-                  body = (m.generate_content(prompt).text or "").strip()
-              except Exception as e:
-                  print(f"gemini fallback: {e}")
-          if not body:
-              body = f"## Astral Game {tag}\n\n### 提交\n{block}\n"
-          pathlib.Path("CHANGELOG.md").write_text(body + "\n", encoding="utf-8")
-          PY
-
-          DELIM="CHLOG_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
-          { echo "body<<${DELIM}"; cat CHANGELOG.md; echo "${DELIM}"; } >> "$GITHUB_OUTPUT"
-
       - name: 创建 GitHub Release
         if: steps.cfg.outputs.skip != 'true'
         env:
@@ -229,65 +126,20 @@ jobs:
           TARGET: ${{ steps.cfg.outputs.target }}
           DRAFT: ${{ steps.cfg.outputs.draft }}
           PRE: ${{ steps.cfg.outputs.prerelease }}
-          BODY: ${{ steps.changelog.outputs.body }}
-          RELEASE_EXISTS: ${{ steps.cfg.outputs.release_exists }}
         run: |
           set -euo pipefail
           if [ ! -d release ] || [ -z "$(ls -A release 2>/dev/null || true)" ]; then
             echo "release/ 为空，无法创建 Release" >&2
             exit 1
           fi
-          if [ "$RELEASE_EXISTS" = "true" ] || gh release view "$TAG" >/dev/null 2>&1; then
+          if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG 已存在，跳过 create"
             exit 0
           fi
-          printf '%s\n' "$BODY" > /tmp/release-body.md
+          echo "" > /tmp/release-body.md
           args=(release create "$TAG" --title "Astral Game $TAG" --notes-file /tmp/release-body.md --target "$TARGET")
           if [ "$DRAFT" = "true" ]; then args+=(--draft); fi
           if [ "$PRE" = "true" ]; then args+=(--prerelease); fi
           # shellcheck disable=SC2206
           files=(release/*)
           gh "${args[@]}" "${files[@]}"
-
-      - name: 安装 Node（夸克官方 CLI）
-        if: steps.cfg.outputs.skip != 'true'
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: 上传夸克网盘并更新官网下载
-        id: quark
-        if: steps.cfg.outputs.skip != 'true'
-        continue-on-error: true
-        env:
-          OPENCLAW_CLI: '1'
-          NODE_OPTIONS: '--dns-result-order=ipv4first'
-          QUARK_DRIVE_CONFIG_JSON: ${{ secrets.QUARK_DRIVE_CONFIG_JSON }}
-          QUARK_USER_ID: ${{ secrets.QUARK_USER_ID }}
-          QUARK_DEVICE_ID: ${{ secrets.QUARK_DEVICE_ID }}
-          QUARK_ACCESS_TOKEN: ${{ secrets.QUARK_ACCESS_TOKEN }}
-          QUARK_REFRESH_TOKEN: ${{ secrets.QUARK_REFRESH_TOKEN }}
-          QUARK_PARENT_FID: ${{ secrets.QUARK_PARENT_FID }}
-          ASTRAL_SITE_TOKEN: ${{ secrets.ASTRAL_SITE_TOKEN }}
-        run: |
-          set -euo pipefail
-          # 不要 set -x：会把 QUARK_DRIVE_CONFIG_JSON 打进日志
-          if [ -z "${QUARK_DRIVE_CONFIG_JSON:-}" ] && [ -z "${QUARK_ACCESS_TOKEN:-}" ]; then
-            echo "Quark secrets 未配置，跳过网盘上传"
-            exit 0
-          fi
-          echo "Quark secrets present; parent_fid set=$([ -n "${QUARK_PARENT_FID:-}" ] && echo yes || echo no)"
-          chmod +x tools/quark_release/upload.sh
-          tools/quark_release/upload.sh "${{ steps.cfg.outputs.version }}" release
-
-      - name: Release 备注夸克链接
-        if: steps.cfg.outputs.skip != 'true' && steps.quark.outputs.share_url != ''
-        env:
-          GH_TOKEN: ${{ secrets.ASTRAL_SITE_TOKEN || secrets.GITHUB_TOKEN }}
-          SHARE: ${{ steps.quark.outputs.share_url }}
-          TAG: ${{ steps.cfg.outputs.tag }}
-        run: |
-          set -euxo pipefail
-          body=$(gh release view "$TAG" --json body -q .body)
-          printf '%s\n\n## 夸克网盘\n%s\n' "$body" "$SHARE" > /tmp/rel-body.md
-          gh release edit "$TAG" --notes-file /tmp/rel-body.md
