@@ -178,14 +178,6 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "1.4.1"
-  charset_converter:
-    dependency: "direct main"
-    description:
-      name: charset_converter
-      sha256: da90e0a5bc3bea06df12615cac23544db4e7f06fb26bec0c7253229fc291e12e
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "2.5.1"
   checked_yaml:
     dependency: transitive
     description:

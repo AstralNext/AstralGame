@@ -1,22 +1,25 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:astral_game/data/services/connectivity_status_service.dart';
 import 'package:astral_game/utils/logger.dart';
-import 'package:charset_converter/charset_converter.dart';
 import 'package:http/http.dart' as http;
 import 'package:signals/signals_core.dart';
 
 /// 本机运营商/网络归属信息。
 ///
-/// 只使用 pconline 接口: https://whois.pconline.com.cn/ipJson.jsp?json=true
-/// 接口直接返回全中文：`{"addr":"山东省临沂市 电信"}`，无需运营商映射。
+/// 两步走，全程 UTF-8：
+///   1. pconline 拿真实公网 IP：
+///      pconline 虽然响应体是 GBK 编码中文，但 IP 字段是纯 ASCII 数字，
+///      直接在 bodyBytes 里搜 `"ip":"` 的 ASCII bytes，不用做任何字符解码。
+///      选它是因为只有它能识别"真实客户端公网 IP"
+///      （其他接口 ipify 亚马逊代理、搜狐返回 127.0.0.1、ip-api 返回 CDN IP）
 ///
-/// ⚠️ GBK 编码：Dart 标准库只有 utf8/ascii/latin1，
-/// 使用 charset_converter (Flutter plugin) 调系统原生 GBK 解码。
-/// 不同平台对 charset 名的识别不一致，因此逐个尝试多种写法。
+///   2. 百度开放平台 oe=utf8 接口拿归属：
+///      http://opendata.baidu.com/api.php?resource_id=6006&oe=utf8&query=IP
+///      Content-Type: application/json;charset=utf-8 ✅
+///      location 字段是拼接好的中文，如 "山东省临沂市 电信"
+///      省/市/运营商全在里面，不用映射表。
 class IspInfoService {
   IspInfoService(this._connectivity);
 
@@ -28,51 +31,54 @@ class IspInfoService {
   final label = signal<String>('');
   final loading = signal<bool>(false);
 
-  static const _url = 'https://whois.pconline.com.cn/ipJson.jsp?json=true';
+  /// Step 1: pconline 拿真实 IP（只看 ASCII bytes，不解 GBK）
+  static const _ipUrl = 'https://whois.pconline.com.cn/ipJson.jsp?json=true';
 
-  /// 不同平台对 GBK 的名字不同，按顺序试直到成功：
-  ///   • Android (ICU):          'GBK'、'GB18030'
-  ///   • iOS/macOS (CFString):   'GBK'、'GB18030'、'GB2312'
-  ///   • Windows (codepage):     'windows-936'、'CP936'、'GB2312'
-  ///   • Linux (iconv):          'GBK'、'GB18030'、'GB2312'
-  static const _charsetCandidates = [
-    'GBK',
-    'GB18030',
-    'windows-936',
-    'CP936',
-    'GB2312',
-    'cp936',
-    'GBK2312',
-    'Shift_JISX0213',
-  ];
+  /// Step 2: 百度 UTF-8 接口拿归属（oe=utf8 强制 UTF-8）
+  static const _geoPrefix =
+      'http://opendata.baidu.com/api.php?co=&resource_id=6006&oe=utf8&query=';
 
-  static Future<String> _decodeGbk(Uint8List bytes) async {
-    if (bytes.isEmpty) return '';
-
-    for (final name in _charsetCandidates) {
-      try {
-        return await CharsetConverter.decode(name, bytes);
-      } catch (_) {
-        // 这个名字当前平台不认得，试下一个
+  /// 在 pconline 的原始响应 bytes 里直接找 ASCII 序列 `"ip":"1.2.3.4"`
+  /// 完全不需要字符解码，也不依赖任何三方包。
+  static String? _extractIpFromBytes(Uint8List bytes) {
+    // 要匹配的 ASCII 序列: "\"ip\":\""
+    // 引号(34) i(105) p(112) 引号(34) :(58) 引号(34)
+    const sig = <int>[34, 105, 112, 34, 58, 34];
+    for (int i = 0; i <= bytes.length - sig.length; i++) {
+      bool hit = true;
+      for (int j = 0; j < sig.length; j++) {
+        if (bytes[i + j] != sig[j]) {
+          hit = false;
+          break;
+        }
       }
+      if (!hit) continue;
+      final start = i + sig.length;
+      var end = start;
+      while (end < bytes.length && bytes[end] != 34) {
+        end++; // 直到下一个引号
+      }
+      if (end > start && end <= bytes.length) {
+        return String.fromCharCodes(Uint8List.sublistView(bytes, start, end));
+      }
+      break;
     }
-    // 全失败：至少把 ASCII 部分（IP 是数字+点）解出来，中文部分变成 ?
-    return latin1.decode(bytes, allowInvalid: true);
+    return null;
   }
 
-  /// 从 pconline addr 字段提取省市 + 运营商。
-  /// 示例:
-  ///   "山东省临沂市 电信"          → ("山东省 临沂市", "电信")
-  ///   "广东省深圳市南山区 电信ADSL" → ("广东省 深圳市 南山区", "电信ADSL")
-  ///   "美国"                      → ("美国", "")
-  static ({String location, String isp}) _splitAddr(String addr) {
-    final trimmed = addr.trim();
+  /// 把百度 location 拆成"位置"和"运营商"两段。
+  /// 例: "山东省临沂市 电信"   → ("山东省 临沂市", "电信")
+  /// 例: "北京市海淀区 联通ADSL" → ("北京市 海淀区", "联通ADSL")
+  /// 例: "美国" (境外)          → ("美国", "")
+  static ({String location, String isp}) _split(String baiduLocation) {
+    final trimmed = baiduLocation.trim();
     if (trimmed.isEmpty) return (location: '', isp: '');
     final idx = trimmed.lastIndexOf(' ');
     if (idx < 0) {
+      // 没有空格 → 境外 (如 "美国")
       return (location: trimmed, isp: '');
     }
-    final rawLoc = trimmed.substring(0, idx);
+    final rawAddr = trimmed.substring(0, idx);
     final tail = trimmed.substring(idx + 1);
 
     const ispKeywords = [
@@ -84,7 +90,8 @@ class IspInfoService {
     ];
     for (final kw in ispKeywords) {
       if (tail.contains(kw)) {
-        final location = rawLoc
+        // 在"省""市"等字之间加空格，输出更清爽
+        final location = rawAddr
             .replaceAllMapped(
               RegExp(r'([^区县省市自治特别])([省市自治区特别行政区])'),
               (m) => '${m.group(1)}${m.group(2)} ',
@@ -94,6 +101,7 @@ class IspInfoService {
         return (location: location, isp: tail);
       }
     }
+    // tail 不像运营商
     return (location: trimmed, isp: '');
   }
 
@@ -119,71 +127,70 @@ class IspInfoService {
   Future<void> _fetchNow() async {
     loading.value = true;
     try {
-      appLogger.i('[IspInfo] 请求 pconline');
-      final resp = await http
-          .get(Uri.parse(_url))
-          .timeout(const Duration(seconds: 10));
-
-      if (resp.statusCode != 200) {
-        appLogger.w('[IspInfo] HTTP ${resp.statusCode}');
+      // ===== Step 1: pconline 抓真实 IP =====
+      appLogger.i('[IspInfo] Step1: pconline 拿真实 IP');
+      final ipResp = await http
+          .get(Uri.parse(_ipUrl))
+          .timeout(const Duration(seconds: 8));
+      if (ipResp.statusCode != 200) {
+        appLogger.w('[IspInfo] pconline HTTP ${ipResp.statusCode}');
         return;
       }
-
-      final body = await _decodeGbk(resp.bodyBytes);
-      appLogger.i('[IspInfo] pconline: $body');
-
-      final ip = _jsonStr(body, 'ip');
-      if (ip.isEmpty) {
-        appLogger.w('[IspInfo] 无 IP');
+      final ip = _extractIpFromBytes(ipResp.bodyBytes);
+      if (ip == null || ip.isEmpty) {
+        appLogger.w('[IspInfo] pconline 没抓到 IP');
         return;
       }
+      appLogger.i('[IspInfo] 真实 IP = $ip');
       if (ip == _lastFetchedIp) {
-        appLogger.i('[IspInfo] IP 未变 ($ip) 跳过');
+        appLogger.i('[IspInfo] IP 未变，跳过');
         return;
       }
       _lastFetchedIp = ip;
 
-      final err = _jsonStr(body, 'err');
-      if (err.isNotEmpty) {
-        appLogger.w('[IspInfo] pconline err=$err');
+      // ===== Step 2: 百度 UTF-8 拿归属 =====
+      appLogger.i('[IspInfo] Step2: 百度 UTF-8 归属');
+      final geoResp = await http
+          .get(Uri.parse('$_geoPrefix$ip'))
+          .timeout(const Duration(seconds: 8));
+      if (geoResp.statusCode != 200) {
+        appLogger.w('[IspInfo] 百度 HTTP ${geoResp.statusCode}');
+        return;
+      }
+      final body = geoResp.body; // UTF-8 ✅
+      appLogger.i('[IspInfo] 百度响应: $body');
+
+      // 抓 location 字段 + status
+      final locM =
+          RegExp('"location"\\s*:\\s*"([^"]*)"').firstMatch(body);
+      final statusM =
+          RegExp('"status"\\s*:\\s*"?(-?\\d+)"?').firstMatch(body);
+      if (locM == null) {
+        appLogger.w('[IspInfo] 百度没返回 location');
+        return;
+      }
+      if (statusM != null && statusM.group(1) != '0') {
+        appLogger.w('[IspInfo] 百度 status != 0');
         return;
       }
 
-      final pro = _jsonStr(body, 'pro');
-      final city = _jsonStr(body, 'city');
-      final addr = _jsonStr(body, 'addr');
-
-      final splitted = _splitAddr(addr);
-      final location = splitted.location.isEmpty
-          ? [pro, city].where((s) => s.isNotEmpty).join(' ')
-          : splitted.location;
-      final isp = splitted.isp;
-      final ispOrUnknown = isp.isEmpty ? '未知运营商' : isp;
-
+      final rawLoc = locM.group(1)!;
+      final parsed = _split(rawLoc);
+      final ispOrUnknown = parsed.isp.isEmpty ? '未知运营商' : parsed.isp;
       final parts = <String>[
-        if (location.isNotEmpty) location,
+        if (parsed.location.isNotEmpty) parsed.location,
         ispOrUnknown,
       ];
       final newLabel = parts.join(' · ');
-
       if (newLabel != label.value) {
         label.value = newLabel;
       }
-      appLogger.i('[IspInfo] ✅ 归属: $newLabel (addr=$addr)');
+      appLogger.i('[IspInfo] ✅ 归属: $newLabel (baidu="$rawLoc")');
     } catch (e) {
       appLogger.e('[IspInfo] 异常: $e');
-      if (label.value.isEmpty) {
-        label.value = '未知运营商';
-      }
+      if (label.value.isEmpty) label.value = '未知运营商';
     } finally {
       loading.value = false;
     }
-  }
-
-  static String _jsonStr(String body, String key) {
-    final m = RegExp(
-      '"${RegExp.escape(key)}"\\s*:\\s*"([^"]*)"',
-    ).firstMatch(body);
-    return m?.group(1) ?? '';
   }
 }
