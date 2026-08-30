@@ -80,16 +80,15 @@ end;
 
 // 返回 True = 进程已终止（或本来就没在跑），可以继续安装/卸载
 // 返回 False = 用户取消
-function ConfirmAndKillAstralGame(const Caption: String; AskUser, Force: Boolean): Boolean;
+function ConfirmAndKillAstralGame(const Caption: String; AskUser: Boolean): Boolean;
 var
   Res: Integer;
   ResultCode: Integer;
-  Retries: Integer;
   Msg: String;
 begin
   Result := True;
 
-  // 1. 不在跑 → 直接通过，一秒都不浪费
+  // 1. 不在跑 → 立刻通过
   if not IsAstralGameRunning() then exit;
 
   // 2. 在跑：先问用户（AskUser=True 时）
@@ -97,8 +96,8 @@ begin
   begin
     Msg := '检测到 Astral Game 正在运行。' + #13#10 + #13#10
          + '如果不关闭，安装程序无法覆盖正在使用的文件。' + #13#10 + #13#10
-         + '是否自动关闭它并继续' + Caption + '？' + #13#10
-         + '（选「是」自动关闭；选「否」取消本次操作）';
+         + '是否立即强制关闭它并继续' + Caption + '？' + #13#10
+         + '（选「是」立即关闭；选「否」取消本次操作）';
     Res := MsgBox(Msg, mbConfirmation, MB_YESNO or MB_DEFBUTTON1);
     if Res <> IDYES then
     begin
@@ -107,27 +106,14 @@ begin
     end;
   end;
 
-  // 3. 温和关闭（taskkill 不带 /F → 让 Flutter 走 WM_CLOSE 保存数据）
-  Exec('taskkill.exe', '/T /IM astral_game.exe',
+  // 3. 用户点"是" 或 不用问的场景 → 直接强杀，不等待任何保存
+  Exec('taskkill.exe', '/F /T /IM astral_game.exe',
        '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-
-  // 最多等 4 秒自然退出（每次 200ms × 20 次）
-  for Retries := 0 to 20 do
-  begin
-    if not IsAstralGameRunning() then break;
-    Sleep(200);
-  end;
-
-  // 4. 还活着 → 强杀
-  if Force or IsAstralGameRunning() then
-  begin
-    Exec('taskkill.exe', '/F /T /IM astral_game.exe',
-         '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Sleep(400);
-    Exec('cmd.exe',
-         '/C wmic process where name="astral_game.exe" call terminate 2>nul >nul',
-         '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  end;
+  Sleep(250);
+  Exec('cmd.exe',
+       '/C wmic process where name="astral_game.exe" call terminate 2>nul >nul',
+       '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Sleep(150);
 end;
 
 function InitializeSetup(): Boolean;
@@ -139,24 +125,23 @@ begin
     exit;
   end;
 
-  // 启动时快速检测 → 检测到才询问
-  Result := ConfirmAndKillAstralGame('安装', True {AskUser}, False {Force});
+  // 启动时快速检测 → 检测到才询问，同意直接强杀不等
+  Result := ConfirmAndKillAstralGame('安装', True {AskUser});
 end;
 
 function InitializeUninstall(): Boolean;
 begin
-  // 卸载：检测到就询问，同意后直接 Force 强杀
-  Result := ConfirmAndKillAstralGame('卸载', True {AskUser}, True {Force});
+  // 卸载：同样询问式
+  Result := ConfirmAndKillAstralGame('卸载', True {AskUser});
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   Dummy: Boolean;
 begin
-  // 真正复制文件前再检查一次——不用再问用户了，之前问过已经同意
-  // 用户可能在"安装向导步骤停留"那段时间又把软件打开了
+  // 真正复制文件前再检查一次——不再问，直接强杀
   if CurStep = ssInstall then
   begin
-    Dummy := ConfirmAndKillAstralGame('安装', False {NoAsk}, False {SoftFirst});
+    Dummy := ConfirmAndKillAstralGame('安装', False {NoAsk});
   end;
 end;
