@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:astral_game/data/services/app_settings_service.dart';
 import 'package:astral_game/data/services/connection_service.dart';
 import 'package:astral_game/data/services/connectivity_status_service.dart';
+import 'package:astral_game/data/services/isp_info_service.dart';
 import 'package:astral_game/data/services/firewall_service.dart';
 import 'package:astral_game/data/services/hitokoto_service.dart';
 import 'package:astral_game/data/services/join_link_service.dart';
@@ -109,6 +110,12 @@ Future<void> setupDI() async {
   getIt.registerSingleton<ConnectivityStatusService>(ConnectivityStatusService());
   _registerDispose<ConnectivityStatusService>((s) => s.dispose(), async: true);
   unawaited(getIt<ConnectivityStatusService>().start());
+
+  getIt.registerSingleton<IspInfoService>(
+    IspInfoService(getIt<ConnectivityStatusService>()),
+  );
+  _registerDispose<IspInfoService>((s) => s.dispose(), async: true);
+  getIt<IspInfoService>().start();
 
   getIt.registerLazySingleton<FirewallService>(() => FirewallService());
   unawaited(getIt<FirewallService>().refreshPrivateProfile());

@@ -205,13 +205,7 @@ class _OpenGameTile extends StatelessWidget {
                             colorScheme.secondaryContainer,
                             colorScheme.onSecondaryContainer,
                           ),
-                        if (listing.isRoomHost)
-                          _chip(
-                            textTheme,
-                            '房主',
-                            colorScheme.primaryContainer,
-                            colorScheme.onPrimaryContainer,
-                          ),
+                        // 不再显示"房主"标签
                         if (relaying)
                           _chip(
                             textTheme,

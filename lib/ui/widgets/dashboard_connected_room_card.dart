@@ -42,7 +42,7 @@ class ConnectedRoomCard extends StatelessWidget {
     final game = GameCatalog.byId(roomGameId);
     final code = roomShortCode?.trim() ?? '';
     final ip = virtualIp?.trim() ?? '';
-    final showHostOffline = !isRoomHost && !hostOnline && !isLinking;
+    final showHostOffline = false; // 不再显示"房主离线"提示
 
     return AstralCard(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
@@ -136,11 +136,7 @@ class ConnectedRoomCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      [
-                        if (game != null) game.displayName,
-                        if (roomRoleLabel != null && roomRoleLabel!.isNotEmpty)
-                          roomRoleLabel!,
-                      ].join(' · '),
+                      game?.displayName ?? '',
                       style: textTheme.bodySmall?.copyWith(
                         color: palette.textSecondary,
                       ),

@@ -1,7 +1,9 @@
 import 'package:astral_game/config/constants.dart';
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/models/enhanced_node_info.dart';
+import 'package:astral_game/data/services/isp_info_service.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
+import 'package:astral_game/di.dart';
 import 'package:astral_game/ui/widgets/grouped_tile_shape.dart';
 import 'package:astral_game/utils/firewall_presentation.dart';
 import 'package:astral_game/utils/network_presentation.dart';
@@ -292,14 +294,20 @@ class _UserStatusChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final myIsp = getIt<IspInfoService>();
     final chips = <Widget>[
+      // 只有自己的行（isRoomHost 在房主模式下等于"我"）显示 ISP
       if (isRoomHost)
-        _MiniChip(
-          icon: Icons.star_rounded,
-          label: '房主',
-          background: colorScheme.primaryContainer,
-          foreground: colorScheme.onPrimaryContainer,
-        ),
+        Watch((context) {
+          final label = myIsp.label.value;
+          if (label.isEmpty) return const SizedBox.shrink();
+          return _MiniChip(
+            icon: Icons.router_rounded,
+            label: label,
+            background: colorScheme.primaryContainer,
+            foreground: colorScheme.onPrimaryContainer,
+          );
+        }),
       if (platformName.isNotEmpty)
         _MiniChip(
           icon: platformIcon,

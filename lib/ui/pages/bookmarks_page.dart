@@ -554,7 +554,7 @@ class _BookmarkCard extends StatelessWidget {
                     else if (gameName.isNotEmpty)
                       gameName,
                     if (displayName != null && displayName.isNotEmpty)
-                      '房主 $displayName',
+                      displayName,
                   ].join(' · '),
                   style: textTheme.bodySmall?.copyWith(
                     color: palette.textSecondary,
