@@ -46,10 +46,12 @@ class IspInfoService {
 
   /// 依次尝试多个 API，第一个成功的结果被采用。
   static const _endpoints = [
-    // http，中文返回，需要 Android usesCleartextTraffic
+    // pconline：全中文，https，稳定
+    _Endpoint('https://whois.pconline.com.cn/ipJson.jsp?json=true', _parsePconline),
+    // ip-api.com：中文，http（Android 需 usesCleartextTraffic）
     _Endpoint('http://ip-api.com/json/?lang=zh-CN&fields=status,isp,org,regionName,city,query',
         _parseIpApi),
-    // https，英文但更稳定，asn/as 字段含运营商
+    // ip2location.io：英文，https，终极兜底
     _Endpoint('https://api.ip2location.io/', _parseIp2Location),
   ];
 
@@ -109,6 +111,29 @@ class IspInfoService {
   }
 
   // ---- 解析器 ----
+
+  static Map<String, String>? _parsePconline(String body) {
+    // 返回格式: {"ip":"...","pro":"山东省","city":"临沂市","addr":"山东省临沂市 电信","err":""}
+    final m = _extractKeys(body, {'ip', 'pro', 'city', 'addr', 'err'});
+    if ((m['err'] ?? '').isNotEmpty) return null;
+    final ip = m['ip'] ?? '';
+    if (ip.isEmpty) return null;
+    final pro = (m['pro'] ?? '').trim();
+    final city = (m['city'] ?? '').trim();
+    final addr = (m['addr'] ?? '').trim();
+    // 从 addr 里提取运营商（最后一个空格后的部分）
+    String isp = '';
+    if (addr.isNotEmpty) {
+      final idx = addr.lastIndexOf(' ');
+      if (idx > 0) isp = addr.substring(idx + 1);
+    }
+    return {
+      'isp': isp,
+      'region': pro,
+      'city': city,
+      'ip': ip,
+    };
+  }
 
   static Map<String, String>? _parseIpApi(String body) {
     final m = _extractKeys(body, {'status', 'isp', 'org', 'regionName', 'city', 'query'});
