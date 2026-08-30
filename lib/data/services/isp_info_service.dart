@@ -2,13 +2,19 @@ import 'dart:async';
 
 import 'package:astral_game/data/services/connectivity_status_service.dart';
 import 'package:astral_game/utils/logger.dart';
+import 'package:charset_converter/charset_converter.dart';
 import 'package:http/http.dart' as http;
 import 'package:signals/signals_core.dart';
 
 /// 本机运营商/网络归属信息。
 ///
-/// 使用 ip-api.com（免费、中文、UTF-8），仅在网络承载变化时重新拉取。
-/// Dart http 库能正确处理其 UTF-8 响应（pconline 返回 GBK 需要额外解码，放弃）。
+/// 仅使用 pconline（腾讯 IP 查询）：
+///   https://whois.pconline.com.cn/ipJson.jsp?json=true
+/// 返回全中文：`{"pro":"山东省","city":"临沂市","addr":"山东省临沂市 电信"}`
+///
+/// ⚠️ 该接口响应体为 GBK 编码（Content-Type 声明 charset=GBK），
+/// 不能用 http.Response.body（Dart 默认 latin1 解码会乱码），
+/// 必须用 [charset_converter] 手动解 GBK。
 class IspInfoService {
   IspInfoService(this._connectivity);
 
@@ -17,46 +23,42 @@ class IspInfoService {
   Timer? _debounceTimer;
   String? _lastFetchedIp;
 
-  /// 当前展示文本，例如 `山东省 济南市 · 中国电信`。
+  /// 当前展示文本，例如 `山东省 临沂市 · 电信`。
   final label = signal<String>('');
 
   /// 正在拉取中。
   final loading = signal<bool>(false);
 
   static const _url =
-      'http://ip-api.com/json/?lang=zh-CN&fields=status,isp,regionName,city,query';
+      'https://whois.pconline.com.cn/ipJson.jsp?json=true';
 
-  /// 英文/缩写运营商 → 中文映射。
-  static const _ispMap = {
-    'Chinanet': '中国电信',
-    'China Telecom': '中国电信',
-    'China Unicom': '中国联通',
-    'Unicom': '中国联通',
-    'China Mobile': '中国移动',
-    'CMCC': '中国移动',
-    'China Tietong': '中国铁通',
-    'Tietong': '中国铁通',
-    'China Railcom': '中国铁通',
-    'China CTT': '中国广电',
-    'Cable Television': '中国广电',
-  };
-
-  static String _mapIsp(String isp) {
-    final trimmed = isp.trim();
+  /// 从 pconline 的 addr 字段（如 "山东省临沂市 电信"）提取中文运营商名。
+  /// 运营商总是 addr 最后一个空格之后的部分。
+  /// 如果 addr 里没空格或最后部分不含运营商关键字，返回空串。
+  static String _extractIsp(String addr) {
+    final trimmed = addr.trim();
     if (trimmed.isEmpty) return '';
-    // 直接匹配
-    for (final entry in _ispMap.entries) {
-      if (trimmed.toLowerCase() == entry.key.toLowerCase()) return entry.value;
+
+    // 找最后一个空格
+    final idx = trimmed.lastIndexOf(' ');
+    if (idx < 0) return ''; // 没空格，说明没运营商
+    final tail = trimmed.substring(idx + 1);
+
+    // 验证 tail 是否像运营商（包含常见关键字）
+    const keywords = [
+      '电信', '联通', '移动', '广电', '铁通', '鹏博士',
+      '长城', '华数', '东方有线', '世纪互联', 'CNISP',
+      '教育网', '科技网', '阿里云', '腾讯云', '华为云',
+      '百度云', '京东云', 'Unknown',
+    ];
+    for (final kw in keywords) {
+      if (tail.contains(kw)) return tail;
     }
-    // 包含匹配（如 "Chinanet (some description)"）
-    for (final entry in _ispMap.entries) {
-      if (trimmed.toLowerCase().contains(entry.key.toLowerCase())) return entry.value;
-    }
-    // 没映射就原样返回
-    return trimmed;
+
+    // 虽然没命中关键字，但也返回最后部分（可能是境外运营商或新运营商）
+    return tail;
   }
 
-  /// 启动：立即拉一次 + 网络变化时自动刷新。
   void start() {
     if (_effectDispose != null) return;
     appLogger.i('[IspInfoService] start() — 立即发起首次拉取');
@@ -90,36 +92,38 @@ class IspInfoService {
         return;
       }
 
-      // ip-api.com 返回的 JSON 里 status 不是 success 就说明限流/失败
-      final body = response.body;
+      // ⚠️ 关键：pconline 返回 GBK，必须用 charset_converter 解
+      final body = await CharsetConverter.decode('GBK', response.bodyBytes);
       appLogger.i('[IspInfo] raw body: $body');
 
-      final m = _extractKeys(body, {'status', 'isp', 'regionName', 'city', 'query'});
-      if (m['status'] != 'success') {
-        appLogger.w('[IspInfo] status != success: ${m['status']}');
+      final m = _extractKeys(body, {'ip', 'pro', 'city', 'addr', 'err'});
+
+      if ((m['err'] ?? '').isNotEmpty) {
+        appLogger.w('[IspInfo] pconline err=${m['err']}');
         return;
       }
 
-      final ip = m['query'] ?? '';
+      final ip = m['ip'] ?? '';
       if (ip.isEmpty) {
         appLogger.w('[IspInfo] 未返回 IP');
         return;
       }
 
-      // IP 没变就跳过
+      // IP 没变就跳过（省请求）
       if (ip == _lastFetchedIp) {
         appLogger.i('[IspInfo] IP 未变 ($ip)，跳过');
         return;
       }
       _lastFetchedIp = ip;
 
-      final region = (m['regionName'] ?? '').trim();
+      final pro = (m['pro'] ?? '').trim();
       final city = (m['city'] ?? '').trim();
-      final ispRaw = (m['isp'] ?? '').trim();
-      final isp = _mapIsp(ispRaw);
+      final addr = (m['addr'] ?? '').trim();
 
-      final location = [region, city].where((s) => s.isNotEmpty).join(' ');
-      // 运营商为空时显示"未知运营商"，确保始终有值
+      final location = [pro, city].where((s) => s.isNotEmpty).join(' ');
+      final isp = _extractIsp(addr);
+
+      // 运营商为空时兜底"未知运营商"
       final ispOrUnknown = isp.isEmpty ? '未知运营商' : isp;
       final parts = <String>[
         if (location.isNotEmpty) location,
@@ -135,7 +139,7 @@ class IspInfoService {
       if (newLabel != label.value) {
         label.value = newLabel;
       }
-      appLogger.i('[IspInfo] ✅ 归属: $newLabel (raw isp=$ispRaw)');
+      appLogger.i('[IspInfo] ✅ 归属: $newLabel (addr=$addr)');
     } catch (e) {
       appLogger.e('[IspInfo] 异常: $e');
       // API 彻底失败时兜底
