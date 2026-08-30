@@ -119,9 +119,11 @@ class IspInfoService {
       final isp = _mapIsp(ispRaw);
 
       final location = [region, city].where((s) => s.isNotEmpty).join(' ');
+      // 运营商为空时显示"未知运营商"，确保始终有值
+      final ispOrUnknown = isp.isEmpty ? '未知运营商' : isp;
       final parts = <String>[
         if (location.isNotEmpty) location,
-        if (isp.isNotEmpty) isp,
+        ispOrUnknown,
       ];
       final newLabel = parts.join(' · ');
 
@@ -136,6 +138,10 @@ class IspInfoService {
       appLogger.i('[IspInfo] ✅ 归属: $newLabel (raw isp=$ispRaw)');
     } catch (e) {
       appLogger.e('[IspInfo] 异常: $e');
+      // API 彻底失败时兜底
+      if (label.value.isEmpty) {
+        label.value = '未知运营商';
+      }
     } finally {
       loading.value = false;
     }
