@@ -63,6 +63,9 @@ class EnhancedNodeInfo {
   /// 见 [`NetworkKind`]；UI 通过 [`NetworkPresentation.fromWire`] 解析为图标 + 文案。
   String? get peerNetwork => metadata['peerNetwork'] as String?;
 
+  /// 对端运营商归属（ip-api.com 数据，如 `中国联通 · 北京`）。
+  String? get peerIsp => metadata['peerIsp'] as String?;
+
   /// 对端 Windows 专用防火墙：`enabled` / `disabled` / `unsupported`。
   String? get peerFirewall => metadata['peerFirewall'] as String?;
 

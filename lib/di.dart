@@ -139,6 +139,7 @@ Future<void> setupDI() async {
       peerRpc: getIt<PeerRpcClient>(),
       connectivity: getIt<ConnectivityStatusService>(),
       firewall: getIt<FirewallService>(),
+      ispInfo: getIt<IspInfoService>(),
     ),
   );
   _registerDispose<NodeManagementService>((s) => s.dispose());
@@ -292,6 +293,7 @@ Future<void> _initPeerRpcRouter() async {
       appSettings,
       connectivity: getIt<ConnectivityStatusService>(),
       firewall: getIt<FirewallService>(),
+      ispInfo: getIt<IspInfoService>(),
     ).methods,
   );
   router.registerAll(NodeMethods(nodeManagement).methods);

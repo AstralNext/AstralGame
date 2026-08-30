@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -17,6 +17,7 @@ import '../models/peer_link_metrics.dart';
 import 'app_settings_service.dart';
 import 'connectivity_status_service.dart';
 import 'firewall_service.dart';
+import 'isp_info_service.dart';
 import 'peer_rpc/peer_rpc_client.dart' show PeerRpcClient;
 import 'peer_rpc/peer_rpc_exception.dart';
 
@@ -34,17 +35,20 @@ required AppSettingsService appSettings,
 required PeerRpcClient peerRpc,
 ConnectivityStatusService? connectivity,
 FirewallService? firewall,
+IspInfoService? ispInfo,
 })  : _p2pService = p2pService,
 _appSettings = appSettings,
 _peerRpc = peerRpc,
 _connectivity = connectivity,
-_firewall = firewall;
+_firewall = firewall,
+_ispInfo = ispInfo;
 
 final P2PService _p2pService;
 final AppSettingsService _appSettings;
 final PeerRpcClient _peerRpc;
 final ConnectivityStatusService? _connectivity;
 final FirewallService? _firewall;
+final IspInfoService? _ispInfo;
 
 /// 是否打印“每秒轮询细节”日志（非常刷屏，默认关闭）
 static const bool _verbosePollLogs = false;
@@ -267,6 +271,13 @@ final firewall = _firewall;
 if (firewall != null) {
 _envListenerDisposers.add(effect(() {
 firewall.privateProfileEnabled.value;
+_onVolatileEnvChanged();
+}));
+}
+final ispInfo = _ispInfo;
+if (ispInfo != null) {
+_envListenerDisposers.add(effect(() {
+ispInfo.label.value;
 _onVolatileEnvChanged();
 }));
 }
@@ -518,6 +529,7 @@ final localName = _appSettings.getUsername().trim();
 final localAvatar = _appSettings.getAvatar();
 final localNetwork = _connectivity?.current.value.wireValue;
 final localFirewall = _firewall?.firewallWireValue() ?? 'unsupported';
+final localIsp = _ispInfo?.label.value;
 final meta = <String, dynamic>{
 ...node.metadata,
 'peerOs': ClientRuntimeInfo.operatingSystem,
@@ -526,6 +538,7 @@ final meta = <String, dynamic>{
 'peerAppVersion': ClientRuntimeInfo.appVersion,
 if (localNetwork != null) 'peerNetwork': localNetwork,
 'peerFirewall': localFirewall,
+if (localIsp != null && localIsp.isNotEmpty) 'peerIsp': localIsp,
 };
 return node.copyWith(
 customName: localName.isEmpty ? node.customName : localName,
@@ -613,6 +626,8 @@ if (map['appName'] != null) 'peerAppName': map['appName'],
 if (map['appVersion'] != null) 'peerAppVersion': map['appVersion'],
 if (map['network'] != null) 'peerNetwork': map['network'],
 if (map['firewall'] != null) 'peerFirewall': map['firewall'],
+if (map['isp'] != null && (map['isp'] as String).isNotEmpty)
+'peerIsp': map['isp'],
 'avatarHash': avatarHash ?? '',
 };
 

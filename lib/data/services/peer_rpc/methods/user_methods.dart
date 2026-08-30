@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:astral_game/data/services/app_settings_service.dart';
 import 'package:astral_game/data/services/connectivity_status_service.dart';
 import 'package:astral_game/data/services/firewall_service.dart';
+import 'package:astral_game/data/services/isp_info_service.dart';
 import 'package:astral_game/data/services/peer_rpc/peer_rpc_router.dart';
 import 'package:astral_game/utils/avatar_hash.dart';
 import 'package:astral_game/utils/client_runtime_info.dart';
@@ -14,12 +15,15 @@ class UserMethods {
     this._settings, {
     ConnectivityStatusService? connectivity,
     FirewallService? firewall,
+    IspInfoService? ispInfo,
   })  : _connectivity = connectivity,
-        _firewall = firewall;
+        _firewall = firewall,
+        _ispInfo = ispInfo;
 
   final AppSettingsService _settings;
   final ConnectivityStatusService? _connectivity;
   final FirewallService? _firewall;
+  final IspInfoService? _ispInfo;
 
   /// 获取用户信息
   ///
@@ -50,6 +54,7 @@ class UserMethods {
       'appVersion': ClientRuntimeInfo.appVersion,
       'network': connectivity.wireValue,
       'firewall': firewall,
+      'isp': _ispInfo?.label.value ?? '',
     };
   }
 

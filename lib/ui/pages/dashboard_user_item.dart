@@ -268,10 +268,10 @@ class _UserAvatar extends StatelessWidget {
   }
 }
 
-/// 状态标签 chips 区域（房主 / 平台 / 网络 / 防火墙 / 延迟）。
+/// 状态标签 chips 区域（运营商 / 平台 / 网络 / 防火墙 / 延迟）。
 class _UserStatusChips extends StatelessWidget {
   const _UserStatusChips({
-    required this.isRoomHost,
+    required this.node,
     required this.platformName,
     required this.platformIcon,
     required this.network,
@@ -282,7 +282,7 @@ class _UserStatusChips extends StatelessWidget {
     required this.latencyColor,
   });
 
-  final bool isRoomHost;
+  final EnhancedNodeInfo node;
   final String platformName;
   final IconData platformIcon;
   final NetworkPresentation network;
@@ -294,20 +294,15 @@ class _UserStatusChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final myIsp = getIt<IspInfoService>();
     final chips = <Widget>[
-      // 只有自己的行（isRoomHost 在房主模式下等于"我"）显示 ISP
-      if (isRoomHost)
-        Watch((context) {
-          final label = myIsp.label.value;
-          if (label.isEmpty) return const SizedBox.shrink();
-          return _MiniChip(
-            icon: Icons.router_rounded,
-            label: label,
-            background: colorScheme.primaryContainer,
-            foreground: colorScheme.onPrimaryContainer,
-          );
-        }),
+      // 每个人都显示自己的运营商归属（本机走 Watch 实时刷新；远程 peer 由 peer RPC 更新 metadata）
+      if (node.peerIsp case final isp?)
+        _MiniChip(
+          icon: Icons.router_rounded,
+          label: isp,
+          background: colorScheme.primaryContainer,
+          foreground: colorScheme.onPrimaryContainer,
+        ),
       if (platformName.isNotEmpty)
         _MiniChip(
           icon: platformIcon,
@@ -538,7 +533,7 @@ class _UserMainContentRow extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               _UserStatusChips(
-                isRoomHost: isRoomHost,
+                node: node,
                 platformName: platformName,
                 platformIcon: platformIcon,
                 network: network,
