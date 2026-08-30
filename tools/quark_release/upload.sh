@@ -188,90 +188,21 @@ quark_retry() {
   return "$rc"
 }
 
-echo "==> whoami"
+# GHA 环境永远无法通过官方 Skill CLI 的环境指纹校验（-104 / 11001），
+# 且 CLI 的 token 体系与 HTTP Open API 不互通，因此直接走 HTTP 全流程，
+# 避免 5 次重试 + 递增 sleep 的死循环浪费时间。
+echo "==> HTTP whoami (skip official CLI: always fails on GHA)"
 set +e
-whoami_out="$(quark_retry get-user-info | ndjson_last)"
+whoami_out="$(python3 "$ROOT/tools/quark_release/quark_http.py" whoami 2>&1)"
 whoami_rc=$?
 set -e
 if [ "$whoami_rc" -ne 0 ]; then
-  echo "==> official CLI failed (rc=$whoami_rc); fallback HTTP upload"
-  python3 "$ROOT/tools/quark_release/quark_http.py" upload "$VERSION" "$RELEASE_DIR"
-  exit $?
-fi
-echo "$whoami_out"
-
-echo "==> ensure parent folder"
-PARENT_FID="${QUARK_PARENT_FID:-}"
-if [ -z "$PARENT_FID" ]; then
-  out="$(quark_retry create-folder --dir-path "AstralGame" --parent-fid "0" | ndjson_last)"
-  echo "$out"
-  PARENT_FID="$(python3 -c 'import json,sys; print((json.loads(sys.argv[1]).get("data") or {}).get("fid",""))' "$out")"
-fi
-if [ -z "$PARENT_FID" ]; then
-  echo "QUARK_PARENT_FID empty and create AstralGame failed" >&2
-  exit 1
+  echo "$whoami_out" >&2
+  echo "==> HTTP whoami failed; still attempt upload so CAC auth code can refresh tokens" >&2
+else
+  echo "$whoami_out"
 fi
 
-out="$(quark_retry create-folder --dir-path "$TAG" --parent-fid "$PARENT_FID" | ndjson_last)"
-echo "$out"
-VER_FID="$(python3 -c 'import json,sys; print((json.loads(sys.argv[1]).get("data") or {}).get("fid",""))' "$out")"
-if [ -z "$VER_FID" ]; then
-  echo "failed to create version folder; fallback HTTP create_dir" >&2
-  VER_FID="$(
-    ROOT="$ROOT" QUARK_PARENT_FID="$PARENT_FID" python3 - "$TAG" <<'PY'
-import os, sys
-from pathlib import Path
-sys.path.insert(0, str(Path(os.environ["ROOT"]) / "tools" / "quark_release"))
-import quark_http
-client = quark_http.QuarkDrive(quark_http._load_config())
-client.ensure_auth()
-print(client.create_dir(sys.argv[1], os.environ["QUARK_PARENT_FID"]))
-PY
-  )" || true
-fi
-if [ -z "$VER_FID" ]; then
-  echo "failed to create version folder" >&2
-  exit 1
-fi
-echo "VER_FID=$VER_FID"
-
-echo "==> upload ${#FILES[@]} files with official CLI"
-quark_retry upload "${FILES[@]}" --parent-fid "$VER_FID" > /tmp/quark-upload.log
-tail -n 30 /tmp/quark-upload.log
-# 确认有成功 result
-python3 - <<'PY'
-import json
-last=None
-for line in open("/tmp/quark-upload.log", encoding="utf-8", errors="replace"):
-    line=line.strip()
-    if not line: continue
-    try: last=json.loads(line)
-    except Exception: pass
-if not last or last.get("type") != "result" or last.get("code") not in (0, "0"):
-    raise SystemExit(f"upload did not succeed: {last}")
-print("upload ok", last.get("data", {}).get("successCount"), "files")
-PY
-
-SHARE_URL=""
-if [ "${QUARK_SHARE:-1}" != "0" ]; then
-  echo "==> create public share"
-  out="$(quark_retry share "$VER_FID" --title "Astral Game $TAG" --url-type 1 --expired-type 1 | ndjson_last)"
-  echo "$out"
-  SHARE_URL="$(python3 -c 'import json,sys; print((json.loads(sys.argv[1]).get("data") or {}).get("share_url",""))' "$out")"
-fi
-
-if [ -n "$SHARE_URL" ]; then
-  echo "QUARK_SHARE_URL=$SHARE_URL"
-  if [ -n "${GITHUB_OUTPUT:-}" ]; then
-    echo "share_url=$SHARE_URL" >> "$GITHUB_OUTPUT"
-  fi
-  if [ -n "${ASTRAL_SITE_TOKEN:-}" ]; then
-    python3 "$ROOT/tools/quark_release/update_downloads_json.py" \
-      --token "$ASTRAL_SITE_TOKEN" \
-      --repo "${SITE_REPO:-AstralNext/next.astral.github.io}" \
-      --path "${SITE_DOWNLOADS_PATH:-public/downloads.json}" \
-      --branch "${SITE_BRANCH:-master}" \
-      --version "$TAG" \
-      --url "$SHARE_URL"
-  fi
-fi
+echo "==> HTTP upload ${#FILES[@]} files"
+python3 "$ROOT/tools/quark_release/quark_http.py" upload "$VERSION" "$RELEASE_DIR"
+exit $?

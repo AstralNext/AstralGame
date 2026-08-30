@@ -113,12 +113,22 @@ _RAW_CONFIG: dict[str, Any] | None = None
 
 def _load_config() -> dict[str, Any]:
     global _RAW_CONFIG
+    agent_code = os.environ.get("QUARK_AGENT_AUTH_CODE", "").strip()
     raw = os.environ.get("QUARK_DRIVE_CONFIG_JSON", "").strip()
+    cfg: dict[str, Any] | None = None
     if raw:
-        cfg = json.loads(raw)
-    elif _CONFIG_PATH.is_file() and not os.environ.get("QUARK_ACCESS_TOKEN"):
-        cfg = json.loads(_CONFIG_PATH.read_text(encoding="utf-8"))
-    elif os.environ.get("QUARK_ACCESS_TOKEN") and os.environ.get("QUARK_USER_ID"):
+        try:
+            cfg = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            if not agent_code:
+                raise SystemExit(f"QUARK_DRIVE_CONFIG_JSON invalid JSON: {exc}") from exc
+            cfg = None
+    if cfg is None and _CONFIG_PATH.is_file() and not os.environ.get("QUARK_ACCESS_TOKEN"):
+        try:
+            cfg = json.loads(_CONFIG_PATH.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            cfg = None
+    if cfg is None and os.environ.get("QUARK_ACCESS_TOKEN") and os.environ.get("QUARK_USER_ID"):
         uid = os.environ["QUARK_USER_ID"]
         cfg = {
             "deviceId": os.environ.get("QUARK_DEVICE_ID") or "github-actions-astral-game",
@@ -130,8 +140,20 @@ def _load_config() -> dict[str, Any]:
                 "userId": uid,
             },
         }
-    else:
-        raise SystemExit("missing QUARK_DRIVE_CONFIG_JSON or token fields")
+    if cfg is None:
+        # Bootstrap minimal config purely from QUARK_AGENT_AUTH_CODE.
+        # Access token / user id are dummies and will be replaced after code exchange.
+        if not agent_code:
+            raise SystemExit(
+                "missing Quark auth: set QUARK_DRIVE_CONFIG_JSON, or QUARK_ACCESS_TOKEN+QUARK_USER_ID, "
+                "or QUARK_AGENT_AUTH_CODE"
+            )
+        cfg = {
+            "deviceId": os.environ.get("QUARK_DEVICE_ID") or "github-actions-astral-game",
+            "platform": os.environ.get("QUARK_PLATFORM") or "Linux",
+            "currentUserId": "",
+        }
+
     uid = str(cfg.get("currentUserId") or "")
     account = cfg.get(uid) if uid else None
     if not isinstance(account, dict):
@@ -140,15 +162,16 @@ def _load_config() -> dict[str, Any]:
                 uid = str(val.get("userId") or key)
                 account = val
                 break
-    if not isinstance(account, dict) or not account.get("accessToken"):
-        raise SystemExit("quark config has no accessToken")
+    has_token = isinstance(account, dict) and bool(account.get("accessToken"))
+    if not has_token and not agent_code:
+        raise SystemExit("quark config has no accessToken and QUARK_AGENT_AUTH_CODE not set")
     _RAW_CONFIG = cfg
     return {
-        "user_id": str(account.get("userId") or uid),
+        "user_id": str(account.get("userId") or uid) if account else uid,
         "device_id": str(cfg.get("deviceId") or "github-actions-astral-game"),
         "platform": str(cfg.get("platform") or "Linux"),
-        "access_token": str(account["accessToken"]),
-        "refresh_token": str(account.get("refreshToken") or ""),
+        "access_token": str(account["accessToken"]) if has_token else "",
+        "refresh_token": str(account.get("refreshToken") or "") if account else "",
     }
 
 
@@ -233,16 +256,22 @@ class QuarkDrive:
             )
         return payload["data"]
 
-    def rotate(self) -> None:
+    def rotate(self) -> bool:
+        """Try to refresh access_token via refresh_token. Returns True on success."""
         refresh = self.cfg.get("refresh_token") or ""
         if not refresh:
-            return
+            print("token rotate skipped: no refresh_token", flush=True)
+            return False
         path = "/agent/v1/oauth/access_token/rotate"
-        payload = self._request(
-            "POST",
-            path,
-            {"refresh_token": refresh, "device_id": self.cfg["device_id"]},
-        )
+        try:
+            payload = self._request(
+                "POST",
+                path,
+                {"refresh_token": refresh, "device_id": self.cfg["device_id"]},
+            )
+        except SystemExit as exc:
+            print(f"token rotate request failed: {exc}", flush=True)
+            return False
         data = payload.get("data") or {}
         access = data.get("access_token") or data.get("accessToken")
         if payload.get("status") == 0 and access:
@@ -250,14 +279,74 @@ class QuarkDrive:
             new_refresh = data.get("refresh_token") or data.get("refreshToken")
             if new_refresh:
                 self.cfg["refresh_token"] = str(new_refresh)
+            new_uid = str(data.get("user_id") or data.get("userId") or self.cfg.get("user_id") or "")
+            if new_uid:
+                self.cfg["user_id"] = new_uid
             _persist_tokens(self.cfg["user_id"], self.access_token, self.cfg.get("refresh_token") or "")
             print("token rotated", flush=True)
-            return
+            return True
         print(
-            f"token rotate skipped: errno={payload.get('errno')} "
-            f"{payload.get('error_info') or ''}",
+            f"token rotate failed: status={payload.get('status')} errno={payload.get('errno')} "
+            f"{payload.get('agent_msg') or payload.get('error_info') or ''}",
             flush=True,
         )
+        return False
+
+    def login_by_agent_auth_code(self, code: str) -> bool:
+        """Exchange a CAC-style agent auth code for HTTP Open API access+refresh tokens."""
+        if not code:
+            return False
+        code = code.strip()
+        print(f"==> exchanging QUARK_AGENT_AUTH_CODE ({len(code)} chars) for HTTP token", flush=True)
+        path = "/agent/v1/oauth/access_token"
+        body: dict[str, Any] = {
+            "client_id": CLIENT_ID,
+            "grant_type": "authorization_code",
+            "code": code,
+            "device_id": self.cfg["device_id"],
+            "platform": self.cfg["platform"],
+        }
+        try:
+            payload = self._request("POST", path, body)
+        except SystemExit as exc:
+            print(f"CAC code exchange failed: {exc}", flush=True)
+            return False
+        status = payload.get("status")
+        if status is None:
+            # Some OAuth implementations return tokens directly without a status envelope.
+            status = 0 if (payload.get("access_token") or payload.get("accessToken")) else payload.get("code", -1)
+        data = payload.get("data") if isinstance(payload.get("data"), dict) else payload
+        access = data.get("access_token") or data.get("accessToken") or payload.get("access_token") or payload.get("accessToken")
+        refresh = data.get("refresh_token") or data.get("refreshToken") or payload.get("refresh_token") or payload.get("refreshToken")
+        uid = (
+            data.get("user_id")
+            or data.get("userId")
+            or data.get("uid")
+            or payload.get("user_id")
+            or payload.get("userId")
+            or payload.get("uid")
+            or self.cfg.get("user_id")
+            or ""
+        )
+        if int(status or -1) != 0 or not access:
+            print(
+                f"CAC code exchange rejected: status={status} errno={payload.get('errno')} "
+                f"{payload.get('agent_msg') or payload.get('error_info') or payload.get('msg') or payload}",
+                flush=True,
+            )
+            return False
+        self.access_token = str(access)
+        self.cfg["access_token"] = self.access_token
+        if refresh:
+            self.cfg["refresh_token"] = str(refresh)
+        if uid:
+            self.cfg["user_id"] = str(uid)
+        _persist_tokens(self.cfg["user_id"] or "", self.access_token, self.cfg.get("refresh_token") or "")
+        print(
+            f"CAC login ok user_id={self.cfg.get('user_id') or uid or '?'} access_len={len(self.access_token)}",
+            flush=True,
+        )
+        return True
 
     def user_info(self) -> dict[str, Any]:
         payload = self._request(
@@ -267,17 +356,59 @@ class QuarkDrive:
         )
         return self._ok(payload, "user info")
 
+    def _looks_like_auth_error(self, exc: SystemExit) -> bool:
+        msg = str(exc).lower()
+        return (
+            "未授权" in msg
+            or "token" in msg
+            or "auth" in msg
+            or "11001" in msg
+            or "1408" in msg
+            or "未登录" in msg
+        )
+
     def ensure_auth(self) -> None:
-        try:
-            self.user_info()
-            return
-        except SystemExit as exc:
-            msg = str(exc).lower()
-            if "未授权" not in msg and "token" not in msg and "auth" not in msg and "1408" not in msg:
-                raise
-            print(f"access token stale, rotating: {exc}", flush=True)
-        self.rotate()
-        self.user_info()
+        # 1) Fast path: existing token still works.
+        fast_err: SystemExit | None = None
+        if self.access_token:
+            try:
+                self.user_info()
+                return
+            except SystemExit as exc:
+                if not self._looks_like_auth_error(exc):
+                    raise
+                fast_err = exc
+                print(f"access token stale/invalid: {exc}", flush=True)
+
+        # 2) Try refresh_token rotate.
+        if self.rotate():
+            try:
+                self.user_info()
+                return
+            except SystemExit as exc:
+                if not self._looks_like_auth_error(exc):
+                    raise
+                print(f"rotated token still invalid: {exc}", flush=True)
+
+        # 3) Try CAC agent auth code exchange (new bootstrap path).
+        agent_code = os.environ.get("QUARK_AGENT_AUTH_CODE", "").strip()
+        if agent_code and self.login_by_agent_auth_code(agent_code):
+            try:
+                self.user_info()
+                return
+            except SystemExit as exc:
+                if not self._looks_like_auth_error(exc):
+                    raise
+                print(f"token from CAC code still invalid: {exc}", flush=True)
+
+        # All paths exhausted.
+        hint = ""
+        if not agent_code:
+            hint = " (set QUARK_AGENT_AUTH_CODE with a fresh CAC code to bootstrap)"
+        msg = f"quark authentication failed, all strategies exhausted{hint}"
+        if fast_err is not None:
+            msg += f"; first error: {fast_err}"
+        raise SystemExit(msg)
 
     def create_dir(self, name: str, parent_fid: str = "0") -> str:
         payload = self._request(
