@@ -61,77 +61,55 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}
 [Code]
 // ======================================================================
 // 安装/卸载前：强制关闭正在运行的 astral_game.exe 进程。
-// 如果不关闭，正在打开的 exe/dll 会被锁住，安装程序无法覆盖文件。
+// 用 tasklist + taskkill，避免依赖 Win32 API（Inno Setup 没内置）。
 // ======================================================================
+function IsAstralGameRunning(): Boolean;
+var
+  ResultCode: Integer;
+  CmdLine: String;
+  Output: String;
+begin
+  // tasklist /FI 过滤进程名；如果找得到会输出多行信息，找不到就只输出表头
+  CmdLine := '/C tasklist /FI "IMAGENAME eq astral_game.exe" /NH 2>nul | findstr /I /C:"astral_game.exe" >nul';
+  Result := Exec('cmd.exe', CmdLine, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  if Result then
+    Result := (ResultCode = 0); // findstr 找到 = 0
+end;
+
 procedure KillAstralGameProcesses(Force: Boolean);
 var
-  WM_CLOSE: Cardinal;
-  Wnd: HWND;
-  Pid: Cardinal;
   ResultCode: Integer;
   Retries: Integer;
 begin
-  WM_CLOSE := 16;
-
-  // 1) 第一步：找到所有主窗口并发送 WM_CLOSE（温和关闭，Flutter 有机会保存数据）
-  Wnd := FindWindowW('FLUTTER_RUNNER_WIN32_WINDOW', 'Astral Game');
-  if Wnd <> 0 then
-  begin
-    GetWindowThreadProcessId(Wnd, Pid);
-    PostMessage(Wnd, WM_CLOSE, 0, 0);
-    // 最多等 5 秒让进程自然退出
-    for Retries := 0 to 25 do
-    begin
-      if not IsProcessRunning(Pid) then break;
-      Sleep(200);
-    end;
-  end;
-
-  // 2) 兜底：用 wmic/windows 工具搜索所有名为 astral_game.exe 的进程，
-  //    如果 5 秒后还活着，就强制 taskkill /F（或第一次 Force=true 直接强杀）。
-  if Force then
+  // 1) 温和关闭：WM_QUERYENDSESSION + WM_CLOSE 级别——用 taskkill 不带 /F
+  //    这样 Flutter 有机会保存 bookmark、断开 P2P、写 SharedPreferences
+  if not Force then
   begin
     Exec('taskkill.exe',
-         '/F /IM astral_game.exe /T',
+         '/T /IM astral_game.exe',
          '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  end
-  else
-  begin
-    // 不 Force 也检查是否还活着，活着就 taskkill /F
-    if FindWindowW('FLUTTER_RUNNER_WIN32_WINDOW', 'Astral Game') <> 0 then
+    // 最多等 5 秒确认进程退出
+    for Retries := 0 to 10 do
     begin
-      Exec('taskkill.exe',
-           '/F /IM astral_game.exe /T',
-           '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    end
-    else
-    begin
-      // 窗口关了但进程可能还在（P2P isolate），再用 tasklist 兜底
-      Exec('taskkill.exe',
-           '/IM astral_game.exe /T',
-           '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-      Sleep(1500);
-      Exec('taskkill.exe',
-           '/F /IM astral_game.exe /T',
-           '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+      if not IsAstralGameRunning() then break;
+      Sleep(500);
     end;
   end;
 
-  Sleep(500);
-end;
-
-function IsProcessRunning(Pid: Cardinal): Boolean;
-var
-  Handle: THandle;
-begin
-  Result := False;
-  if Pid = 0 then exit;
-  Handle := OpenProcess(STANDARD_RIGHTS_READ or PROCESS_QUERY_INFORMATION or SYNCHRONIZE, False, Pid);
-  if Handle <> 0 then
+  // 2) 还活着或者 Force=true 直接强杀
+  if Force or IsAstralGameRunning() then
   begin
-    Result := WaitForSingleObject(Handle, 0) = WAIT_TIMEOUT;
-    CloseHandle(Handle);
+    Exec('taskkill.exe',
+         '/F /T /IM astral_game.exe',
+         '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Sleep(500);
+    // 再兜底一次：如果用户启动了多开或者有残留 zombie，用 PID 通配杀一遍
+    Exec('cmd.exe',
+         '/C wmic process where name="astral_game.exe" call terminate 2>nul >nul',
+         '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   end;
+
+  Sleep(300);
 end;
 
 function InitializeSetup(): Boolean;
@@ -150,15 +128,13 @@ end;
 function InitializeUninstall(): Boolean;
 begin
   Result := True;
-  // 卸载前也关闭正在运行的进程
+  // 卸载前直接强杀
   KillAstralGameProcesses(True);
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
-var
-  ResultCode: Integer;
 begin
-  // 在真正复制文件之前再最后杀一次（用户可能在安装向导过程中又把程序打开了）
+  // 真正复制文件之前再最后杀一次（用户可能在安装向导期间又把软件打开了）
   if CurStep = ssInstall then
   begin
     KillAstralGameProcesses(False);
