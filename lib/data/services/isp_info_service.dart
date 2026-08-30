@@ -92,11 +92,33 @@ class IspInfoService {
         return;
       }
 
-      // ⚠️ 关键：pconline 返回 GBK，必须用 charset_converter 解
-      final body = await CharsetConverter.decode('GBK', response.bodyBytes);
-      appLogger.i('[IspInfo] raw body: $body');
+      // ⚠️ 关键：pconline 返回 GBK。
+      // charset_converter 是平台实现，不同平台认的 charset 名不一样：
+      //   Windows: GB2312 / GB18030 / CP936 / windows-936 （"GBK" 有时不认）
+      //   Android: "GBK" 最稳
+      // 所以按优先级挨个试，直到一个成功。
+      const charsetCandidates = [
+        'GBK', 'GB18030', 'GB2312', 'CP936', 'windows-936', 'cp936',
+      ];
+      String? body;
+      String? usedCharset;
+      for (final cs in charsetCandidates) {
+        try {
+          body = await CharsetConverter.decode(cs, response.bodyBytes);
+          usedCharset = cs;
+          break;
+        } catch (_) {
+          // 这个 charset 不认，试下一个
+        }
+      }
+      if (body == null) {
+        appLogger.w('[IspInfo] 所有 GBK 变体 charset 都不被当前平台支持');
+        return;
+      }
+      appLogger.i('[IspInfo] 解码成功 charset=$usedCharset; body=$body');
+      final decoded = body!;
 
-      final m = _extractKeys(body, {'ip', 'pro', 'city', 'addr', 'err'});
+      final m = _extractKeys(decoded, {'ip', 'pro', 'city', 'addr', 'err'});
 
       if ((m['err'] ?? '').isNotEmpty) {
         appLogger.w('[IspInfo] pconline err=${m['err']}');
