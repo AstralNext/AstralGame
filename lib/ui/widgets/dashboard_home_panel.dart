@@ -2,9 +2,10 @@ import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/models/bookmark.dart';
 import 'package:astral_game/data/services/connection_service.dart';
 import 'package:astral_game/data/services/share_code_service.dart';
+import 'package:astral_game/data/services/shell_navigation_service.dart';
 import 'package:astral_game/data/state/room_state.dart';
 import 'package:astral_game/di.dart';
-import 'package:astral_game/ui/pages/bookmarks_page.dart';
+import 'package:astral_game/ui/widgets/app_snack_bar.dart';
 import 'package:astral_game/ui/widgets/astral_card.dart';
 import 'package:astral_game/ui/widgets/dashboard_connected_room_card.dart';
 import 'package:astral_game/ui/widgets/dashboard_create_join_pill.dart';
@@ -13,6 +14,25 @@ import 'package:astral_game/utils/client_runtime_info.dart';
 import 'package:astral_game/utils/room_display.dart';
 import 'package:flutter/material.dart';
 import 'package:signals/signals_flutter.dart';
+
+/// 联机页操作回调集合：窄/宽布局与 HomePanel 共用，避免逐层重复传参。
+class DashboardCallbacks {
+  const DashboardCallbacks({
+    required this.onCreateRoom,
+    required this.onJoinRoom,
+    required this.onShareRoom,
+    required this.onDisconnect,
+    required this.onBookmarkRoom,
+  });
+
+  final VoidCallback onCreateRoom;
+  final VoidCallback onJoinRoom;
+  final VoidCallback onShareRoom;
+  final VoidCallback onDisconnect;
+
+  /// 「收藏当前房间」按钮回调；未连接时 UI 不会触发。
+  final VoidCallback onBookmarkRoom;
+}
 
 /// 联机页：空闲为风景欢迎卡 + 底部信息 + FAB；已连接为房间卡。
 class DashboardHomePanel extends StatelessWidget {
@@ -28,11 +48,7 @@ class DashboardHomePanel extends StatelessWidget {
     this.isRoomHost = false,
     this.hostOnline = true,
     this.virtualIp,
-    required this.onCreateRoom,
-    required this.onJoinRoom,
-    required this.onShareRoom,
-    required this.onDisconnect,
-    required this.onBookmarkRoom,
+    required this.callbacks,
   });
 
   final bool isConnected;
@@ -47,13 +63,7 @@ class DashboardHomePanel extends StatelessWidget {
   final bool isRoomHost;
   final bool hostOnline;
   final String? virtualIp;
-  final VoidCallback onCreateRoom;
-  final VoidCallback onJoinRoom;
-  final VoidCallback onShareRoom;
-  final VoidCallback onDisconnect;
-
-  /// 「收藏当前房间」按钮回调；未连接时 UI 不会触发。
-  final VoidCallback onBookmarkRoom;
+  final DashboardCallbacks callbacks;
 
   @override
   Widget build(BuildContext context) {
@@ -82,9 +92,9 @@ class DashboardHomePanel extends StatelessWidget {
                 hostOnline: hostOnline,
                 isLinking: isLinking,
                 virtualIp: virtualIp,
-                onShare: onShareRoom,
-                onDisconnect: onDisconnect,
-                onBookmark: onBookmarkRoom,
+                onShare: callbacks.onShareRoom,
+                onDisconnect: callbacks.onDisconnect,
+                onBookmark: callbacks.onBookmarkRoom,
                 isBookmarked: isBookmarked,
               );
             })
@@ -93,8 +103,8 @@ class DashboardHomePanel extends StatelessWidget {
               username: username?.trim().isNotEmpty == true
                   ? username!.trim()
                   : 'Player',
-              onCreate: onCreateRoom,
-              onJoin: onJoinRoom,
+              onCreate: callbacks.onCreateRoom,
+              onJoin: callbacks.onJoinRoom,
             ),
     );
   }
@@ -119,61 +129,55 @@ class _IdleHome extends StatelessWidget {
     final version = ClientRuntimeInfo.appVersion;
     final os = ClientRuntimeInfo.operatingSystemVersion;
 
-    return Stack(
-      clipBehavior: Clip.none,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        Expanded(child: DailySceneryCard(username: username)),
+        const SizedBox(height: 16),
+        Watch((context) {
+          final list = getIt<RoomState>().bookmarksList.value;
+          if (list.isEmpty) return const SizedBox.shrink();
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: _BookmarkPreviewCard(
+              bookmarks: list,
+              onOpenAll: () =>
+                  getIt<ShellNavigationService>().openBookmarksTab(),
+              onJoin: (b) => _handlePreviewJoin(context, b),
+            ),
+          );
+        }),
+        // 版本信息与右侧「创建/加入」胶囊同一行、底部对齐
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Expanded(
-              child: DailySceneryCard(username: username),
-            ),
-            const SizedBox(height: 16),
-            Watch((context) {
-              final list = getIt<RoomState>().bookmarksList.value;
-              if (list.isEmpty) return const SizedBox.shrink();
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: _BookmarkPreviewCard(
-                  bookmarks: list,
-                  onOpenAll: () {
-                    Navigator.of(context).push<void>(
-                      MaterialPageRoute(
-                        builder: (_) => const BookmarksPage(),
-                      ),
-                    );
-                  },
-                  onJoin: (b) => _handlePreviewJoin(context, b),
-                ),
-              );
-            }),
-            Text(
-              'v$version',
-              style: textTheme.labelMedium?.copyWith(
-                color: palette.textSecondary,
-                fontWeight: FontWeight.w600,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'v$version',
+                    style: textTheme.labelMedium?.copyWith(
+                      color: palette.textSecondary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    os,
+                    style: textTheme.labelSmall?.copyWith(
+                      color: palette.textTertiary,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              os,
-              style: textTheme.labelSmall?.copyWith(
-                color: palette.textTertiary,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            // 给右下角胶囊按钮留空
-            const SizedBox(height: 64),
+            const SizedBox(width: 16),
+            CreateJoinPill(onCreate: onCreate, onJoin: onJoin),
           ],
-        ),
-        Positioned(
-          right: 0,
-          bottom: 4,
-          child: CreateJoinPill(
-            onCreate: onCreate,
-            onJoin: onJoin,
-          ),
         ),
       ],
     );
@@ -215,23 +219,14 @@ class _BookmarkPreviewCard extends StatelessWidget {
                   ),
                 ),
               ),
-              TextButton(
-                onPressed: onOpenAll,
-                child: const Text('查看全部'),
-              ),
+              TextButton(onPressed: onOpenAll, child: const Text('查看全部')),
             ],
           ),
           const SizedBox(height: 2),
           for (var i = 0; i < preview.length; i++) ...[
             if (i > 0)
-              Divider(
-                height: 1,
-                color: palette.divider.withValues(alpha: 0.3),
-              ),
-            _PreviewTile(
-              bookmark: preview[i],
-              onTap: () => onJoin(preview[i]),
-            ),
+              Divider(height: 1, color: palette.divider.withValues(alpha: 0.3)),
+            _PreviewTile(bookmark: preview[i], onTap: () => onJoin(preview[i])),
           ],
         ],
       ),
@@ -304,9 +299,7 @@ Future<void> _handlePreviewJoin(BuildContext context, Bookmark b) async {
   final cs = getIt<ConnectionService>();
   final rs = getIt<RoomState>();
   if (cs.isConnecting) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('正在连接中，请稍候…')),
-    );
+    showAppSnackBar(context, '正在连接中，请稍候…');
     return;
   }
   try {
@@ -318,10 +311,7 @@ Future<void> _handlePreviewJoin(BuildContext context, Bookmark b) async {
     return;
   } catch (e) {
     if (!context.mounted) return;
-    final msg = e is ShareCodeException
-        ? e.message
-        : '加入失败：${e.runtimeType}';
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(msg)));
+    final msg = e is ShareCodeException ? e.message : '加入失败：${e.runtimeType}';
+    showAppSnackBar(context, msg);
   }
 }

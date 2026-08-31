@@ -1,5 +1,6 @@
 import 'package:astral_game/data/services/node_management_service.dart';
 import 'package:astral_game/di.dart';
+import 'package:astral_game/ui/widgets/app_snack_bar.dart';
 import 'package:astral_game/ui/widgets/avatar_widget.dart';
 import 'package:astral_game/utils/image_picker_helper.dart';
 import 'package:flutter/material.dart';
@@ -7,7 +8,9 @@ import 'package:flutter/material.dart';
 /// 全局编辑资料弹窗（侧栏 / 顶栏头像共用）。
 Future<void> showEditProfileDialog(BuildContext context) async {
   final nodes = getIt<NodeManagementService>();
-  final nameController = TextEditingController(text: nodes.currentUsername.value);
+  final nameController = TextEditingController(
+    text: nodes.currentUsername.value,
+  );
   var avatar = nodes.currentUserAvatar.value;
 
   final result = await showDialog<bool>(
@@ -22,14 +25,12 @@ Future<void> showEditProfileDialog(BuildContext context) async {
               children: [
                 GestureDetector(
                   onTap: () async {
-                    final bytes = await ImagePickerHelper.pickImageFromGallery();
+                    final bytes =
+                        await ImagePickerHelper.pickImageFromGallery();
                     if (bytes == null) return;
                     setState(() => avatar = bytes);
                   },
-                  child: AvatarWidget(
-                    avatar: avatar,
-                    size: 72,
-                  ),
+                  child: AvatarWidget(avatar: avatar, size: 72),
                 ),
                 const SizedBox(height: 20),
                 TextField(
@@ -68,8 +69,6 @@ Future<void> showEditProfileDialog(BuildContext context) async {
   );
 
   if (result == true && context.mounted) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('资料已更新')),
-    );
+    showAppSnackBar(context, '资料已更新');
   }
 }

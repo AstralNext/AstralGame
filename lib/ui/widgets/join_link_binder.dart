@@ -7,6 +7,7 @@ import 'package:astral_game/data/services/share_code_service.dart';
 import 'package:astral_game/data/services/shell_navigation_service.dart';
 import 'package:astral_game/data/state/room_state.dart';
 import 'package:astral_game/di.dart';
+import 'package:astral_game/ui/widgets/app_snack_bar.dart';
 import 'package:astral_game/utils/room_share.dart';
 import 'package:flutter/material.dart';
 import 'package:signals/signals_flutter.dart';
@@ -121,7 +122,7 @@ class _JoinLinkBinderState extends State<JoinLinkBinder> {
   void _toast(String msg) {
     final ctx = context;
     if (!ctx.mounted) return;
-    ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(msg)));
+    showAppSnackBar(ctx, msg);
   }
 
   @override

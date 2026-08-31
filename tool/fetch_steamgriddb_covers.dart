@@ -16,15 +16,10 @@ import 'dart:io';
 import 'dart:typed_data';
 
 const _apiBase = 'https://www.steamgriddb.com/api/v2';
-const _steamCdn =
-    'https://cdn.cloudflare.steamstatic.com/steam/apps';
+const _steamCdn = 'https://cdn.cloudflare.steamstatic.com/steam/apps';
 
 class _GameTarget {
-  const _GameTarget({
-    required this.id,
-    this.steamAppId,
-    this.sgdbGameId,
-  });
+  const _GameTarget({required this.id, this.steamAppId, this.sgdbGameId});
 
   final String id;
   final int? steamAppId;
@@ -37,7 +32,7 @@ Future<List<_GameTarget>> _loadTargets(Directory root) async {
   final client = HttpClient();
   try {
     final req = await client
-        .getUrl(Uri.parse('https://astral.fan/gamerules.json'))
+        .getUrl(Uri.parse('https://next.astral.fan/gamerules.json'))
         .timeout(const Duration(seconds: 12));
     final res = await req.close().timeout(const Duration(seconds: 12));
     if (res.statusCode >= 200 && res.statusCode < 300) {
@@ -79,11 +74,9 @@ Future<List<_GameTarget>> _loadTargets(Directory root) async {
     final steamAppId = steam is num ? steam.toInt() : null;
     final sgdbGameId = sgdb is num ? sgdb.toInt() : null;
     if (steamAppId == null && sgdbGameId == null) continue;
-    out.add(_GameTarget(
-      id: id,
-      steamAppId: steamAppId,
-      sgdbGameId: sgdbGameId,
-    ));
+    out.add(
+      _GameTarget(id: id, steamAppId: steamAppId, sgdbGameId: sgdbGameId),
+    );
   }
   return out;
 }
@@ -265,7 +258,8 @@ Future<void> _downloadBestAsset({
     final path = Uri.tryParse(url)?.path.toLowerCase() ?? '';
     final mime = '${item['mime'] ?? ''}'.toLowerCase();
     final okExt = preferFormats.any(path.endsWith);
-    final okMime = mime.contains('png') ||
+    final okMime =
+        mime.contains('png') ||
         mime.contains('jpeg') ||
         mime.contains('jpg') ||
         mime.contains('webp');
@@ -276,13 +270,10 @@ Future<void> _downloadBestAsset({
       break;
     }
   }
-  chosen ??= sorted.cast<Map<String, dynamic>?>().firstWhere(
-        (item) {
-          final url = item?['url']?.toString() ?? '';
-          return !url.toLowerCase().endsWith('.ico');
-        },
-        orElse: () => null,
-      );
+  chosen ??= sorted.cast<Map<String, dynamic>?>().firstWhere((item) {
+    final url = item?['url']?.toString() ?? '';
+    return !url.toLowerCase().endsWith('.ico');
+  }, orElse: () => null);
 
   if (chosen == null) {
     stderr.writeln('  $kind: 无可用 PNG/JPEG（仅有 ICO），跳过');

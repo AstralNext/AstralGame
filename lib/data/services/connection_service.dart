@@ -24,7 +24,7 @@ import 'package:signals/signals_core.dart';
 
 /// 连接服务：建房 / 进房（6 位 32 进制短码或离线 Base64）/ 会话，不落盘房间历史。
 ///
-/// 进网方式：双方共享随机 [network_name] + [network_secret]（旧版密码进房）。
+/// 进网方式：双方共享随机 [network_name] + [network_secret]。
 class ConnectionService {
   ConnectionService(
     this._p2pService,

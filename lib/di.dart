@@ -30,6 +30,7 @@ import 'package:astral_game/data/services/shell_navigation_service.dart';
 import 'package:astral_game/data/services/server_persistence_service.dart';
 import 'package:astral_game/data/services/shortcut_service.dart';
 import 'package:astral_game/data/services/share_code_service.dart';
+import 'package:astral_game/data/state/bookmark_search_state.dart';
 import 'package:astral_game/data/state/room_state.dart';
 import 'package:astral_game/data/state/server_state.dart';
 import 'package:astral_game/data/state/settings_state.dart';
@@ -105,7 +106,9 @@ Future<void> setupDI() async {
   unawaited(getIt<P2PService>().ensureInitialized());
   await ClientRuntimeInfo.warmUp();
 
-  getIt.registerSingleton<ConnectivityStatusService>(ConnectivityStatusService());
+  getIt.registerSingleton<ConnectivityStatusService>(
+    ConnectivityStatusService(),
+  );
   _registerDispose<ConnectivityStatusService>((s) => s.dispose(), async: true);
   unawaited(getIt<ConnectivityStatusService>().start());
 
@@ -177,7 +180,9 @@ Future<void> setupDI() async {
   unawaited(getIt<GameAssistRulesService>().ensureLoaded());
   getIt.registerLazySingleton<HitokotoService>(() => HitokotoService());
   _registerDispose<HitokotoService>((s) => s.close());
-  getIt.registerLazySingleton<AlcyWallpaperService>(() => AlcyWallpaperService());
+  getIt.registerLazySingleton<AlcyWallpaperService>(
+    () => AlcyWallpaperService(),
+  );
   _registerDispose<AlcyWallpaperService>((s) => s.close());
 
   getIt.registerLazySingleton<ServerState>(() => ServerState());
@@ -196,10 +201,7 @@ Future<void> setupDI() async {
   await serverState.loadFromPersistence();
 
   getIt.registerLazySingleton<P2PConfigService>(
-    () => P2PConfigService(
-      getIt<AppSettingsService>(),
-      getIt<ServerState>(),
-    ),
+    () => P2PConfigService(getIt<AppSettingsService>(), getIt<ServerState>()),
   );
   getIt.registerLazySingleton<OpenGamesService>(
     () => OpenGamesService(
@@ -221,6 +223,8 @@ Future<void> setupDI() async {
   );
 
   getIt.registerLazySingleton<RoomState>(() => RoomState());
+
+  getIt.registerLazySingleton<BookmarkSearchState>(() => BookmarkSearchState());
 
   getIt.registerLazySingleton<RoomPersistenceService>(
     () => RoomPersistenceService(),

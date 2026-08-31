@@ -69,6 +69,28 @@ abstract class Bookmark with _$Bookmark {
       contentHash == hashInviteContent(other);
 }
 
+/// 生成不与 [takenNames] 重名的收藏名：重名时追加序号（"星露谷局"、"星露谷局 2"…）。
+String uniqueBookmarkName(Iterable<String> takenNames, String baseName) {
+  final name = baseName.trim();
+  final taken = takenNames.toSet();
+  if (!taken.contains(name)) return name;
+  var i = 2;
+  while (taken.contains('$name $i')) {
+    i++;
+  }
+  return '$name $i';
+}
+
+/// 一键收藏的自动命名：游戏名 → 房间名 → 网络名。
+String autoBookmarkName(RoomInvitePayload p) {
+  final candidates = <String>[
+    p.gameName.trim(),
+    (p.displayName ?? '').trim(),
+    p.networkName,
+  ];
+  return candidates.firstWhere((s) => s.isNotEmpty, orElse: () => '未命名房间');
+}
+
 /// 对 [RoomInvitePayload] 做 SHA-256 哈希。
 ///
 /// 参与哈希的字段：gameName / networkName / networkSecret / peers.uri（先排序保证稳定）。

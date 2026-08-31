@@ -16,7 +16,6 @@ import 'package:win32_registry/win32_registry.dart';
 ///   图标支持 PNG-in-ICO（Windows Vista+ 原生支持），纯 Dart 写 ICO 头。
 /// - Android：用 ShortcutManager.requestPinShortcut()。
 class ShortcutService {
-
   const ShortcutService();
   static const _channel = MethodChannel('astral.game/shortcut');
 
@@ -77,8 +76,7 @@ class ShortcutService {
     if (ref == null) return null;
 
     // 1) asset 或 hybrid 本地路径
-    if (ref.kind == GameMediaKind.asset ||
-        ref.kind == GameMediaKind.hybrid) {
+    if (ref.kind == GameMediaKind.asset || ref.kind == GameMediaKind.hybrid) {
       final assetPath = ref.path;
       if (assetPath != null) {
         try {
@@ -88,16 +86,14 @@ class ShortcutService {
             bytes.lengthInBytes,
           );
           if (list.isNotEmpty) return list;
-        } catch (_) {}
+        } catch (e) {
+          appLogger.t('shortcut android icon load asset fail: $e');
+        }
       }
     }
 
-    // 2) network 或 hybrid 远程兜底
-    final url = ref.kind == GameMediaKind.network
-        ? ref.url
-        : ref.kind == GameMediaKind.hybrid
-            ? ref.url
-            : null;
+    // 2) network 或 hybrid 的远程 URL
+    final url = ref.url;
     if (url != null) {
       try {
         final client = HttpClient();
@@ -111,7 +107,9 @@ class ShortcutService {
           final result = sink.toBytes();
           if (result.isNotEmpty) return result;
         }
-      } catch (_) {}
+      } catch (e) {
+        appLogger.t('shortcut android icon download fail: $e');
+      }
     }
     return null;
   }
@@ -150,22 +148,19 @@ class ShortcutService {
     final finalIcon = iconPath ?? exe;
 
     final lnkPath = '$desktopDir\\$safeName.lnk';
-    final result = _writeWindowsLnk(
+    _writeWindowsLnk(
       lnkPath: lnkPath,
       target: exe,
       arguments: url,
       iconPath: finalIcon,
       description: '加入 Astral Game 房间：${bookmark.displayName}',
     );
-    if (!result) {
-      throw ShortcutException('创建 .lnk 失败');
-    }
     appLogger.i('[Shortcut] 创建桌面快捷方式: $lnkPath');
     return true;
   }
 
   /// 用 win32 COM 创建真正的 Windows 快捷方式（.lnk）。
-  bool _writeWindowsLnk({
+  void _writeWindowsLnk({
     required String lnkPath,
     required String target,
     required String arguments,
@@ -191,13 +186,14 @@ class ShortcutService {
       shellLink.release();
 
       if (hr < 0) {
-        appLogger.e('[Shortcut] IPersistFile.save 失败: HRESULT=0x${hr.toRadixString(16)}');
-        return false;
+        throw ShortcutException('创建快捷方式失败: HRESULT=0x${hr.toRadixString(16)}');
       }
-      return File(lnkPath).existsSync();
+      if (!File(lnkPath).existsSync()) {
+        throw ShortcutException('快捷方式创建后文件不存在');
+      }
     } catch (e) {
-      appLogger.e('[Shortcut] 创建 .lnk 异常: $e');
-      return false;
+      if (e is ShortcutException) rethrow;
+      throw ShortcutException('创建快捷方式失败: $e');
     } finally {
       calloc.free(lnkPathPtr);
       calloc.free(targetPtr);
@@ -232,12 +228,26 @@ class ShortcutService {
         if (Directory(expanded).existsSync()) return expanded;
       }
     } catch (e) {
-      appLogger.w('[Shortcut] 读取桌面路径失败: $e');
+      appLogger.w('[Shortcut] 读取桌面路径(注册表)失败: $e');
     }
+
     final home = Platform.environment['USERPROFILE'];
     if (home != null) {
       final d = '$home\\Desktop';
       if (Directory(d).existsSync()) return d;
+    }
+
+    // OneDrive 重定向桌面兜底（注册表读不到时）
+    for (final env in const [
+      'OneDrive',
+      'OneDriveCommercial',
+      'OneDriveConsumer',
+    ]) {
+      final base = Platform.environment[env];
+      if (base != null && base.isNotEmpty) {
+        final d = '$base\\Desktop';
+        if (Directory(d).existsSync()) return d;
+      }
     }
     return null;
   }
@@ -265,7 +275,7 @@ class ShortcutService {
       return null;
     }
 
-    final url = ref.kind == GameMediaKind.network ? ref.url! : ref.url;
+    final url = ref.url;
     if (url == null) return null;
     try {
       final client = HttpClient();
@@ -304,14 +314,19 @@ class ShortcutService {
       16,
       8, // width 4 bytes + height 4 bytes = 8 bytes
     );
-    final w = bd.getUint32(0, Endian.big);
-    final h = bd.getUint32(4, Endian.big);
+    // PNG 尺寸字段为大端；显式传 Endian.big 防止误改（默认值相同，lint 报冗余）。
+    final w =
+        // ignore: avoid_redundant_argument_values
+        bd.getUint32(0, Endian.big);
+    final h =
+        // ignore: avoid_redundant_argument_values
+        bd.getUint32(4, Endian.big);
 
     // ICO header: 6 字节
     final header = ByteData(6);
-    header.setUint16(0, 0, Endian.little); // reserved
-    header.setUint16(2, 1, Endian.little); // type = 1 (icon)
-    header.setUint16(4, 1, Endian.little); // count = 1
+    header.setUint16(0, 0); // reserved
+    header.setUint16(2, 1); // type = 1 (icon)
+    header.setUint16(4, 1); // count = 1
 
     // ICO directory entry: 16 字节
     final dir = ByteData(16);
@@ -319,10 +334,10 @@ class ShortcutService {
     dir.setUint8(1, h > 255 ? 0 : h);
     dir.setUint8(2, 0); // color count
     dir.setUint8(3, 0); // reserved
-    dir.setUint16(4, 1, Endian.little); // color planes
-    dir.setUint16(6, 32, Endian.little); // bits per pixel
-    dir.setUint32(8, pngBytes.length, Endian.little); // size of image data
-    dir.setUint32(12, 22, Endian.little); // offset = 6 + 16 = 22
+    dir.setUint16(4, 1); // color planes
+    dir.setUint16(6, 32); // bits per pixel
+    dir.setUint32(8, pngBytes.length); // size of image data
+    dir.setUint32(12, 22); // offset = 6 + 16 = 22
 
     final output = <int>[
       ...header.buffer.asUint8List(),
@@ -341,8 +356,4 @@ class ShortcutException implements Exception {
   String toString() => message;
 }
 
-enum ShortcutErrorCode {
-  noPermission,
-  unsupported,
-  desktopNotFound,
-}
+enum ShortcutErrorCode { noPermission, unsupported, desktopNotFound }

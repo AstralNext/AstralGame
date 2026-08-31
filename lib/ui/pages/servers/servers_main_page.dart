@@ -1,5 +1,7 @@
 import 'package:astral_game/config/app_dimensions.dart';
+import 'package:astral_game/ui/widgets/app_snack_bar.dart';
 import 'package:astral_game/ui/widgets/astral_card.dart';
+import 'package:astral_game/ui/widgets/empty_state.dart';
 import 'package:flutter/material.dart';
 import 'package:signals/signals_flutter.dart';
 import 'package:astral_game/di.dart';
@@ -55,8 +57,9 @@ class _ServersMainPageState extends State<ServersMainPage> {
       final latencies = _serverStatusState.serverLatencies.value;
 
       if (visible) {
-        final fingerprint =
-            servers.map((s) => '${s.id}:${s.url}:${s.enable}').join('|');
+        final fingerprint = servers
+            .map((s) => '${s.id}:${s.url}:${s.enable}')
+            .join('|');
         if (_lastServersFingerprint != fingerprint) {
           _lastServersFingerprint = fingerprint;
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -71,30 +74,13 @@ class _ServersMainPageState extends State<ServersMainPage> {
       }
 
       if (servers.isEmpty) {
-        return Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.dns_outlined,
-                size: 64,
-                color: Theme.of(context).colorScheme.outline,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                '暂无服务器',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.outline,
-                    ),
-              ),
-              const SizedBox(height: 16),
-              FilledButton.icon(
-                onPressed: () => showAddServerDialog(context),
-                icon: const Icon(Icons.add),
-                label: const Text('添加服务器'),
-              ),
-            ],
-          ),
+        return EmptyState(
+          icon: Icons.dns_outlined,
+          title: '暂无服务器',
+          actionLabel: '添加服务器',
+          actionStyle: EmptyActionStyle.filled,
+          actionIcon: Icons.add,
+          onAction: () => showAddServerDialog(context),
         );
       }
 
@@ -108,16 +94,11 @@ class _ServersMainPageState extends State<ServersMainPage> {
         itemCount: servers.length,
         buildDefaultDragHandles: false,
         proxyDecorator: (child, index, animation) {
-          return Material(
-            color: Colors.transparent,
-            child: child,
-          );
+          return Material(color: Colors.transparent, child: child);
         },
-        onReorder: (oldIndex, newIndex) {
+        // Flutter 3.41+ onReorderItem: newIndex 已自动扣除 oldIndex 删除影响，无需手动调整。
+        onReorderItem: (oldIndex, newIndex) {
           final newServers = List<ServerMod>.from(servers);
-          if (oldIndex < newIndex) {
-            newIndex -= 1;
-          }
           final server = newServers.removeAt(oldIndex);
           newServers.insert(newIndex, server);
           _serverState.reorderServers(newServers);
@@ -127,8 +108,9 @@ class _ServersMainPageState extends State<ServersMainPage> {
           final status = statuses[server.id] ?? ServerStatus.unknown;
           final latency = latencies[server.id];
           final colorScheme = Theme.of(context).colorScheme;
-          final addressLine =
-              BlockedServers.isBlocked(server.url) ? '***' : server.url;
+          final addressLine = BlockedServers.isBlocked(server.url)
+              ? '***'
+              : server.url;
           final subtitleText = addressLine;
 
           return ReorderableDragStartListener(
@@ -160,9 +142,7 @@ class _ServersMainPageState extends State<ServersMainPage> {
                             latency != null ? '${latency}ms' : '--',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context)
-                                .textTheme
-                                .labelMedium
+                            style: Theme.of(context).textTheme.labelMedium
                                 ?.copyWith(
                                   color: colorScheme.outline,
                                   fontWeight: FontWeight.w600,
@@ -190,10 +170,7 @@ class _ServersMainPageState extends State<ServersMainPage> {
                         child: Switch(
                           value: server.enable,
                           onChanged: (value) {
-                            _serverState.toggleServerEnabled(
-                              server.id,
-                              value,
-                            );
+                            _serverState.toggleServerEnabled(server.id, value);
                           },
                         ),
                       ),
@@ -202,11 +179,10 @@ class _ServersMainPageState extends State<ServersMainPage> {
                         onSelected: (value) {
                           if (value == 'edit') {
                             if (BlockedServers.isBlocked(server.url)) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('此服务器不可编辑'),
-                                  duration: Duration(seconds: 2),
-                                ),
+                              showAppSnackBar(
+                                context,
+                                '此服务器不可编辑',
+                                duration: const Duration(seconds: 2),
                               );
                             } else {
                               showEditServerDialog(context, server: server);
@@ -216,8 +192,9 @@ class _ServersMainPageState extends State<ServersMainPage> {
                           }
                         },
                         itemBuilder: (context) {
-                          final isBlocked =
-                              BlockedServers.isBlocked(server.url);
+                          final isBlocked = BlockedServers.isBlocked(
+                            server.url,
+                          );
                           final scheme = Theme.of(context).colorScheme;
                           return [
                             PopupMenuItem(

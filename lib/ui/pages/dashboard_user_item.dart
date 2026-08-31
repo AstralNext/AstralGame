@@ -2,6 +2,7 @@ import 'package:astral_game/config/constants.dart';
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/models/enhanced_node_info.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
+import 'package:astral_game/ui/widgets/app_snack_bar.dart';
 import 'package:astral_game/ui/widgets/grouped_tile_shape.dart';
 import 'package:astral_game/utils/firewall_presentation.dart';
 import 'package:astral_game/utils/network_presentation.dart';
@@ -29,6 +30,7 @@ class DashboardUserItem extends StatefulWidget {
   final int index;
   final int count;
   final bool compact;
+
   /// 是否为当前房间房主。
   final bool isRoomHost;
 
@@ -49,8 +51,9 @@ class _DashboardUserItemState extends State<DashboardUserItem> {
     final os = OsPresentation.forNode(node);
     final network = NetworkPresentation.fromWire(node.peerNetwork);
     final firewall = FirewallPresentation.fromWire(node.peerFirewall);
-    final versionNumber =
-        PlatformVersionParser.getVersionNumber(node.baseInfo.version);
+    final versionNumber = PlatformVersionParser.getVersionNumber(
+      node.baseInfo.version,
+    );
     final peerEnvLine = _peerClientEnvLabel(node);
 
     return RepaintBoundary(
@@ -101,12 +104,7 @@ class _DashboardUserItemState extends State<DashboardUserItem> {
       onTap: () => _copyIp(context, hasIpv4: hasIpv4, ipv4: node.ipv4),
       colorScheme: colorScheme,
       child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          widget.grouped ? 16 : 12,
-          12,
-          12,
-          12,
-        ),
+        padding: EdgeInsets.fromLTRB(widget.grouped ? 16 : 12, 12, 12, 12),
         child: _UserMainContentRow(
           node: node,
           colorScheme: colorScheme,
@@ -147,17 +145,13 @@ class _DashboardUserItemState extends State<DashboardUserItem> {
   }) async {
     if (!hasIpv4) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('该成员尚未分配 IP')),
-      );
+      showAppSnackBar(context, '该成员尚未分配 IP');
       return;
     }
     await Clipboard.setData(ClipboardData(text: ipv4));
     HapticFeedback.selectionClick();
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('已复制 IP：$ipv4')),
-    );
+    showAppSnackBar(context, '已复制 IP：$ipv4');
   }
 
   /// 单行摘要（列表内展示）：仅「系统版本 · 应用版本」，例如 `10.0.26200 · 1.0.41`。
@@ -222,7 +216,6 @@ class _DashboardUserItemState extends State<DashboardUserItem> {
         return raw;
     }
   }
-
 }
 
 // ─── 拆分后的子 Widget ───────────────────────────────────────────────────────

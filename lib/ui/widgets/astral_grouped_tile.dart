@@ -3,17 +3,24 @@ import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/ui/widgets/grouped_tile_shape.dart';
 import 'package:flutter/material.dart';
 
-/// 分组卡片内的设置行（MD3：主色图标 + 内部分隔线，无卡片描边）。
+/// 分组卡片内统一的设置行（MD3）：
+/// 主色图标 + 标题/副标题 + trailing 控件（开关/按钮/chevron）+ 缩进分隔线。
+///
+/// 三种行型：
+/// - 导航行：传 [onTap]，不传 [trailing] → 自动显示 chevron
+/// - 控件行：传 [trailing]（如 [Switch]），[onTap] 可选（整行点击切换开关）
+/// - 纯展示行：都不传
 class AstralGroupedTile extends StatelessWidget {
   const AstralGroupedTile({
     super.key,
     required this.icon,
     required this.label,
-    required this.onTap,
     required this.index,
     required this.count,
     this.subtitle,
     this.subtitleMuted = false,
+    this.onTap,
+    this.trailing,
     this.showDivider = true,
   });
 
@@ -21,7 +28,10 @@ class AstralGroupedTile extends StatelessWidget {
   final String label;
   final String? subtitle;
   final bool subtitleMuted;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+
+  /// trailing 控件（Switch/按钮/外链图标等）；为 null 且有 onTap 时显示 chevron。
+  final Widget? trailing;
   final int index;
   final int count;
   final bool showDivider;
@@ -34,6 +44,14 @@ class AstralGroupedTile extends StatelessWidget {
     final divider = theme.dividerColor;
     final shape = groupedTileShape(index: index, count: count);
     final borderRadius = groupedTileBorderRadius(index: index, count: count);
+
+    Widget? tail = trailing;
+    if (tail == null && onTap != null) {
+      tail = Icon(
+        Icons.chevron_right_rounded,
+        color: scheme.onSurfaceVariant.withValues(alpha: 0.65),
+      );
+    }
 
     return Column(
       children: [
@@ -89,10 +107,10 @@ class AstralGroupedTile extends StatelessWidget {
                       ],
                     ),
                   ),
-                  Icon(
-                    Icons.chevron_right_rounded,
-                    color: scheme.onSurfaceVariant.withValues(alpha: 0.65),
-                  ),
+                  if (tail != null) ...[
+                    const SizedBox(width: 12),
+                    tail,
+                  ],
                 ],
               ),
             ),

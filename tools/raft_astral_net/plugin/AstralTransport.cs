@@ -496,7 +496,7 @@ namespace AstralRaftNet
 
         private static void StartLanBroadcast()
         {
-            string name = "Astral";
+            string name = "ASGAME";
             try
             {
                 name = SteamFriends.GetPersonaName() ?? name;

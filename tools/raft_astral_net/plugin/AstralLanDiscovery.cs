@@ -51,7 +51,7 @@ namespace AstralRaftNet
         private static volatile bool _broadcastRunning;
         private static int _tcpPort = AstralTransport.DefaultPort;
         private static bool _password;
-        private static string _name = "Astral";
+        private static string _name = "ASGAME";
 
         public static void EnsureReceiver()
         {
@@ -92,7 +92,7 @@ namespace AstralRaftNet
             EnsureReceiver();
             _tcpPort = tcpPort <= 0 ? AstralTransport.DefaultPort : tcpPort;
             _password = password;
-            _name = string.IsNullOrEmpty(name) ? "Astral" : name;
+            _name = string.IsNullOrEmpty(name) ? "ASGAME" : name;
             if (_broadcastRunning)
             {
                 return;
@@ -124,8 +124,9 @@ namespace AstralRaftNet
                     _socket.Close();
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                AstralLog.Info("StopAll socket close: " + ex.Message);
             }
 
             _socket = null;
@@ -144,8 +145,9 @@ namespace AstralRaftNet
             {
                 local = SteamUser.GetSteamID().m_SteamID;
             }
-            catch
+            catch (Exception ex)
             {
+                AstralLog.Info("Snapshot SteamUser unavailable: " + ex.Message);
             }
 
             lock (Sync)
@@ -252,8 +254,9 @@ namespace AstralRaftNet
                     {
                         local = SteamUser.GetSteamID().m_SteamID;
                     }
-                    catch
+                    catch (Exception ex)
                     {
+                        AstralLog.Info("RecvLoop SteamUser unavailable: " + ex.Message);
                     }
 
                     if (local != 0 && room.SteamId == local)
@@ -266,8 +269,14 @@ namespace AstralRaftNet
                         Rooms[room.SteamId] = room;
                     }
                 }
-                catch (SocketException)
+                catch (SocketException ex)
                 {
+                    if (_recvRunning &&
+                        ex.SocketErrorCode != SocketError.TimedOut &&
+                        ex.SocketErrorCode != SocketError.Interrupted)
+                    {
+                        AstralLog.Error("LAN recv socket: " + ex.SocketErrorCode + " " + ex.Message);
+                    }
                 }
                 catch (ObjectDisposedException)
                 {
@@ -295,8 +304,9 @@ namespace AstralRaftNet
             {
                 socket.SendTo(packet, new IPEndPoint(IPAddress.Broadcast, DiscoveryPort));
             }
-            catch
+            catch (Exception ex)
             {
+                AstralLog.Info("LAN bcast 255.255.255.255 fail: " + ex.Message);
             }
 
             try
@@ -327,14 +337,16 @@ namespace AstralRaftNet
                         {
                             socket.SendTo(packet, new IPEndPoint(new IPAddress(bcast), DiscoveryPort));
                         }
-                        catch
+                        catch (Exception ex)
                         {
+                            AstralLog.Info("LAN bcast nic " + unicast.Address + " fail: " + ex.Message);
                         }
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                AstralLog.Info("LAN bcast nic enum fail: " + ex.Message);
             }
         }
 
@@ -349,7 +361,7 @@ namespace AstralRaftNet
             {
             }
 
-            byte[] nameBytes = Encoding.UTF8.GetBytes(_name ?? "Astral");
+            byte[] nameBytes = Encoding.UTF8.GetBytes(_name ?? "ASGAME");
             if (nameBytes.Length > 80)
             {
                 Array.Resize(ref nameBytes, 80);

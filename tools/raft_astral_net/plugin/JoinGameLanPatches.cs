@@ -237,7 +237,7 @@ namespace AstralRaftNet
                 Text mode = AccessTools.Field(typeof(JoinGameConsole_Selection), "gameMode").GetValue(item) as Text;
                 if (mode != null)
                 {
-                    mode.text = "Astral";
+                    mode.text = "ASGAME";
                 }
 
                 Text cross = AccessTools.Field(typeof(JoinGameConsole_Selection), "crossPlay").GetValue(item) as Text;

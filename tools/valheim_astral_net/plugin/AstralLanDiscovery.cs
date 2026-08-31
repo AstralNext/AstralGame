@@ -54,7 +54,7 @@ namespace AstralValheimNet
         private static volatile bool _broadcastRunning;
         private static int _gamePort = AstralValheim.GamePort;
         private static bool _password;
-        private static string _name = "Astral";
+        private static string _name = "ASGAME";
         private static int _roomsVersion;
         private static DateTime _lastSkipLogUtc = DateTime.MinValue;
         private static DateTime _lastBadLogUtc = DateTime.MinValue;
@@ -111,7 +111,7 @@ namespace AstralValheimNet
             EnsureReceiver();
             _gamePort = gamePort <= 0 ? AstralValheim.GamePort : gamePort;
             _password = password;
-            _name = string.IsNullOrEmpty(name) ? "Astral" : name;
+            _name = string.IsNullOrEmpty(name) ? "ASGAME" : name;
             if (_broadcastRunning)
             {
                 return;
@@ -143,8 +143,9 @@ namespace AstralValheimNet
                     _socket.Close();
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                AstralLog.Info("StopAll socket close: " + ex.Message);
             }
 
             _socket = null;
@@ -332,16 +333,18 @@ namespace AstralValheimNet
             {
                 socket.SendTo(packet, new IPEndPoint(IPAddress.Broadcast, DiscoveryPort));
             }
-            catch
+            catch (Exception ex)
             {
+                AstralLog.Info("LAN bcast 255.255.255.255 fail: " + ex.Message);
             }
 
             try
             {
                 socket.SendTo(packet, new IPEndPoint(IPAddress.Loopback, DiscoveryPort));
             }
-            catch
+            catch (Exception ex)
             {
+                AstralLog.Info("LAN bcast loopback fail: " + ex.Message);
             }
 
             try
@@ -372,21 +375,23 @@ namespace AstralValheimNet
                         {
                             socket.SendTo(packet, new IPEndPoint(new IPAddress(bcast), DiscoveryPort));
                         }
-                        catch
+                        catch (Exception ex)
                         {
+                            AstralLog.Info("LAN bcast nic " + unicast.Address + " fail: " + ex.Message);
                         }
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                AstralLog.Info("LAN bcast nic enum fail: " + ex.Message);
             }
         }
 
         private static byte[] BuildAnnounce()
         {
             ulong steamId = LocalSteamId();
-            byte[] nameBytes = Encoding.UTF8.GetBytes(_name ?? "Astral");
+            byte[] nameBytes = Encoding.UTF8.GetBytes(_name ?? "ASGAME");
             if (nameBytes.Length > 80)
             {
                 Array.Resize(ref nameBytes, 80);
@@ -452,8 +457,9 @@ namespace AstralValheimNet
             {
                 pid = (uint)Process.GetCurrentProcess().Id;
             }
-            catch
+            catch (Exception ex)
             {
+                AstralLog.Info("MakeInstanceId Process.GetCurrentProcess fail: " + ex.Message);
             }
 
             ulong id = ((ulong)pid << 32) | (uint)Environment.TickCount;
@@ -466,8 +472,9 @@ namespace AstralValheimNet
             {
                 return SteamUser.GetSteamID().m_SteamID;
             }
-            catch
+            catch (Exception ex)
             {
+                AstralLog.Info("LocalSteamId unavailable: " + ex.Message);
                 return 0;
             }
         }

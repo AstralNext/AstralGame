@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/ui/widgets/avatar_widget.dart';
 import 'package:astral_game/ui/widgets/navigation/navigation_item.dart';
@@ -63,10 +64,7 @@ class LeftNav extends StatelessWidget {
                 borderRadius: BorderRadius.circular(28),
                 child: Padding(
                   padding: const EdgeInsets.all(4),
-                  child: AvatarWidget(
-                    avatar: avatar,
-                    onTap: onAvatarTap,
-                  ),
+                  child: AvatarWidget(avatar: avatar, onTap: onAvatarTap),
                 ),
               ),
             ),
@@ -86,7 +84,7 @@ class _BrandBadge extends StatelessWidget {
       width: 56,
       height: 56,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
         boxShadow: [
           BoxShadow(
             color: context.astralPalette.shadowSoft,

@@ -20,21 +20,13 @@ class DashboardWideLayout extends StatelessWidget {
     required this.nodeManagement,
     required this.screenStateService,
     required this.roomState,
-    required this.onCreateRoom,
-    required this.onJoinRoom,
-    required this.onShareRoom,
-    required this.onDisconnect,
-    required this.onBookmarkRoom,
+    required this.callbacks,
   });
 
   final NodeManagementService nodeManagement;
   final ScreenStateService screenStateService;
   final RoomState roomState;
-  final VoidCallback onCreateRoom;
-  final VoidCallback onJoinRoom;
-  final VoidCallback onShareRoom;
-  final VoidCallback onDisconnect;
-  final VoidCallback onBookmarkRoom;
+  final DashboardCallbacks callbacks;
 
   @override
   Widget build(BuildContext context) {
@@ -48,11 +40,7 @@ class DashboardWideLayout extends StatelessWidget {
           child: DashboardHomePanel(
             isConnected: false,
             username: nodeManagement.currentUsername.value,
-            onCreateRoom: onCreateRoom,
-            onJoinRoom: onJoinRoom,
-            onShareRoom: onShareRoom,
-            onDisconnect: onDisconnect,
-            onBookmarkRoom: onBookmarkRoom,
+            callbacks: callbacks,
           ),
         );
       }
@@ -73,11 +61,7 @@ class DashboardWideLayout extends StatelessWidget {
             child: _RoomPane(
               nodeManagement: nodeManagement,
               roomState: roomState,
-              onCreateRoom: onCreateRoom,
-              onJoinRoom: onJoinRoom,
-              onShareRoom: onShareRoom,
-              onDisconnect: onDisconnect,
-              onBookmarkRoom: onBookmarkRoom,
+              callbacks: callbacks,
             ),
           ),
         ],
@@ -87,10 +71,7 @@ class DashboardWideLayout extends StatelessWidget {
 }
 
 class _MembersPane extends StatelessWidget {
-  const _MembersPane({
-    required this.nodeManagement,
-    required this.roomState,
-  });
+  const _MembersPane({required this.nodeManagement, required this.roomState});
 
   final NodeManagementService nodeManagement;
   final RoomState roomState;
@@ -103,7 +84,7 @@ class _MembersPane extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: palette.card,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
         border: Border.all(color: palette.divider.withValues(alpha: 0.45)),
       ),
       child: Padding(
@@ -113,9 +94,13 @@ class _MembersPane extends StatelessWidget {
           children: [
             Watch((context) {
               final session = roomState.session.value;
-              final game =
-                  session == null ? null : GameCatalog.byId(session.gameId);
-              final title = [if (game != null) game.displayName, '成员'].join(' · ');
+              final game = session == null
+                  ? null
+                  : GameCatalog.byId(session.gameId);
+              final title = [
+                if (game != null) game.displayName,
+                '成员',
+              ].join(' · ');
               return Text(
                 title,
                 style: textTheme.titleSmall?.copyWith(
@@ -166,20 +151,12 @@ class _RoomPane extends StatelessWidget {
   const _RoomPane({
     required this.nodeManagement,
     required this.roomState,
-    required this.onCreateRoom,
-    required this.onJoinRoom,
-    required this.onShareRoom,
-    required this.onDisconnect,
-    required this.onBookmarkRoom,
+    required this.callbacks,
   });
 
   final NodeManagementService nodeManagement;
   final RoomState roomState;
-  final VoidCallback onCreateRoom;
-  final VoidCallback onJoinRoom;
-  final VoidCallback onShareRoom;
-  final VoidCallback onDisconnect;
-  final VoidCallback onBookmarkRoom;
+  final DashboardCallbacks callbacks;
 
   @override
   Widget build(BuildContext context) {
@@ -205,18 +182,12 @@ class _RoomPane extends StatelessWidget {
             virtualIp: isRunning
                 ? (myIp.isNotEmpty ? myIp : AppConstants.defaultVirtualIp)
                 : null,
-            onCreateRoom: onCreateRoom,
-            onJoinRoom: onJoinRoom,
-            onShareRoom: onShareRoom,
-            onDisconnect: onDisconnect,
-            onBookmarkRoom: onBookmarkRoom,
+            callbacks: callbacks,
           ),
           const SizedBox(height: AppDimensions.sectionGap),
           Expanded(
             child: isRunning
-                ? RoomOpenGamesPanel(
-                    gameId: session?.gameId,
-                  )
+                ? RoomOpenGamesPanel(gameId: session?.gameId)
                 : const SizedBox.shrink(),
           ),
         ],

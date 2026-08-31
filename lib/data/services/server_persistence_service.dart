@@ -18,7 +18,7 @@ class ServerPersistenceService {
     try {
       final filePath = await _filePath;
       final file = File(filePath);
-      if (!await file.exists()) {
+      if (!file.existsSync()) {
         return [];
       }
       final content = await file.readAsString();

@@ -21,7 +21,7 @@ class RoomPersistenceService {
     try {
       final filePath = await _filePath;
       final file = File(filePath);
-      final exists = await file.exists();
+      final exists = file.existsSync();
       appLogger.d('[RoomPersistenceService] loadBookmarks: path=$filePath, exists=$exists');
       if (!exists) return const [];
       final content = await file.readAsString();

@@ -78,6 +78,29 @@ class RoomState {
     bookmarksList.value = next;
   }
 
+  /// 一键收藏：自动命名（游戏名 → 房间名 → 网络名），重名自动加序号，不弹任何 UI。
+  Future<Bookmark> quickSaveBookmark(
+    RoomInvitePayload payload, {
+    String? originalShortCode,
+    String? originalOfflineToken,
+  }) async {
+    final name = uniqueBookmarkName(
+      bookmarksList.value.map((b) => b.customName),
+      autoBookmarkName(payload),
+    );
+    final now = DateTime.now();
+    final bookmark = Bookmark(
+      id: now.millisecondsSinceEpoch,
+      customName: name,
+      payload: payload,
+      originalShortCode: originalShortCode,
+      originalOfflineToken: originalOfflineToken,
+      savedAt: now,
+    );
+    await upsertBookmark(bookmark);
+    return bookmark;
+  }
+
   Future<void> removeBookmark(int id) async {
     final persistence = _persistence;
     final next = persistence == null

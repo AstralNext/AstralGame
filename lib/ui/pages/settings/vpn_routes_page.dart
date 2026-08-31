@@ -22,49 +22,41 @@ class VpnRoutesPage extends StatelessWidget {
     String initial = '',
   }) async {
     final controller = TextEditingController(text: initial);
+    final formKey = GlobalKey<FormState>();
     final result = await showDialog<String>(
       context: context,
-      builder: (ctx) {
-        String? error;
-        return StatefulBuilder(
-          builder: (ctx, setLocal) {
-            return AlertDialog(
-              title: Text(index == null ? '添加 VPN 路由' : '编辑 VPN 路由'),
-              content: TextField(
-                controller: controller,
-                autofocus: true,
-                decoration: InputDecoration(
-                  labelText: 'CIDR',
-                  hintText: '例如 192.168.1.0/24',
-                  errorText: error,
-                  border: const OutlineInputBorder(),
-                ),
-                onChanged: (_) {
-                  if (error != null) setLocal(() => error = null);
-                },
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  child: const Text('取消'),
-                ),
-                FilledButton(
-                  onPressed: () {
-                    final value = controller.text.trim();
-                    final err = InputValidator.validateCidr(value);
-                    if (err != null) {
-                      setLocal(() => error = err);
-                      return;
-                    }
-                    Navigator.of(ctx).pop(value);
-                  },
-                  child: Text(index == null ? '添加' : '保存'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      builder: (ctx) => AlertDialog(
+        title: Text(index == null ? '添加 VPN 路由' : '编辑 VPN 路由'),
+        content: Form(
+          key: formKey,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          child: TextFormField(
+            controller: controller,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'CIDR',
+              hintText: '例如 192.168.1.0/24',
+              border: OutlineInputBorder(),
+            ),
+            validator: InputValidator.validateCidr,
+            keyboardType: TextInputType.number,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (formKey.currentState?.validate() == true) {
+                Navigator.of(ctx).pop(controller.text.trim());
+              }
+            },
+            child: Text(index == null ? '添加' : '保存'),
+          ),
+        ],
+      ),
     );
     controller.dispose();
     if (result == null || !context.mounted) return;

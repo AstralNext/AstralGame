@@ -1,5 +1,6 @@
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/models/game_catalog.dart';
+import 'package:astral_game/ui/widgets/app_snack_bar.dart';
 import 'package:astral_game/ui/widgets/astral_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -152,9 +153,7 @@ class ConnectedRoomCard extends StatelessWidget {
                                 ClipboardData(text: code),
                               );
                               if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('已复制：$code')),
-                                );
+                                showAppSnackBar(context, '已复制：$code');
                               }
                             },
                             icon: Icon(

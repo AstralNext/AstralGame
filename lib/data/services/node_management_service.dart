@@ -568,6 +568,12 @@ nw.isEmpty ||
 needsFirewall;
 }
 
+// ================= 节点资料拉取（peer RPC `user.getInfo`） =================
+//
+// 本节与上面的轮询主流程共享 userNodes signal 与本机身份判定（_isLocalPeer 等），
+// 因此不拆成独立 Service——拆出反而需要回绑 5 个依赖，耦合更高。
+// 对外仅通过 [_maybeFetchNodeInfo] 进入（由轮询规范化时调用）。
+
 /// 节流后的 `user.getInfo`：缺少客户端环境字段时较快重试，否则低频刷新昵称/头像。
 void _maybeFetchNodeInfo(EnhancedNodeInfo n) {
 if (_isPublicServerNode(n)) return;

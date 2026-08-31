@@ -7,7 +7,6 @@ import 'package:flutter/foundation.dart' show listEquals, mapEquals;
 
 /// 在 [`KVNodeInfo`] 上叠加 peer-RPC（`user.getInfo`）返回的昵称与头像等资料。
 class EnhancedNodeInfo {
-
   EnhancedNodeInfo({
     required this.baseInfo,
     this.metadata = const {},
@@ -41,6 +40,7 @@ class EnhancedNodeInfo {
   int get peerId => baseInfo.peerId;
   String get hostname => baseInfo.hostname;
   String get ipv4 => baseInfo.ipv4;
+
   /// 虚拟网 IPv6（通常带 `/prefix`），无则为空串。
   String get ipv6 => baseInfo.ipv6;
   String get displayName => customName ?? baseInfo.hostname;
@@ -63,7 +63,7 @@ class EnhancedNodeInfo {
   /// 见 [`NetworkKind`]；UI 通过 [`NetworkPresentation.fromWire`] 解析为图标 + 文案。
   String? get peerNetwork => metadata['peerNetwork'] as String?;
 
-  /// 对端运营商归属（ip-api.com 数据，如 `中国联通 · 北京`）。
+  /// 对端运营商归属（ipip.net 数据，如 `中国河北 联通`）。
   String? get peerIsp => metadata['peerIsp'] as String?;
 
   /// 对端 Windows 专用防火墙：`enabled` / `disabled` / `unsupported`。
@@ -82,7 +82,8 @@ class EnhancedNodeInfo {
 
   /// 节点是否拥有有效的虚拟网 IPv6（兼容 CIDR）。
   bool get hasValidIpv6 =>
-      stripCidrHost(baseInfo.ipv6, unspecified: const {kUnspecifiedIpV6}) != null;
+      stripCidrHost(baseInfo.ipv6, unspecified: const {kUnspecifiedIpV6}) !=
+      null;
 }
 
 /// 成员列表行会用到的字段；不含 rx/tx、时延、丢包（时延走独立 signal）。

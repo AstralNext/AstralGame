@@ -1,12 +1,13 @@
-
 import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/di.dart';
-import 'package:astral_game/data/services/app_settings_service.dart';
 import 'package:astral_game/data/state/settings_state.dart';
 import 'package:astral_game/data/state/update_state.dart';
 import 'package:astral_game/data/state/theme_reveal_state.dart';
+import 'package:astral_game/ui/widgets/app_snack_bar.dart';
+import 'package:astral_game/ui/widgets/astral_grouped_tile.dart';
 import 'package:astral_game/ui/widgets/astral_settings_section.dart';
+import 'package:astral_game/ui/widgets/confirm_dialog.dart';
 import 'package:astral_game/ui/widgets/fade_in_section.dart';
 import 'package:astral_game/ui/navigation/astral_page_route.dart';
 import 'package:astral_game/ui/widgets/theme_picker_sheet.dart';
@@ -20,7 +21,10 @@ import 'package:signals/signals_flutter.dart';
 import 'about_page.dart';
 import 'vpn_routes_page.dart';
 
-/// 设置主页面。
+/// 设置主页面。所有持久化字段统一通过 [SettingsState] signals 管理。
+///
+/// 行组件统一走 [AstralGroupedTile]（MD3：主色图标 + 缩进分隔线 + trailing 控件），
+/// 分区标题统一在卡片上方（[buildSettingsHeader]）。
 class SettingsMainPage extends StatefulWidget {
   const SettingsMainPage({super.key});
 
@@ -29,33 +33,12 @@ class SettingsMainPage extends StatefulWidget {
 }
 
 class _SettingsMainPageState extends State<SettingsMainPage> {
-  static const _tilePadding = EdgeInsets.symmetric(horizontal: 16);
-
   static bool get _isDesktop {
     final os = RuntimePlatform.operatingSystem;
     return os != 'android' && os != 'ios';
   }
 
   static bool get _isAndroid => RuntimePlatform.isAndroid;
-
-  late TextEditingController _virtualIpController;
-  late bool _isDhcp;
-  bool _isValidIP = true;
-
-  @override
-  void initState() {
-    super.initState();
-    final appSettings = getIt<AppSettingsService>();
-    _isDhcp = appSettings.getIsDhcp();
-    _virtualIpController =
-        TextEditingController(text: appSettings.getVirtualIp());
-  }
-
-  @override
-  void dispose() {
-    _virtualIpController.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -108,59 +91,44 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
           order: 1,
           child: AstralSettingsFormCard(
             title: '应用',
-            children: [
-              if (_isDesktop) ...[
-                Watch((context) {
-                  return _buildSwitchTile(
-                    title: '关闭时最小化到托盘',
-                    subtitle: '点击关闭时最小化到托盘区',
-                    value: settingsState.closeMinimize.value,
-                    onChanged: (v) {
-                      settingsState.closeMinimize.value = v;
-                      settingsState.saveToPersistence();
-                    },
-                  );
-                }),
-                const Divider(height: 1),
-              ],
-              Watch((context) {
-                return _buildSwitchTile(
-                  title: '自动检查更新',
-                  value: updateState.autoCheckUpdate.value,
-                  onChanged: updateState.setAutoCheckUpdate,
-                );
-              }),
-              const Divider(height: 1),
-              Watch((context) {
-                return _buildSwitchTile(
-                  title: '测试版频道',
-                  value: updateState.beta.value,
-                  onChanged: updateState.setBeta,
-                );
-              }),
-              if (_isAndroid) ...[
-                const Divider(height: 1),
-                Watch((context) {
-                  return _buildSwitchTile(
-                    title: '在线用户悬浮窗',
-                    subtitle: '透明 HUD，不挡触摸；显示头像、IP、延迟列表',
-                    value: settingsState.floatingOverlayEnabled.value,
-                    onChanged: (v) => _onFloatingOverlayChanged(
-                      context,
-                      settingsState,
-                      v,
-                    ),
-                  );
-                }),
-              ],
+            rows: [
+              if (_isDesktop)
+                _switchRow(
+                  icon: Icons.window_outlined,
+                  title: '关闭时最小化到托盘',
+                  subtitle: () => '点击关闭时最小化到托盘区',
+                  value: () => settingsState.closeMinimize.value,
+                  onChanged: (v) {
+                    settingsState.closeMinimize.value = v;
+                    settingsState.saveToPersistence();
+                  },
+                ),
+              _switchRow(
+                icon: Icons.system_update_outlined,
+                title: '自动检查更新',
+                value: () => updateState.autoCheckUpdate.value,
+                onChanged: updateState.setAutoCheckUpdate,
+              ),
+              _switchRow(
+                icon: Icons.science_outlined,
+                title: '测试版频道',
+                value: () => updateState.beta.value,
+                onChanged: updateState.setBeta,
+              ),
+              if (_isAndroid)
+                _switchRow(
+                  icon: Icons.picture_in_picture_alt_outlined,
+                  title: '在线用户悬浮窗',
+                  subtitle: () => '透明 HUD，不挡触摸；显示头像、IP、延迟列表',
+                  value: () => settingsState.floatingOverlayEnabled.value,
+                  onChanged: (v) =>
+                      _onFloatingOverlayChanged(context, settingsState, v),
+                ),
             ],
           ),
         ),
         const SizedBox(height: AppDimensions.sectionGap),
-        FadeInSection(
-          order: 2,
-          child: _buildNetworkSection(settingsState),
-        ),
+        FadeInSection(order: 2, child: _buildNetworkSection(settingsState)),
         const SizedBox(height: AppDimensions.sectionGap),
         FadeInSection(
           order: 3,
@@ -170,15 +138,38 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
               AstralSettingItem(
                 icon: Icons.info_outline_rounded,
                 label: '关于 Astral Game',
-                onTap: () => Navigator.of(context).push<void>(
-                  astralPageRoute(const AboutPage()),
-                ),
+                onTap: () => Navigator.of(
+                  context,
+                ).push<void>(astralPageRoute(const AboutPage())),
               ),
             ],
           ),
         ),
       ],
     );
+  }
+
+  /// 开关行的声明式包装：value/subtitle 用 getter 延迟取，行内自包 [Watch]，
+  /// 整行可点切换，trailing 为 MD3 [Switch.adaptive]。
+  static AstralSettingRow _switchRow({
+    required IconData icon,
+    required String title,
+    String Function()? subtitle,
+    required bool Function() value,
+    required ValueChanged<bool>? onChanged,
+  }) {
+    return (index, count) => Watch((context) {
+      final v = value();
+      return AstralGroupedTile(
+        icon: icon,
+        label: title,
+        subtitle: subtitle?.call(),
+        index: index,
+        count: count,
+        onTap: onChanged == null ? null : () => onChanged(!v),
+        trailing: Switch.adaptive(value: v, onChanged: onChanged),
+      );
+    });
   }
 
   Future<void> _onFloatingOverlayChanged(
@@ -197,27 +188,15 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
     final overlay = FloatingOverlayService();
     if (!await overlay.canDrawOverlays()) {
       if (!context.mounted) return;
-      final goSettings = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('需要悬浮窗权限'),
-          content: const Text(
+      final goSettings = await showConfirmDialog(
+        context,
+        title: '需要悬浮窗权限',
+        content:
             '请在系统设置中允许 Astral Game「显示在其他应用上层」，'
             '然后返回应用重新打开此开关。',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('去设置'),
-            ),
-          ],
-        ),
+        confirmLabel: '去设置',
       );
-      if (goSettings == true) {
+      if (goSettings) {
         await overlay.openOverlayPermissionSettings();
       }
       settingsState.floatingOverlayEnabled.value = false;
@@ -229,126 +208,144 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
   }
 
   Widget _buildNetworkSection(SettingsState settingsState) {
-    final textTheme = Theme.of(context).textTheme;
     return AstralSettingsFormCard(
       title: '网络',
-      children: [
-        _buildSwitchTile(
+      rows: [
+        _switchRow(
+          icon: Icons.settings_ethernet_outlined,
           title: '自动分配虚拟网络 IP',
-          subtitle: _isDhcp ? 'DHCP 已开启' : '关闭后可手动填写固定 IP',
-          value: _isDhcp,
+          subtitle: () =>
+              settingsState.isDhcp.value ? 'DHCP 已开启' : '关闭后可手动设置固定 IP',
+          value: () => settingsState.isDhcp.value,
           onChanged: (value) {
-            setState(() {
-              _isDhcp = value;
-              if (value) _isValidIP = true;
-            });
-            getIt<AppSettingsService>().setIsDhcp(value);
+            settingsState.isDhcp.value = value;
+            settingsState.saveToPersistence();
           },
         ),
-        const Divider(height: 1),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
-          child: TextField(
-            controller: _virtualIpController,
-            enabled: !_isDhcp,
-            onChanged: (value) {
-              if (!_isDhcp) {
-                setState(() {
-                  _isValidIP = InputValidator.validateIPv4(value) == null;
-                });
-                if (_isValidIP) {
-                  getIt<AppSettingsService>().setVirtualIp(value);
-                }
-              }
-            },
-            decoration: InputDecoration(
-              labelText: '虚拟网络 IP',
-              hintText: '10.147.xxx.xxx',
-              prefixIcon: const Icon(Icons.lan_outlined),
-              helperText: _isDhcp ? '开启 DHCP 时会自动分配' : null,
-              errorText: (!_isDhcp && !_isValidIP) ? '无效的 IPv4 地址' : null,
-            ),
-          ),
-        ),
-        if (_isDhcp)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-            child: Text(
-              '当前为自动分配模式。',
-              style: textTheme.bodySmall,
-            ),
-          ),
-        const Divider(height: 1),
-        Watch((context) {
-          return _buildSwitchTile(
-            title: '禁用 P2P',
-            subtitle: '仅通过中继通信',
-            value: settingsState.disableP2p.value,
-            onChanged: (v) {
-              settingsState.disableP2p.value = v;
-              settingsState.saveToPersistence();
-            },
+        (index, count) => Watch((context) {
+          final isDhcp = settingsState.isDhcp.value;
+          final ip = settingsState.virtualIp.value;
+          return AstralGroupedTile(
+            icon: Icons.lan_outlined,
+            label: '虚拟网络 IP',
+            subtitle: isDhcp ? '当前为自动分配模式' : ip,
+            index: index,
+            count: count,
+            onTap: isDhcp ? null : () => _editVirtualIp(settingsState),
+            trailing: isDhcp
+                ? null
+                : FilledButton.tonal(
+                    onPressed: () => _editVirtualIp(settingsState),
+                    child: const Text('编辑'),
+                  ),
           );
         }),
+        _switchRow(
+          icon: Icons.hub_outlined,
+          title: '禁用 P2P',
+          subtitle: () => '仅通过中继通信',
+          value: () => settingsState.disableP2p.value,
+          onChanged: (v) {
+            settingsState.disableP2p.value = v;
+            settingsState.saveToPersistence();
+          },
+        ),
         if (RuntimePlatform.operatingSystem == 'windows') ...[
-          const Divider(height: 1),
-          Watch((context) {
-            return _buildSwitchTile(
-              title: '强制 UDP 广播转发',
-              subtitle: '覆盖游戏规则；多数游戏由线上规则自动开启，重连后生效',
-              value: settingsState.enableUdpBroadcastRelay.value,
-              onChanged: (v) {
-                settingsState.enableUdpBroadcastRelay.value = v;
-                settingsState.saveToPersistence();
-              },
-            );
-          }),
-          const Divider(height: 1),
-          Watch((context) {
+          _switchRow(
+            icon: Icons.settings_input_antenna,
+            title: '强制 UDP 广播转发',
+            subtitle: () => '覆盖游戏规则；多数游戏由线上规则自动开启，重连后生效',
+            value: () => settingsState.enableUdpBroadcastRelay.value,
+            onChanged: (v) {
+              settingsState.enableUdpBroadcastRelay.value = v;
+              settingsState.saveToPersistence();
+            },
+          ),
+          (index, count) => Watch((context) {
             final optimize = getIt<NetworkOptimizeService>();
             final busy = optimize.busy.value;
-            return _buildSwitchTile(
-              title: '网络加速（仅限中国大陆）',
-              subtitle: busy
-                  ? '正在安装或卸载…'
-                  : '自动选择最低延迟的网址 IP',
-              value: optimize.installed.value,
-              onChanged: busy
+            return AstralGroupedTile(
+              icon: Icons.speed_outlined,
+              label: '网络加速（仅限中国大陆）',
+              subtitle: busy ? '正在安装或卸载…' : '自动选择最低延迟的网址 IP',
+              index: index,
+              count: count,
+              onTap: busy
                   ? null
-                  : (v) => _onNetworkOptimizeChanged(context, optimize, v),
+                  : () => _onNetworkOptimizeChanged(
+                      context,
+                      optimize,
+                      !optimize.installed.value,
+                    ),
+              trailing: Switch.adaptive(
+                value: optimize.installed.value,
+                onChanged: busy
+                    ? null
+                    : (v) => _onNetworkOptimizeChanged(context, optimize, v),
+              ),
             );
           }),
         ],
-        if (_isAndroid) ...[
-          const Divider(height: 1),
-          ListTile(
-            contentPadding: _tilePadding,
-            leading: const Icon(Icons.route_outlined),
-            title: const Text('自定义 VPN 路由'),
-            subtitle: const Text('额外 CIDR；默认含虚拟网段、组播、广播'),
-            trailing: const Icon(Icons.chevron_right_rounded),
-            onTap: () => Navigator.of(context).push<void>(
-              astralPageRoute(const VpnRoutesPage()),
-            ),
+        if (_isAndroid)
+          (index, count) => AstralGroupedTile(
+            icon: Icons.route_outlined,
+            label: '自定义 VPN 路由',
+            subtitle: '额外 CIDR；默认含虚拟网段、组播、广播',
+            index: index,
+            count: count,
+            onTap: () => Navigator.of(
+              context,
+            ).push<void>(astralPageRoute(const VpnRoutesPage())),
           ),
-        ],
       ],
     );
   }
 
-  Widget _buildSwitchTile({
-    required String title,
-    String? subtitle,
-    required bool value,
-    required ValueChanged<bool>? onChanged,
-  }) {
-    return SwitchListTile.adaptive(
-      contentPadding: _tilePadding,
-      title: Text(title),
-      subtitle: subtitle == null ? null : Text(subtitle),
-      value: value,
-      onChanged: onChanged,
+  Future<void> _editVirtualIp(SettingsState settingsState) async {
+    final controller = TextEditingController(
+      text: settingsState.virtualIp.value,
     );
+    final formKey = GlobalKey<FormState>();
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('编辑虚拟网络 IP'),
+        content: Form(
+          key: formKey,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          child: TextFormField(
+            controller: controller,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'IPv4',
+              hintText: '10.147.xxx.xxx',
+              prefixIcon: Icon(Icons.lan_outlined),
+              border: OutlineInputBorder(),
+            ),
+            validator: InputValidator.validateIPv4,
+            keyboardType: TextInputType.number,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (formKey.currentState?.validate() == true) {
+                Navigator.of(ctx).pop(true);
+              }
+            },
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (result != true || !mounted) return;
+    settingsState.virtualIp.value = controller.text.trim();
+    await settingsState.saveToPersistence();
   }
 
   Future<void> _onNetworkOptimizeChanged(
@@ -360,9 +357,7 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
       await optimize.setEnabled(enable);
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(enable ? '安装失败：$e' : '卸载失败：$e')),
-      );
+      showAppSnackBar(context, enable ? '安装失败：$e' : '卸载失败：$e');
     }
   }
 }

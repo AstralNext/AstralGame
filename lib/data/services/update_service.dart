@@ -192,10 +192,7 @@ class UpdateService {
                   },
                 ),
                 const SizedBox(height: 12),
-                Text(
-                  '请前往官网下载对应平台的安装包。',
-                  style: theme.textTheme.bodySmall,
-                ),
+                Text('请前往官网下载对应平台的安装包。', style: theme.textTheme.bodySmall),
               ],
             ),
           ),
@@ -220,8 +217,24 @@ class UpdateService {
   /// 打开官网下载页。
   Future<void> openDownloadPage() => _launchUrl(AppConstants.downloadPageUrl);
 
+  /// App 启动后若开启自动检查，延迟 1 秒静默检测（不弹"已是最新"、不弹失败）。
+  /// 延迟 + 读取 autoCheckUpdate 判断 + 无更新/失败静默，这 3 部分业务时序
+  /// 统一封装在 UpdateService 内；Shell 只在首帧后调用一次即可。
+  /// [context] 由 Shell 首帧回调传入；若 Widget 已销毁则本方法内部跳过弹窗。
+  Future<void> startAutoCheckIfEnabled({BuildContext? context}) async {
+    if (!updateState.autoCheckUpdate.value) return;
+    await Future.delayed(const Duration(seconds: 1));
+    if (context == null || !context.mounted) return;
+    await checkForUpdates(
+      context,
+      showNoUpdateMessage: false,
+      showFailureMessage: false,
+    );
+  }
+
   /// 打开 Releases 列表页（关于页等可复用）。
-  Future<void> openReleasesPage() => _launchUrl(AppConstants.githubReleasesPage);
+  Future<void> openReleasesPage() =>
+      _launchUrl(AppConstants.githubReleasesPage);
 
   Future<void> openIssuesPage() => _launchUrl(AppConstants.githubIssuesPage);
 

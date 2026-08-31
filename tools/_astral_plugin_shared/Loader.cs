@@ -70,51 +70,17 @@ namespace AstralValheimNet
 
         private static void LoadEmbeddedHarmony()
         {
-            foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
-            {
-                if (assembly.GetName().Name == "0Harmony")
-                {
-                    return;
-                }
-            }
-
-            using (Stream stream = typeof(Loader).Assembly.GetManifestResourceStream("0Harmony.dll"))
-            {
-                if (stream == null)
-                {
-                    throw new FileNotFoundException("embedded 0Harmony.dll missing");
-                }
-
-                byte[] buffer = new byte[stream.Length];
-                stream.Read(buffer, 0, buffer.Length);
-                Assembly.Load(buffer);
-                Log("Assembly.Load 0Harmony " + buffer.Length);
-            }
+            // 找不到时会抛 FileNotFoundException，与原有行为一致
+            TryLoadEmbeddedHarmony(throwIfMissing: true);
         }
 
-        private static void Log(string message)
+        /// <summary>
+        /// 从已加载程序集或嵌入资源加载 0Harmony。
+        /// 当 throwIfMissing=true 且找不到嵌入 DLL 时抛 FileNotFoundException；
+        /// 否则找不到时返回 null（让默认解析继续）。
+        /// </summary>
+        private static Assembly TryLoadEmbeddedHarmony(bool throwIfMissing)
         {
-            string line = DateTime.Now.ToString("HH:mm:ss.fff") + " " + message + Environment.NewLine;
-            foreach (string path in LogPaths)
-            {
-                try
-                {
-                    File.AppendAllText(path, line);
-                }
-                catch
-                {
-                }
-            }
-        }
-
-        private static Assembly ResolveEmbedded(object sender, ResolveEventArgs args)
-        {
-            string name = new AssemblyName(args.Name).Name;
-            if (name != "0Harmony")
-            {
-                return null;
-            }
-
             foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
             {
                 if (assembly.GetName().Name == "0Harmony")
@@ -127,13 +93,53 @@ namespace AstralValheimNet
             {
                 if (stream == null)
                 {
+                    if (throwIfMissing)
+                    {
+                        throw new FileNotFoundException("embedded 0Harmony.dll missing");
+                    }
                     return null;
                 }
 
                 byte[] buffer = new byte[stream.Length];
                 stream.Read(buffer, 0, buffer.Length);
-                return Assembly.Load(buffer);
+                Assembly loaded = Assembly.Load(buffer);
+                Log("Assembly.Load 0Harmony " + buffer.Length);
+                return loaded;
             }
+        }
+
+        private static void Log(string message)
+        {
+            string line = DateTime.Now.ToString("HH:mm:ss.fff") + " " + message + Environment.NewLine;
+            foreach (string path in LogPaths)
+            {
+                try
+                {
+                    File.AppendAllText(path, line);
+                }
+                catch (Exception ex)
+                {
+                    // 注意：此处不要再调用 Log 递归；仅在调试器附加时输出到 Debug
+                    try
+                    {
+                        System.Diagnostics.Debug.WriteLine("Loader log fail " + path + ": " + ex.Message);
+                    }
+                    catch
+                    {
+                    }
+                }
+            }
+        }
+
+        private static Assembly ResolveEmbedded(object sender, ResolveEventArgs args)
+        {
+            string name = new AssemblyName(args.Name).Name;
+            if (name != "0Harmony")
+            {
+                return null;
+            }
+
+            return TryLoadEmbeddedHarmony(throwIfMissing: false);
         }
     }
 }

@@ -3,12 +3,11 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 /// 线上规则与相对路径图片基准。
-const kAstralGameRulesUrl = 'https://astral.fan/gamerules.json';
-const kAstralGameMediaBaseUrl = 'https://astral.fan/';
+const kAstralGameRulesUrl = 'https://next.astral.fan/gamerules.json';
+const kAstralGameMediaBaseUrl = 'https://next.astral.fan/';
 
 /// 可选游戏目录项（由远程 / 本地规则填充，见 [GameCatalog]）。
 class GameInfo {
-
   factory GameInfo.fromRules(GameAssistGameRules rules) {
     return GameInfo(
       id: rules.id,
@@ -51,7 +50,7 @@ class GameInfo {
   /// SteamGridDB 游戏 id（无 Steam 时直接用，如 Minecraft）。
   final int? sgdbGameId;
 
-  /// 方形 icon：本地 `assets/...`、绝对 URL，或相对 `https://astral.fan/` 的路径。
+  /// 方形 icon：本地 `assets/...`、绝对 URL，或相对 `https://next.astral.fan/` 的路径。
   final String? iconAsset;
 
   /// 竖版封面：同 [iconAsset]。
@@ -158,19 +157,20 @@ IconData resolveGameIcon(String name) =>
 enum GameMediaKind { asset, network, hybrid }
 
 class GameMediaRef {
-  const GameMediaRef.asset(this.path)
-    : kind = GameMediaKind.asset,
-      url = null;
+  const GameMediaRef.asset(this.path) : kind = GameMediaKind.asset, url = null;
   const GameMediaRef.network(this.url)
     : kind = GameMediaKind.network,
       path = null;
+
   /// hybrid：同时持有本地 asset 路径 + 远程 URL，按顺序尝试。
   const GameMediaRef.hybrid({required this.path, required this.url})
     : kind = GameMediaKind.hybrid;
 
   final GameMediaKind kind;
+
   /// asset 路径（或 hybrid 的本地 asset 路径，带 assets/ 前缀）。
   final String? path;
+
   /// 完整 URL（network / hybrid 的远程地址）。
   final String? url;
 
@@ -194,10 +194,7 @@ class GameMediaRef {
     final resolved = s.startsWith('/')
         ? base.replace(path: s)
         : base.resolve(s);
-    return GameMediaRef.hybrid(
-      path: 'assets/$s',
-      url: resolved.toString(),
-    );
+    return GameMediaRef.hybrid(path: 'assets/$s', url: resolved.toString());
   }
 }
 
@@ -221,6 +218,7 @@ class GameMediaImage extends StatelessWidget {
   final double? height;
   final BoxFit fit;
   final ImageErrorWidgetBuilder? errorBuilder;
+
   /// 网络加载中的占位 Widget（可选，默认是空白）。
   final WidgetBuilder? placeholder;
 
@@ -242,10 +240,7 @@ class GameMediaImage extends StatelessWidget {
           errorBuilder: errorBuilder,
         );
       case GameMediaKind.network:
-        return _cachedNetwork(
-          url: ref.url!,
-          errorBuilder: errorBuilder,
-        );
+        return _cachedNetwork(url: ref.url!, errorBuilder: errorBuilder);
       case GameMediaKind.hybrid:
         // 优先本地打包 asset；加载失败再走带缓存的远程 CDN。
         return Image.asset(
@@ -278,15 +273,14 @@ class GameMediaImage extends StatelessWidget {
           ? (context, _) => placeholder!(context)
           : null,
       errorWidget: errorBuilder != null
-          ? (context, u, e) =>
-              errorBuilder(context, e, StackTrace.empty)
+          ? (context, u, e) => errorBuilder(context, e, StackTrace.empty)
           : (context, u, e) => const SizedBox.shrink(),
     );
   }
 }
 
 /// 游戏方形 Logo：
-/// - 用 resolvedIconAsset（优先 JSON 写的 icon_asset，否则自动推断 games/<id>/icon.png）
+/// - 用 resolvedIconAsset（优先 JSON 写的 icon_asset，否则自动推断 `games/{id}/icon.png`）
 /// - GameMediaImage 会：先试本地 asset → 失败走远程 CDN（磁盘缓存）→ 再失败回退色块
 class GameLogo extends StatelessWidget {
   const GameLogo({super.key, required this.game, this.size = 40});

@@ -1,472 +1,376 @@
 import 'package:astral_game/utils/logger.dart';
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/config/theme.dart';
+import 'package:astral_game/data/services/network_optimize_service.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
 import 'package:astral_game/data/services/screen_state_service.dart';
 import 'package:astral_game/data/services/shell_navigation_service.dart';
 import 'package:astral_game/data/services/update_service.dart';
 import 'package:astral_game/data/state/settings_state.dart';
-import 'package:astral_game/data/state/update_state.dart';
-import 'package:astral_game/di.dart' show getIt, disposeDI;
-import 'package:astral_game/ui/widgets/avatar_widget.dart';
+import 'package:astral_game/di.dart' show getIt;
+import 'package:astral_game/ui/widgets/bookmark_search_field.dart';
 import 'package:astral_game/ui/widgets/edit_profile_dialog.dart';
 import 'package:astral_game/utils/runtime_platform.dart';
 import 'package:flutter/material.dart';
-import 'package:signals/signals_flutter.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:path_provider/path_provider.dart';
+import 'package:signals/signals_flutter.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../pages/dashboard_page.dart';
+import '../pages/bookmarks_page.dart';
 import '../pages/servers/servers_main_page.dart';
 import '../pages/settings/settings_main_page.dart';
 import '../widgets/navigation/bottom_nav.dart';
 import '../widgets/navigation/left_nav.dart';
 import '../widgets/navigation/navigation_item.dart';
+import '../widgets/desktop_title_bar.dart';
+import '../widgets/mobile_chrome_bar.dart';
 import '../widgets/shell_tab_pane.dart';
-import '../widgets/window_button.dart';
 
 /// 主壳：底栏 / 侧栏切换 Tab（[IndexedStack]），二级页走根 [Navigator] + [AppBar] 返回。
 class Shell extends StatefulWidget {
-const Shell({super.key});
+  const Shell({super.key});
 
-@override
-State<Shell> createState() => _ShellState();
+  @override
+  State<Shell> createState() => _ShellState();
 }
 
 class _ShellState extends State<Shell> with WindowListener, TrayListener {
-late final ScreenStateService _screenStateService;
-late final List<NavigationItem> _navigationItems;
-final TrayManager _trayManager = TrayManager.instance;
-EffectCleanup? _shellNavEffect;
+  late final ScreenStateService _screenStateService;
+  late final List<NavigationItem> _navigationItems;
+  final TrayManager _trayManager = TrayManager.instance;
+  EffectCleanup? _shellNavEffect;
 
-int _selectedIndex = 0;
+  int _selectedIndex = 0;
+  final bool _isDesktop = RuntimePlatform.isDesktop;
+  bool _isMaximized = false;
 
-@override
-void initState() {
-super.initState();
-_screenStateService = getIt<ScreenStateService>();
+  /// 收藏 Tab 的索引（[IndexedStack] 顺序：联机/服务器/收藏/设置）。
+  static const _bookmarksTabIndex = 2;
 
-_shellNavEffect = effect(() {
-final pending = getIt<ShellNavigationService>().pendingTabIndex.value;
-if (pending == null || !mounted) return;
-setState(() => _selectedIndex = pending.clamp(0, 2));
-getIt<ShellNavigationService>().clearPending();
-});
+  @override
+  void initState() {
+    super.initState();
+    _screenStateService = getIt<ScreenStateService>();
 
-_navigationItems = [
-const NavigationItem(
-icon: Icons.sports_esports_outlined,
-activeIcon: Icons.sports_esports,
-label: '联机',
-page: DashboardPage(key: PageStorageKey('dashboard')),
-),
-const NavigationItem(
-icon: Icons.dns_outlined,
-activeIcon: Icons.dns,
-label: '服务器',
-page: ServersMainPage(key: PageStorageKey('servers')),
-),
-const NavigationItem(
-icon: Icons.settings_outlined,
-activeIcon: Icons.settings,
-label: '设置',
-page: SettingsMainPage(key: PageStorageKey('settings')),
-),
-];
+    _shellNavEffect = effect(() {
+      final pending = getIt<ShellNavigationService>().pendingTabIndex.value;
+      if (pending == null || !mounted) return;
+      setState(() => _selectedIndex = pending.clamp(0, 3));
+      getIt<ShellNavigationService>().clearPending();
+    });
 
-WidgetsBinding.instance.addPostFrameCallback((_) {
-if (mounted) {
-_screenStateService.updateScreenWidth(MediaQuery.sizeOf(context).width);
-}
-});
+    _navigationItems = [
+      const NavigationItem(
+        icon: Icons.sports_esports_outlined,
+        activeIcon: Icons.sports_esports,
+        label: '联机',
+        page: DashboardPage(key: PageStorageKey('dashboard')),
+      ),
+      const NavigationItem(
+        icon: Icons.dns_outlined,
+        activeIcon: Icons.dns,
+        label: '服务器',
+        page: ServersMainPage(key: PageStorageKey('servers')),
+      ),
+      const NavigationItem(
+        icon: Icons.bookmark_border_rounded,
+        activeIcon: Icons.bookmark_rounded,
+        label: '收藏',
+        page: BookmarksPage(key: PageStorageKey('bookmarks')),
+      ),
+      const NavigationItem(
+        icon: Icons.settings_outlined,
+        activeIcon: Icons.settings,
+        label: '设置',
+        page: SettingsMainPage(key: PageStorageKey('settings')),
+      ),
+    ];
 
-WidgetsBinding.instance.addPostFrameCallback((_) {
-if (mounted) {
-final updateState = getIt<UpdateState>();
-if (updateState.autoCheckUpdate.value) {
-Future.delayed(const Duration(seconds: 1), () {
-if (mounted) {
-getIt<UpdateService>().checkForUpdates(
-context,
-showNoUpdateMessage: false,
-showFailureMessage: false,
-);
-}
-});
-}
-}
-});
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      // 静默检查更新（业务时序统一封装在 UpdateService 内）
+      await getIt<UpdateService>().startAutoCheckIfEnabled(context: context);
+      if (!mounted) return;
+      // 同步网络加速驱动真实状态，避免设置页首次打开时 installed=false 与实际脱节
+      if (RuntimePlatform.isWindows) {
+        // ignore: discarded_futures
+        getIt<NetworkOptimizeService>().refresh();
+      }
+    });
 
-_setupDesktopCloseBehavior();
-}
+    _setupDesktopCloseBehavior();
+  }
 
-@override
-void dispose() {
-_shellNavEffect?.call();
-if (RuntimePlatform.isDesktop) {
-windowManager.removeListener(this);
-_trayManager.removeListener(this);
-}
-super.dispose();
-}
-
-bool get _isDesktopPlatform => RuntimePlatform.isDesktop;
-
-Future<void> _setupDesktopCloseBehavior() async {
-if (!_isDesktopPlatform) return;
-
-windowManager.addListener(this);
-_trayManager.addListener(this);
-await windowManager.setPreventClose(true);
-await _initTray();
-}
-
-Future<void> _initTray() async {
-final String iconPath;
-if (RuntimePlatform.isWindows) {
-iconPath = await _ensureTrayIconFile(
-preferredAssetPath: 'assets/icon.ico',
-fallbackAssetPath: 'assets/logo.png',
-outputFileName: 'astral_game_tray_icon_bw',
-);
-} else {
-iconPath = await _ensureTrayIconFile(
-preferredAssetPath: 'assets/logo.png',
-fallbackAssetPath: 'assets/logo.png',
-outputFileName: 'astral_game_tray_icon_bw',
-);
-}
-
-await _trayManager.setIcon(iconPath);
-if (!RuntimePlatform.isLinux) {
-await _trayManager.setToolTip('Astral Game');
-}
-await _trayManager.setContextMenu(
-Menu(
-items: [
-MenuItem(key: 'show_window', label: '显示主界面'),
-MenuItem.separator(),
-MenuItem(key: 'exit', label: '退出'),
-],
-),
-);
-}
-
-Future<String> _ensureTrayIconFile({
-required String preferredAssetPath,
-required String fallbackAssetPath,
-required String outputFileName,
-}) async {
-final tmpDir = await getTemporaryDirectory();
-
-Future<String> writeAsset(String assetPath, String ext) async {
-final bytes = await rootBundle.load(assetPath);
-final file = File(
-'${tmpDir.path}${Platform.pathSeparator}$outputFileName$ext',
-);
-await file.writeAsBytes(bytes.buffer.asUint8List(), flush: true);
-return file.path;
-}
-
-try {
-final ext =
-preferredAssetPath.toLowerCase().endsWith('.ico') ? '.ico' : '.png';
-return await writeAsset(preferredAssetPath, ext);
-} catch (e) {
-      appLogger.w('[Shell] 操作失败', error: e);
-final ext =
-fallbackAssetPath.toLowerCase().endsWith('.ico') ? '.ico' : '.png';
-return await writeAsset(fallbackAssetPath, ext);
-
+  @override
+  void dispose() {
+    _shellNavEffect?.call();
+    if (_isDesktop) {
+      windowManager.removeListener(this);
+      _trayManager.removeListener(this);
     }
-}
+    super.dispose();
+  }
 
-Future<void> _showWindowFromTray() async {
-await windowManager.show();
-await windowManager.focus();
-}
+  @override
+  void onWindowMaximize() {
+    if (mounted) setState(() => _isMaximized = true);
+  }
 
-Future<void> _handleCloseRequested() async {
-if (!_isDesktopPlatform) return;
-final closeMinimize = getIt<SettingsState>().closeMinimize.value;
-if (closeMinimize) {
-await windowManager.hide();
-return;
-}
-_quitForReal();
-}
+  @override
+  void onWindowRestore() {
+    if (mounted) setState(() => _isMaximized = false);
+  }
 
-/// 真正"结束软件"：直接 exit(0)，什么清理都不等，用户点退出就要立刻走。
-void _quitForReal() {
-  exit(0);
-}
+  @override
+  void onWindowUnmaximize() {
+    if (mounted) setState(() => _isMaximized = false);
+  }
 
-@override
-void onWindowClose() {
-unawaited(_handleCloseRequested());
-}
+  Future<void> _toggleMaximize() async {
+    if (_isMaximized) {
+      await windowManager.restore();
+    } else {
+      await windowManager.maximize();
+    }
+    // windowManager 的事件会回调 onWindowMaximize/Restore/Unmaximize 自动 setState
+  }
 
-@override
-void onTrayIconMouseDown() {
-unawaited(_showWindowFromTray());
-}
+  Future<void> _setupDesktopCloseBehavior() async {
+    if (!_isDesktop) return;
 
-@override
-void onTrayIconRightMouseDown() {
-unawaited(_trayManager.popUpContextMenu());
-}
+    windowManager.addListener(this);
+    _trayManager.addListener(this);
+    await windowManager.setPreventClose(true);
+    _isMaximized = await windowManager.isMaximized();
+    await _initTray();
+  }
 
-@override
-void onTrayMenuItemClick(MenuItem menuItem) {
-switch (menuItem.key) {
-case 'show_window':
-unawaited(_showWindowFromTray());
-break;
-case 'exit':
-_quitForReal();
-break;
-}
-}
+  Future<void> _initTray() async {
+    final String iconPath;
+    if (RuntimePlatform.isWindows) {
+      iconPath = await _ensureTrayIconFile(
+        preferredAssetPath: 'assets/icon.ico',
+        fallbackAssetPath: 'assets/logo.png',
+        outputFileName: 'astral_game_tray_icon_bw',
+      );
+    } else {
+      iconPath = await _ensureTrayIconFile(
+        preferredAssetPath: 'assets/logo.png',
+        fallbackAssetPath: 'assets/logo.png',
+        outputFileName: 'astral_game_tray_icon_bw',
+      );
+    }
 
-void _handleDestinationSelected(int index) {
-if (index == _selectedIndex) return;
-setState(() => _selectedIndex = index);
-}
+    await _trayManager.setIcon(iconPath);
+    if (!RuntimePlatform.isLinux) {
+      await _trayManager.setToolTip('Astral Game');
+    }
+    await _trayManager.setContextMenu(
+      Menu(
+        items: [
+          MenuItem(key: 'show_window', label: '显示主界面'),
+          MenuItem.separator(),
+          MenuItem(key: 'exit', label: '退出'),
+        ],
+      ),
+    );
+  }
 
-Widget _buildTabBody(bool isCompact) {
-final pages = [
-for (final item in _navigationItems) item.page,
-];
-final stack = isCompact
-? ShellTabStack(index: _selectedIndex, children: pages)
-: IndexedStack(
-index: _selectedIndex,
-sizing: StackFit.expand,
-children: pages,
-);
+  Future<String> _ensureTrayIconFile({
+    required String preferredAssetPath,
+    required String fallbackAssetPath,
+    required String outputFileName,
+  }) async {
+    final tmpDir = await getTemporaryDirectory();
 
-if (!isCompact) return stack;
+    Future<String> writeAsset(String assetPath, String ext) async {
+      final bytes = await rootBundle.load(assetPath);
+      final file = File(
+        '${tmpDir.path}${Platform.pathSeparator}$outputFileName$ext',
+      );
+      await file.writeAsBytes(bytes.buffer.asUint8List(), flush: true);
+      return file.path;
+    }
 
-// 顶栏已处理 status bar，内容区不再叠一层顶部 SafeArea。
-return SafeArea(
-top: false,
-bottom: false,
-child: stack,
-);
-}
+    try {
+      final ext = preferredAssetPath.toLowerCase().endsWith('.ico')
+          ? '.ico'
+          : '.png';
+      return await writeAsset(preferredAssetPath, ext);
+    } catch (e) {
+      appLogger.w('[Shell] 操作失败', error: e);
+      final ext = fallbackAssetPath.toLowerCase().endsWith('.ico')
+          ? '.ico'
+          : '.png';
+      return await writeAsset(fallbackAssetPath, ext);
+    }
+  }
 
-@override
-Widget build(BuildContext context) {
-final palette = context.astralPalette;
-final screenWidth = MediaQuery.sizeOf(context).width;
-final isCompact = screenWidth < 600;
-_screenStateService.updateScreenWidth(screenWidth);
-final nodes = getIt<NodeManagementService>();
+  Future<void> _showWindowFromTray() async {
+    await windowManager.show();
+    await windowManager.focus();
+  }
 
-final contentRadius = isCompact
-? BorderRadius.circular(AppDimensions.radiusMd)
-: const BorderRadius.only(
-topLeft: Radius.circular(AppDimensions.radiusMd),
-);
+  Future<void> _handleCloseRequested() async {
+    if (!_isDesktop) return;
+    final closeMinimize = getIt<SettingsState>().closeMinimize.value;
+    if (closeMinimize) {
+      await windowManager.hide();
+      return;
+    }
+    _quitForReal();
+  }
 
-return PopScope(
-canPop: false,
-child: Scaffold(
-backgroundColor: palette.canvas,
-body: Row(
-crossAxisAlignment: CrossAxisAlignment.stretch,
-children: [
-if (!isCompact)
-ColoredBox(
-color: palette.canvas,
-child: Watch((context) {
-return LeftNav(
-items: _navigationItems,
-selectedIndex: _selectedIndex,
-onSelected: _handleDestinationSelected,
-avatar: nodes.currentUserAvatar.value,
-username: nodes.currentUsername.value,
-onAvatarTap: () => showEditProfileDialog(context),
-);
-}),
-),
-Expanded(
-child: ColoredBox(
-color: palette.canvas,
-child: Column(
-children: [
-if (_isDesktopPlatform)
-  _DesktopTitleBar(
-    onClose: () => unawaited(_handleCloseRequested()),
-  )
-else if (isCompact)
-Watch((context) {
-  return _MobileChromeBar(
-    avatar: nodes.currentUserAvatar.value,
-    onAvatarTap: () => showEditProfileDialog(context),
-  );
-}),
-Expanded(
-child: ClipRRect(
-borderRadius: contentRadius,
-child: ColoredBox(
-color: palette.background,
-child: _buildTabBody(isCompact),
-),
-),
-),
-],
-),
-),
-),
-],
-),
-bottomNavigationBar: isCompact
-? ColoredBox(
-color: palette.canvas,
-child: SafeArea(
-top: false,
-child: BottomNav(
-navigationItems: _navigationItems,
-selectedIndex: _selectedIndex,
-onSelected: _handleDestinationSelected,
-),
-),
-)
-: null,
-),
-);
-}
-}
+  /// 真正"结束软件"：直接 exit(0)，什么清理都不等，用户点退出就要立刻走。
+  void _quitForReal() {
+    exit(0);
+  }
 
-/// 手机顶栏：模拟桌面标题栏，头像落在窗口按钮区域。
-class _MobileChromeBar extends StatelessWidget {
-const _MobileChromeBar({
-required this.avatar,
-required this.onAvatarTap,
-});
+  @override
+  void onWindowClose() {
+    unawaited(_handleCloseRequested());
+  }
 
-final Uint8List? avatar;
-final VoidCallback onAvatarTap;
+  @override
+  void onTrayIconMouseDown() {
+    unawaited(_showWindowFromTray());
+  }
 
-@override
-Widget build(BuildContext context) {
-final palette = context.astralPalette;
-return Material(
-color: palette.canvas,
-child: SafeArea(
-bottom: false,
-child: SizedBox(
-height: 48,
-child: Padding(
-padding: const EdgeInsets.symmetric(horizontal: 12),
-child: Row(
-children: [
-const SizedBox(width: 8),
-Expanded(
-child: Text(
-'Astral Game',
-style: TextStyle(
-color: palette.textPrimary,
-fontSize: 13,
-fontWeight: FontWeight.w600,
-),
-),
-),
-AvatarWidget(
-avatar: avatar,
-size: 36,
-onTap: onAvatarTap,
-),
-],
-),
-),
-),
-),
-);
-}
-}
+  @override
+  void onTrayIconRightMouseDown() {
+    unawaited(_trayManager.popUpContextMenu());
+  }
 
-/// 桌面窗口标题栏（拖拽 + 窗口按钮）。
-class _DesktopTitleBar extends StatefulWidget {
-const _DesktopTitleBar({
-required this.onClose,
-});
+  @override
+  void onTrayMenuItemClick(MenuItem menuItem) {
+    switch (menuItem.key) {
+      case 'show_window':
+        unawaited(_showWindowFromTray());
+        break;
+      case 'exit':
+        _quitForReal();
+        break;
+    }
+  }
 
-final VoidCallback onClose;
+  void _handleDestinationSelected(int index) {
+    if (index == _selectedIndex) return;
+    setState(() => _selectedIndex = index);
+  }
 
-@override
-State<_DesktopTitleBar> createState() => _DesktopTitleBarState();
-}
+  Widget _buildTabBody(bool isCompact) {
+    final pages = [for (final item in _navigationItems) item.page];
+    final stack = isCompact
+        ? ShellTabStack(index: _selectedIndex, children: pages)
+        : IndexedStack(
+            index: _selectedIndex,
+            sizing: StackFit.expand,
+            children: pages,
+          );
 
-class _DesktopTitleBarState extends State<_DesktopTitleBar> {
-bool _isMaximized = false;
+    if (!isCompact) return stack;
 
-Future<void> _toggleMaximize() async {
-if (_isMaximized) {
-await windowManager.restore();
-setState(() => _isMaximized = false);
-} else {
-await windowManager.maximize();
-setState(() => _isMaximized = true);
-}
-}
+    // 顶栏已处理 status bar，内容区不再叠一层顶部 SafeArea。
+    return SafeArea(top: false, bottom: false, child: stack);
+  }
 
-@override
-Widget build(BuildContext context) {
-final palette = context.astralPalette;
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.astralPalette;
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final isCompact = screenWidth < 600;
+    _screenStateService.updateScreenWidth(screenWidth);
+    final nodes = getIt<NodeManagementService>();
 
-return GestureDetector(
-onPanStart: (_) => windowManager.startDragging(),
-child: SizedBox(
-height: 44,
-child: Container(
-color: palette.canvas,
-padding: const EdgeInsets.symmetric(horizontal: 12),
-child: Row(
-children: [
-const SizedBox(width: 8),
-Expanded(
-child: Text(
-'Astral Game',
-style: TextStyle(
-color: palette.textPrimary,
-fontSize: 13,
-fontWeight: FontWeight.w600,
-),
-),
-),
-WindowButton(
-icon: Icons.remove,
-iconSize: 16,
-hoverColor: palette.accentMuted,
-iconColor: palette.textPrimary,
-onTap: () => windowManager.minimize(),
-),
-WindowButton(
-icon: _isMaximized ? Icons.filter_none : Icons.crop_square,
-iconSize: 14,
-hoverColor: palette.accentMuted,
-iconColor: palette.textPrimary,
-onTap: () => unawaited(_toggleMaximize()),
-),
-WindowButton(
-icon: Icons.close,
-iconSize: 16,
-hoverColor: palette.error.withValues(alpha: 0.2),
-iconColor: palette.textPrimary,
-onTap: widget.onClose,
-),
-],
-),
-),
-),
-);
-}
+    final contentRadius = isCompact
+        ? BorderRadius.circular(AppDimensions.radiusMd)
+        : const BorderRadius.only(
+            topLeft: Radius.circular(AppDimensions.radiusMd),
+          );
+
+    return PopScope(
+      canPop: false,
+      child: Scaffold(
+        backgroundColor: palette.canvas,
+        body: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (!isCompact)
+              ColoredBox(
+                color: palette.canvas,
+                child: Watch((context) {
+                  return LeftNav(
+                    items: _navigationItems,
+                    selectedIndex: _selectedIndex,
+                    onSelected: _handleDestinationSelected,
+                    avatar: nodes.currentUserAvatar.value,
+                    username: nodes.currentUsername.value,
+                    onAvatarTap: () => showEditProfileDialog(context),
+                  );
+                }),
+              ),
+            Expanded(
+              child: ColoredBox(
+                color: palette.canvas,
+                child: Column(
+                  children: [
+                    if (_isDesktop)
+                      DesktopTitleBar(
+                        onClose: () => unawaited(_handleCloseRequested()),
+                        isMaximized: _isMaximized,
+                        onToggleMaximize: _toggleMaximize,
+                        // 收藏 Tab：顶栏中央放搜索胶囊
+                        center: _selectedIndex == _bookmarksTabIndex
+                            ? const BookmarkSearchField()
+                            : null,
+                      )
+                    // 移动端全宽显示顶栏（平板此前无顶栏，头像/搜索将无处安放）
+                    else
+                      Watch((context) {
+                        return MobileChromeBar(
+                          avatar: nodes.currentUserAvatar.value,
+                          onAvatarTap: () => showEditProfileDialog(context),
+                          // 收藏 Tab：顶栏中央放搜索胶囊
+                          center: _selectedIndex == _bookmarksTabIndex
+                              ? const BookmarkSearchField()
+                              : null,
+                        );
+                      }),
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: contentRadius,
+                        child: ColoredBox(
+                          color: palette.background,
+                          child: _buildTabBody(isCompact),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+        bottomNavigationBar: isCompact
+            ? ColoredBox(
+                color: palette.canvas,
+                child: SafeArea(
+                  top: false,
+                  child: BottomNav(
+                    navigationItems: _navigationItems,
+                    selectedIndex: _selectedIndex,
+                    onSelected: _handleDestinationSelected,
+                  ),
+                ),
+              )
+            : null,
+      ),
+    );
+  }
 }

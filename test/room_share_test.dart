@@ -32,28 +32,17 @@ void main() {
   });
 
   test('extractJoinToken from next.astral.fan', () {
-    expect(
-      extractJoinToken('https://next.astral.fan/j?c=JHJM8Z'),
-      'JHJM8Z',
-    );
+    expect(extractJoinToken('https://next.astral.fan/j?c=JHJM8Z'), 'JHJM8Z');
   });
 
   test('extractJoinToken from astralgame://', () {
-    expect(
-      extractJoinToken('astralgame://join?c=JHJM8Z'),
-      'JHJM8Z',
-    );
-    expect(
-      extractJoinToken('astralgame://j/JHJM8Z'),
-      'JHJM8Z',
-    );
+    expect(extractJoinToken('astralgame://join?c=JHJM8Z'), 'JHJM8Z');
+    expect(extractJoinToken('astralgame://j/JHJM8Z'), 'JHJM8Z');
   });
 
-  test('extractJoinToken from legacy astral.fan', () {
-    expect(
-      extractJoinToken('https://astral.fan/j?c=JHJM8Z'),
-      'JHJM8Z',
-    );
+  test('extractJoinToken rejects legacy astral.fan (no next prefix)', () {
+    expect(extractJoinToken('https://astral.fan/j?c=JHJM8Z'), isNull);
+    expect(extractJoinToken('https://www.astral.fan/j?c=JHJM8Z'), isNull);
   });
 
   test('extractJoinToken from message with embedded url', () {
@@ -73,14 +62,14 @@ void main() {
 
   test('extractJoinToken ignores widget deep links', () {
     expect(extractJoinToken('astralgame://widget/connect'), isNull);
-    expect(extractJoinToken('astralgame://widget/rooms?code=123456789'), isNull);
+    expect(
+      extractJoinToken('astralgame://widget/rooms?code=123456789'),
+      isNull,
+    );
   });
 
   test('extractJoinToken from www and fragment', () {
-    expect(
-      extractJoinToken('https://www.next.astral.fan/j#JHJM8Z'),
-      'JHJM8Z',
-    );
+    expect(extractJoinToken('https://www.next.astral.fan/j#JHJM8Z'), 'JHJM8Z');
   });
 
   test('looksLikeJoinToken', () {

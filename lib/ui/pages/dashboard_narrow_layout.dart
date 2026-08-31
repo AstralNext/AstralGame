@@ -19,20 +19,12 @@ class DashboardNarrowLayout extends StatelessWidget {
     super.key,
     required this.nodeManagement,
     required this.roomState,
-    required this.onCreateRoom,
-    required this.onJoinRoom,
-    required this.onShareRoom,
-    required this.onDisconnect,
-    required this.onBookmarkRoom,
+    required this.callbacks,
   });
 
   final NodeManagementService nodeManagement;
   final RoomState roomState;
-  final VoidCallback onCreateRoom;
-  final VoidCallback onJoinRoom;
-  final VoidCallback onShareRoom;
-  final VoidCallback onDisconnect;
-  final VoidCallback onBookmarkRoom;
+  final DashboardCallbacks callbacks;
 
   @override
   Widget build(BuildContext context) {
@@ -54,11 +46,7 @@ class DashboardNarrowLayout extends StatelessWidget {
           child: DashboardHomePanel(
             isConnected: false,
             username: nodeManagement.currentUsername.value,
-            onCreateRoom: onCreateRoom,
-            onJoinRoom: onJoinRoom,
-            onShareRoom: onShareRoom,
-            onDisconnect: onDisconnect,
-            onBookmarkRoom: onBookmarkRoom,
+            callbacks: callbacks,
           ),
         );
       }
@@ -85,11 +73,7 @@ class DashboardNarrowLayout extends StatelessWidget {
                 roleLabel: active.roleLabel,
                 gameId: active.gameId,
                 isHost: active.isHost,
-                onCreateRoom: onCreateRoom,
-                onJoinRoom: onJoinRoom,
-                onShareRoom: onShareRoom,
-                onDisconnect: onDisconnect,
-                onBookmarkRoom: onBookmarkRoom,
+                callbacks: callbacks,
               ),
             ),
           ),
@@ -135,11 +119,7 @@ class _NarrowRoomHeader extends StatelessWidget {
     required this.roleLabel,
     required this.gameId,
     required this.isHost,
-    required this.onCreateRoom,
-    required this.onJoinRoom,
-    required this.onShareRoom,
-    required this.onDisconnect,
-    required this.onBookmarkRoom,
+    required this.callbacks,
   });
 
   final NodeManagementService nodeManagement;
@@ -150,11 +130,7 @@ class _NarrowRoomHeader extends StatelessWidget {
   final String? roleLabel;
   final String gameId;
   final bool isHost;
-  final VoidCallback onCreateRoom;
-  final VoidCallback onJoinRoom;
-  final VoidCallback onShareRoom;
-  final VoidCallback onDisconnect;
-  final VoidCallback onBookmarkRoom;
+  final DashboardCallbacks callbacks;
 
   @override
   Widget build(BuildContext context) {
@@ -173,21 +149,14 @@ class _NarrowRoomHeader extends StatelessWidget {
         virtualIp: isRunning
             ? (myIp.isNotEmpty ? myIp : AppConstants.defaultVirtualIp)
             : null,
-        onCreateRoom: onCreateRoom,
-        onJoinRoom: onJoinRoom,
-        onShareRoom: onShareRoom,
-        onDisconnect: onDisconnect,
-        onBookmarkRoom: onBookmarkRoom,
+        callbacks: callbacks,
       );
     });
   }
 }
 
 class _NarrowOpenGamesSlot extends StatelessWidget {
-  const _NarrowOpenGamesSlot({
-    required this.gameId,
-    required this.isRunning,
-  });
+  const _NarrowOpenGamesSlot({required this.gameId, required this.isRunning});
 
   final String gameId;
   final bool isRunning;
@@ -208,10 +177,7 @@ class _NarrowOpenGamesSlot extends StatelessWidget {
         child: SizedBox(
           height: openGamesHeight,
           width: double.infinity,
-          child: RoomOpenGamesPanel(
-            compact: true,
-            gameId: gameId,
-          ),
+          child: RoomOpenGamesPanel(compact: true, gameId: gameId),
         ),
       );
     });
@@ -219,10 +185,7 @@ class _NarrowOpenGamesSlot extends StatelessWidget {
 }
 
 class _MembersBlock extends StatelessWidget {
-  const _MembersBlock({
-    required this.roomState,
-    required this.nodeManagement,
-  });
+  const _MembersBlock({required this.roomState, required this.nodeManagement});
 
   final RoomState roomState;
   final NodeManagementService nodeManagement;
@@ -233,10 +196,7 @@ class _MembersBlock extends StatelessWidget {
       (context) {
         final session = roomState.session.value;
         final game = session == null ? null : GameCatalog.byId(session.gameId);
-        final title = [
-          if (game != null) game.displayName,
-          '成员',
-        ].join(' · ');
+        final title = [if (game != null) game.displayName, '成员'].join(' · ');
         final nodes = nodeManagement.userNodes.value;
         final theme = Theme.of(context).textTheme;
         final palette = context.astralPalette;
@@ -291,7 +251,8 @@ class _MembersBlock extends StatelessWidget {
                   grouped: true,
                   index: i,
                   count: nodes.length,
-                  isRoomHost: session != null &&
+                  isRoomHost:
+                      session != null &&
                       nodeManagement.isRoomHostPeer(
                         node.peerId,
                         sessionIsHost: session.isHost,

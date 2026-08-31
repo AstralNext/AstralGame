@@ -55,8 +55,6 @@ bool looksLikeJoinToken(String raw) =>
 bool isJoinHttpsHost(String host) {
   final h = host.toLowerCase();
   if (h == kJoinHttpsHost || h == 'www.$kJoinHttpsHost') return true;
-  // 兼容旧域名 astral.fan（没有 next 前缀），仍可解析旧链接。
-  if (h == 'astral.fan' || h == 'www.astral.fan') return true;
   return false;
 }
 
@@ -110,7 +108,7 @@ String? extractJoinToken(String raw) {
   }
 
   final embedded = RegExp(
-    r'https?://(?:www\.)?(?:next\.)?astral\.fan/j[^\s]*',
+    r'https?://(?:www\.)?next\.astral\.fan/j[^\s]*',
     caseSensitive: false,
   ).firstMatch(text);
   if (embedded != null) {

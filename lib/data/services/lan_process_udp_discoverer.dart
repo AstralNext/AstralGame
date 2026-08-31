@@ -217,7 +217,7 @@ dirs.add(Directory('$localApp\\Gas Powered Games'));
 }
 final files = <File>[];
 for (final dir in dirs) {
-if (!await dir.exists()) continue;
+if (!dir.existsSync()) continue;
 await for (final ent in dir.list(followLinks: false)) {
 if (ent is! File) continue;
 final name = ent.uri.pathSegments.isEmpty

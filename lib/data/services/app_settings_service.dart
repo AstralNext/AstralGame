@@ -8,9 +8,8 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AppSettingsService {
-
   AppSettingsService(this._prefs, {Directory? supportDir})
-      : _supportDir = supportDir;
+    : _supportDir = supportDir;
   // 用户信息
   static const String _keyUsername = 'username';
   static const String _keyAvatarHash = 'avatar_hash';
@@ -41,11 +40,12 @@ class AppSettingsService {
     if (_avatarLoaded) return;
     try {
       final file = _avatarFile;
-      if (file != null && await file.exists()) {
+      if (file != null && file.existsSync()) {
         final bytes = await file.readAsBytes();
         if (bytes.isNotEmpty) {
           _avatarBytes = Uint8List.fromList(bytes);
-          _avatarHash = _prefs.getString(_keyAvatarHash) ??
+          _avatarHash =
+              _prefs.getString(_keyAvatarHash) ??
               avatarContentHash(_avatarBytes);
           if (_avatarHash != null &&
               _prefs.getString(_keyAvatarHash) != _avatarHash) {
@@ -74,7 +74,8 @@ class AppSettingsService {
   // ---- 网络配置 ----
 
   static const String _keyDisableP2p = 'disable_p2p';
-  static const String _keyEnableUdpBroadcastRelay = 'enable_udp_broadcast_relay';
+  static const String _keyEnableUdpBroadcastRelay =
+      'enable_udp_broadcast_relay';
   static const String _keyFloatingOverlayEnabled = 'floating_overlay_enabled';
 
   bool isDisableP2p() => _prefs.getBool(_keyDisableP2p) ?? false;
@@ -145,7 +146,7 @@ class AppSettingsService {
     _avatarHash = null;
     _avatarLoaded = true;
     final file = _avatarFile;
-    if (file != null && await file.exists()) {
+    if (file != null && file.existsSync()) {
       await file.delete();
     }
     await _prefs.remove(_keyAvatarHash);
@@ -164,7 +165,8 @@ class AppSettingsService {
       await _prefs.setBool(_keyIsDhcp, value);
 
   /// 获取虚拟 IP
-  String getVirtualIp() => _prefs.getString(_keyVirtualIp) ?? kDefaultVirtualIpV4;
+  String getVirtualIp() =>
+      _prefs.getString(_keyVirtualIp) ?? kDefaultVirtualIpV4;
   Future<void> setVirtualIp(String value) async =>
       await _prefs.setString(_keyVirtualIp, value);
 }
