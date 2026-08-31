@@ -96,8 +96,10 @@ class _ServersMainPageState extends State<ServersMainPage> {
         proxyDecorator: (child, index, animation) {
           return Material(color: Colors.transparent, child: child);
         },
-        // Flutter 3.41+ onReorderItem: newIndex 已自动扣除 oldIndex 删除影响，无需手动调整。
-        onReorderItem: (oldIndex, newIndex) {
+        // 兼容 stable 的 onReorder：newIndex 是"移除前"的目标下标，需手动扣除。
+        // （beta 3.46 的 onReorderItem 才是扣除后的，CI 用的 stable 3.41 没有，勿换。）
+        onReorder: (oldIndex, newIndex) {
+          if (oldIndex < newIndex) newIndex -= 1;
           final newServers = List<ServerMod>.from(servers);
           final server = newServers.removeAt(oldIndex);
           newServers.insert(newIndex, server);
