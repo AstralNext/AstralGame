@@ -41,8 +41,6 @@ abstract class ActiveRoomSession with _$ActiveRoomSession {
     required final List<PeerEndpoint> peers,
   }) = _ActiveRoomSession;
 
-  String get roleLabel => isHost ? '房主' : '成员';
-
   /// 支持显式传 null。用 [_unset] 哨兵和"用户未传参"区分。
   ActiveRoomSession copyWithNullable({
     Object? shortCode = _unset,

@@ -42,10 +42,8 @@ class DashboardHomePanel extends StatelessWidget {
     this.isLinking = false,
     this.username,
     this.roomDisplayName,
-    this.roomRoleLabel,
     this.roomGameId,
     this.roomShortCode,
-    this.isRoomHost = false,
     this.hostOnline = true,
     this.virtualIp,
     required this.callbacks,
@@ -57,10 +55,8 @@ class DashboardHomePanel extends StatelessWidget {
   final bool isLinking;
   final String? username;
   final String? roomDisplayName;
-  final String? roomRoleLabel;
   final String? roomGameId;
   final String? roomShortCode;
-  final bool isRoomHost;
   final bool hostOnline;
   final String? virtualIp;
   final DashboardCallbacks callbacks;
@@ -85,10 +81,8 @@ class DashboardHomePanel extends StatelessWidget {
               return ConnectedRoomCard(
                 key: const ValueKey('connected'),
                 roomDisplayName: roomDisplayName ?? '房间',
-                roomRoleLabel: roomRoleLabel,
                 roomGameId: roomGameId,
                 roomShortCode: roomShortCode,
-                isRoomHost: isRoomHost,
                 hostOnline: hostOnline,
                 isLinking: isLinking,
                 virtualIp: virtualIp,

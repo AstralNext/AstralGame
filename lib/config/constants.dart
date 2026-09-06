@@ -5,7 +5,6 @@ class AppRadius {
   AppRadius._();
   static const brSmall = BorderRadius.all(Radius.circular(16));
   static const brMedium = BorderRadius.all(Radius.circular(18));
-  static const brLarge = BorderRadius.all(Radius.circular(20));
 }
 
 /// MD3 设计规范 - 状态颜色（语义色）
@@ -20,9 +19,6 @@ class AppColors {
 /// 应用常量定义
 class AppConstants {
   AppConstants._();
-
-  // 默认 IP 地址
-  static const String defaultVirtualIp = '';
 
   static const Duration pingTimeout = Duration(seconds: 5);
 

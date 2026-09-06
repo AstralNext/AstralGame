@@ -25,7 +25,6 @@ dependencies:
   window_manager: ^0.4.3
   get_it: ^9.2.0
   signals: ^6.3.0
-  signals_flutter: ^6.3.0
   url_launcher: ^6.3.0
   share_plus: ^10.1.4
   app_links: ^6.4.1
@@ -45,8 +44,6 @@ dependencies:
   flutter_markdown: ^0.7.7+1
   ffi: ^2.1.0
   freezed_annotation: ^3.0.0
-  json_annotation: ^4.9.0
-  io: ^1.1.0
   win32: ^5.15.0
   win32_registry: ^2.1.0
 dev_dependencies:
@@ -88,6 +85,7 @@ flutter:
     - assets/games/dont_starve_together/
     - assets/games/factorio/
     - assets/games/forged_alliance/
+    - assets/games/grand_theft_auto_v/
     - assets/games/left_4_dead/
     - assets/games/left_4_dead_2/
     - assets/games/mindustry/

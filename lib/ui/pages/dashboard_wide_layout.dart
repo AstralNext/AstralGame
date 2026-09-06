@@ -1,5 +1,4 @@
 import 'package:astral_game/config/app_dimensions.dart';
-import 'package:astral_game/config/constants.dart';
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/models/game_catalog.dart';
 import 'package:astral_game/data/services/connection_service.dart';
@@ -123,15 +122,8 @@ class _MembersPane extends StatelessWidget {
                     users: nodes,
                     nodeManagement: nodeManagement,
                     physics: const AlwaysScrollableScrollPhysics(),
-                    isRoomHostOf: (node) {
-                      final s = roomState.session.value;
-                      if (s == null) return false;
-                      return nodeManagement.isRoomHostPeer(
-                        node.peerId,
-                        sessionIsHost: s.isHost,
-                        isCredentialPeer: node.isCredentialPeer,
-                      );
-                    },
+                    isLocalOf: (node) =>
+                        nodeManagement.isLocalPeer(node.peerId),
                   );
                 },
                 dependencies: [
@@ -174,14 +166,10 @@ class _RoomPane extends StatelessWidget {
             isConnected: true,
             isLinking: isLinking,
             roomDisplayName: roomState.activeRoomDisplayLabel,
-            roomRoleLabel: session?.roleLabel,
             roomGameId: session?.gameId,
             roomShortCode: roomState.activeShareCode,
-            isRoomHost: session?.isHost == true,
             hostOnline: roomState.hostOnline.value,
-            virtualIp: isRunning
-                ? (myIp.isNotEmpty ? myIp : AppConstants.defaultVirtualIp)
-                : null,
+            virtualIp: isRunning ? myIp : null,
             callbacks: callbacks,
           ),
           const SizedBox(height: AppDimensions.sectionGap),

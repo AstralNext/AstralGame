@@ -10,10 +10,8 @@ class ConnectedRoomCard extends StatelessWidget {
   const ConnectedRoomCard({
     super.key,
     required this.roomDisplayName,
-    this.roomRoleLabel,
     this.roomGameId,
     this.roomShortCode,
-    required this.isRoomHost,
     this.hostOnline = true,
     this.isLinking = false,
     this.virtualIp,
@@ -24,10 +22,8 @@ class ConnectedRoomCard extends StatelessWidget {
   });
 
   final String roomDisplayName;
-  final String? roomRoleLabel;
   final String? roomGameId;
   final String? roomShortCode;
-  final bool isRoomHost;
   final bool hostOnline;
   final bool isLinking;
   final String? virtualIp;

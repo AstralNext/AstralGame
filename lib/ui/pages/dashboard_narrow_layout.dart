@@ -1,5 +1,4 @@
 import 'package:astral_game/config/app_dimensions.dart';
-import 'package:astral_game/config/constants.dart';
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/models/game_catalog.dart';
 import 'package:astral_game/data/services/connection_service.dart';
@@ -70,9 +69,7 @@ class DashboardNarrowLayout extends StatelessWidget {
                 isRunning: isRunning,
                 isLinking: isLinking,
                 username: nodeManagement.currentUsername.value,
-                roleLabel: active.roleLabel,
                 gameId: active.gameId,
-                isHost: active.isHost,
                 callbacks: callbacks,
               ),
             ),
@@ -116,9 +113,7 @@ class _NarrowRoomHeader extends StatelessWidget {
     required this.isRunning,
     required this.isLinking,
     required this.username,
-    required this.roleLabel,
     required this.gameId,
-    required this.isHost,
     required this.callbacks,
   });
 
@@ -127,9 +122,7 @@ class _NarrowRoomHeader extends StatelessWidget {
   final bool isRunning;
   final bool isLinking;
   final String username;
-  final String? roleLabel;
   final String gameId;
-  final bool isHost;
   final DashboardCallbacks callbacks;
 
   @override
@@ -141,14 +134,10 @@ class _NarrowRoomHeader extends StatelessWidget {
         isLinking: isLinking,
         username: username,
         roomDisplayName: roomState.activeRoomDisplayLabel,
-        roomRoleLabel: roleLabel,
         roomGameId: gameId,
         roomShortCode: roomState.activeShareCode,
-        isRoomHost: isHost,
         hostOnline: roomState.hostOnline.value,
-        virtualIp: isRunning
-            ? (myIp.isNotEmpty ? myIp : AppConstants.defaultVirtualIp)
-            : null,
+        virtualIp: isRunning ? myIp : null,
         callbacks: callbacks,
       );
     });
@@ -251,13 +240,7 @@ class _MembersBlock extends StatelessWidget {
                   grouped: true,
                   index: i,
                   count: nodes.length,
-                  isRoomHost:
-                      session != null &&
-                      nodeManagement.isRoomHostPeer(
-                        node.peerId,
-                        sessionIsHost: session.isHost,
-                        isCredentialPeer: node.isCredentialPeer,
-                      ),
+                  isLocal: nodeManagement.isLocalPeer(node.peerId),
                 ),
               ],
             );

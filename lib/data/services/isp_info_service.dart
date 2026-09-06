@@ -12,6 +12,7 @@ class IspInfoService {
   final ConnectivityStatusService _connectivity;
   void Function()? _effectDispose;
   Timer? _debounceTimer;
+  bool _disposed = false;
 
   final label = signal<String>('');
   final loading = signal<bool>(false);
@@ -28,13 +29,18 @@ class IspInfoService {
     _fetchNow();
     _effectDispose = effect(() {
       final kind = _connectivity.current.value;
-      if (kind == NetworkKind.none || kind == NetworkKind.unknown) return;
+      if (kind == NetworkKind.none || kind == NetworkKind.unknown) {
+        _debounceTimer?.cancel();
+        label.value = _unknown;
+        return;
+      }
       _debounceTimer?.cancel();
       _debounceTimer = Timer(const Duration(milliseconds: 800), _fetchNow);
     });
   }
 
   Future<void> dispose() async {
+    _disposed = true;
     _effectDispose?.call();
     _effectDispose = null;
     _debounceTimer?.cancel();
@@ -42,9 +48,11 @@ class IspInfoService {
   }
 
   Future<void> _fetchNow() async {
+    if (_disposed) return;
     loading.value = true;
     try {
       final resp = await http.get(Uri.parse(_apiUrl)).timeout(_timeout);
+      if (_disposed) return;
       if (resp.statusCode != 200) {
         appLogger.w('[IspInfo] ipip HTTP ${resp.statusCode}');
         label.value = _unknown;
@@ -53,12 +61,12 @@ class IspInfoService {
       final data = jsonDecode(resp.body) as Map<String, dynamic>;
       final newLabel = _parseLabel(data) ?? _unknown;
       if (newLabel != label.value) label.value = newLabel;
-      appLogger.i('[IspInfo] ✅ 归属: $newLabel');
+      appLogger.i('[IspInfo] 归属: $newLabel');
     } catch (e) {
       appLogger.e('[IspInfo] 异常: $e');
-      if (label.value.isEmpty) label.value = _unknown;
+      label.value = _unknown;
     } finally {
-      loading.value = false;
+      if (!_disposed) loading.value = false;
     }
   }
 
@@ -68,7 +76,8 @@ class IspInfoService {
     final loc =
         ((json['data'] as Map<String, dynamic>?)?['location'] as List?) ??
         const [];
-    String part(int i) => (loc.length > i ? '${loc[i]}' : '').trim();
+    String part(int i) =>
+        (loc.length > i ? (loc[i]?.toString() ?? '') : '').trim();
 
     final place = '${part(0)}${part(1)}'; // 国家+省，如「中国山东」
     final isp = part(4);

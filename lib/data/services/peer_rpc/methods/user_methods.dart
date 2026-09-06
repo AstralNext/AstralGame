@@ -27,8 +27,8 @@ class UserMethods {
 
   /// 获取用户信息
   ///
-  /// 除昵称、头像外附带本机环境：`os`、`osVersion`、`appName`、`appVersion`、
-  /// `network`、`firewall`（Windows 专用配置文件），便于房间内共享展示。
+  /// 除昵称、头像外附带本机环境（见 [`ClientRuntimeInfo.envSnapshot`]），
+  /// 便于房间内共享展示。
   ///
   /// [params.avatarHash] 为对端已知 hash；相同则不回传整图。
   Future<Map<String, dynamic>> getInfo(dynamic params) async {
@@ -48,13 +48,11 @@ class UserMethods {
       'avatar': shouldSendAvatarBytes(knownHash, hash) && avatar != null
           ? base64Encode(avatar)
           : null,
-      'os': ClientRuntimeInfo.operatingSystem,
-      'osVersion': ClientRuntimeInfo.operatingSystemVersion,
-      'appName': ClientRuntimeInfo.appName,
-      'appVersion': ClientRuntimeInfo.appVersion,
-      'network': connectivity.wireValue,
-      'firewall': firewall,
-      'isp': _ispInfo?.label.value ?? '',
+      ...ClientRuntimeInfo.envSnapshot(
+        networkWire: connectivity.wireValue,
+        firewallWire: firewall,
+        isp: _ispInfo?.label.value ?? '',
+      ),
     };
   }
 
