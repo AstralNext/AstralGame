@@ -432,6 +432,8 @@ class ConnectionService {
         peersOverride: peersOverride,
         enableUdpBroadcastRelay: udpRelay,
         protocol: protocol,
+        isDhcp: _appSettings.getIsDhcp(),
+        virtualIp: _appSettings.getVirtualIp(),
       );
       appLogger.i(
         '[ConnectionService] $purpose 启动实例 network=$networkName '

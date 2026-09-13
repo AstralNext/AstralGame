@@ -24,12 +24,17 @@ class P2PConfigService {
   }
 
   /// 构建 TOML：双方共享 [roomPassword] 作为 network_secret（旧版密码进房）。
+  ///
+  /// [isDhcp] 控制是否让 EasyTier 自动分配虚拟 IP；为 false 时使用
+  /// [virtualIp] 作为固定 IP（写入 [flags].virtual_ipv4）。
   String buildTomlConfig(
     String roomName,
     String roomPassword, {
     List<PeerEndpoint>? peersOverride,
     bool? enableUdpBroadcastRelay,
     GameAssistNetworkProtocol protocol = GameAssistNetworkProtocol.udp,
+    bool isDhcp = true,
+    String? virtualIp,
   }) {
     final disableP2p = _appSettings.isDisableP2p();
     final rawUsername = _appSettings.getUsername().trim();
@@ -56,6 +61,12 @@ class P2PConfigService {
             ? 'enable_udp_broadcast_relay = true\n'
             : '';
 
+    // 关闭 DHCP 时，把用户填写的固定 IP 写入 [flags].virtual_ipv4。
+    final trimmedIp = virtualIp?.trim() ?? '';
+    final virtualIpFlag = (!isDhcp && trimmedIp.isNotEmpty)
+        ? 'virtual_ipv4 = "${_escapeString(trimmedIp)}"\n'
+        : '';
+
     final identityBlock = '''
 [network_identity]
 network_name = "${_escapeString(roomName)}"
@@ -64,15 +75,16 @@ network_secret = "${_escapeString(roomPassword)}"
 
     appLogger.i(
       '[P2PConfigService] buildTomlConfig room=$roomName '
-      'shared_secret=true dhcp=true disable_p2p=$disableP2p '
+      'shared_secret=true dhcp=$isDhcp disable_p2p=$disableP2p '
       'protocol=${protocol.name} udp_broadcast_relay=$udpRelay '
+      'virtual_ip=${(!isDhcp && trimmedIp.isNotEmpty) ? trimmedIp : "auto"} '
       'peers=${peers.length}',
     );
 
     return '''
 instance_name = "AstralGame"
 hostname = "${_escapeString(hostname)}"
-dhcp = true
+dhcp = $isDhcp
 listeners = [
     "tcp://0.0.0.0:0",
     "udp://0.0.0.0:0",
@@ -82,6 +94,7 @@ $identityBlock
 ${peerBlock.isNotEmpty ? '$peerBlock\n\n' : ''}${_flagsBlock(
       disableP2p: disableP2p,
       udpBroadcastFlag: udpBroadcastFlag,
+      virtualIpFlag: virtualIpFlag,
       protocol: protocol,
     )}
 ''';
@@ -91,6 +104,7 @@ ${peerBlock.isNotEmpty ? '$peerBlock\n\n' : ''}${_flagsBlock(
   static String _flagsBlock({
     required bool disableP2p,
     required String udpBroadcastFlag,
+    required String virtualIpFlag,
     required GameAssistNetworkProtocol protocol,
   }) {
     final quic = protocol == GameAssistNetworkProtocol.tcp
@@ -108,7 +122,7 @@ enable_relay_foreign_network_quic = false
     return '''
 [flags]
 disable_p2p = $disableP2p
-${udpBroadcastFlag}data_compress_algo = 2
+$udpBroadcastFlag${virtualIpFlag}data_compress_algo = 2
 default_protocol = "tcp"
 dev_name = "ASGAME"
 disable_kcp_input = true
