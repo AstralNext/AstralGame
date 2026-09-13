@@ -59,3 +59,28 @@ const kDefaultVirtualIpV4 = '10.147.18.24';
 
 /// astral-share 短码服务地址。
 const kShareCodeServiceBaseUrl = 'http://103.194.107.25:8080/';
+
+/// astral-share 短码服务请求超时：短码只是锦上添花（有离线邀请兜底），
+/// 不能让建房/分享等关键路径被无超时请求无限挂起。
+const kShareCodeTimeout = Duration(seconds: 8);
+
+// --- 远程服务超时 ---
+// 各远程 HTTP 服务的超时统一收口在此，改一处全局生效。
+
+/// 一言（v1.hitokoto.cn）：装饰性内容，超时短一点无所谓。
+const kHitokotoTimeout = Duration(seconds: 6);
+
+/// 栗次元壁纸 JSON API（t.alcy.cc）：取直链，失败回退本地图。
+const kWallpaperTimeout = Duration(seconds: 8);
+
+/// 壁纸图片本体下载（可能是数 MB 的大图，比 JSON API 宽松）。
+const kWallpaperDownloadTimeout = Duration(seconds: 30);
+
+/// ISP 归属查询（myip.ipip.net）：失败显示「未知运营商」。
+const kIspInfoTimeout = Duration(seconds: 8);
+
+/// 游戏规则目录（gamerules.json）：有 asset/磁盘缓存多级回退。
+const kGameRulesTimeout = Duration(seconds: 12);
+
+/// GitHub Releases 更新检查：GitHub 在国内访问慢，给最宽时限。
+const kUpdateCheckTimeout = Duration(seconds: 15);

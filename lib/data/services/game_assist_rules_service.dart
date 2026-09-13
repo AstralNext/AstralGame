@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:astral_game/config/network_constants.dart';
 import 'package:astral_game/data/models/game_assist_rules.dart';
 import 'package:astral_game/data/models/game_catalog.dart';
 import 'package:astral_game/utils/logger.dart';
@@ -226,7 +227,7 @@ class GameAssistRulesService {
       };
       final res = await _client
           .get(Uri.parse(remoteUrl), headers: headers)
-          .timeout(const Duration(seconds: 12));
+          .timeout(kGameRulesTimeout);
       if (res.statusCode == 304) {
         return const _RemoteRulesFetch(notModified: true);
       }

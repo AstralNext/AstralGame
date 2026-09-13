@@ -1,6 +1,7 @@
 import 'package:astral_game/utils/logger.dart';
 import 'dart:io';
 
+import 'package:astral_game/config/network_constants.dart';
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/services/alcy_wallpaper_service.dart';
 import 'package:astral_game/data/services/hitokoto_service.dart';
@@ -101,7 +102,7 @@ class DailySceneryCardState extends State<DailySceneryCard> {
     if (url != null && url.isNotEmpty) {
       final res = await http
           .get(Uri.parse(url))
-          .timeout(const Duration(seconds: 30));
+          .timeout(kWallpaperDownloadTimeout);
       if (res.statusCode < 200 || res.statusCode >= 300) {
         throw StateError('图片下载失败：${res.statusCode}');
       }

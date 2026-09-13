@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:astral_game/config/constants.dart';
+import 'package:astral_game/config/network_constants.dart';
 import 'package:astral_game/data/state/update_state.dart';
 import 'package:astral_game/utils/app_version.dart';
 import 'package:astral_game/utils/client_runtime_info.dart';
@@ -14,7 +15,7 @@ class UpdateService {
   UpdateService(this.updateState);
 
   final UpdateState updateState;
-  static const _requestTimeout = Duration(seconds: 15);
+  static const _requestTimeout = kUpdateCheckTimeout;
 
   /// 当前版本（来自 pubspec / [PackageInfo]，见 [ClientRuntimeInfo.warmUp]）。
   Future<String> getCurrentVersion() async {

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:astral_game/config/network_constants.dart';
 import 'package:astral_game/data/services/connectivity_status_service.dart';
 import 'package:astral_game/utils/logger.dart';
 import 'package:http/http.dart' as http;
@@ -20,7 +21,7 @@ class IspInfoService {
   // 单一数据源：ipip.net 免费接口。自动识别客户端真实 IP，
   // 无需传参，UTF-8 JSON，location = [国家, 省, 市, 区县, 运营商]（全中文）。
   static const _apiUrl = 'https://myip.ipip.net/json';
-  static const _timeout = Duration(seconds: 8);
+  static const _timeout = kIspInfoTimeout;
   static const _unknown = '未知运营商';
 
   void start() {

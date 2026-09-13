@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:astral_game/config/network_constants.dart';
+import 'package:astral_game/data/services/remote_service_exception.dart';
 import 'package:http/http.dart' as http;
 
 /// 一言（Hitokoto）一句。
@@ -38,17 +40,20 @@ class HitokotoService {
   );
 
   Future<HitokotoQuote> fetch() async {
-    final res = await _client.get(_uri).timeout(const Duration(seconds: 6));
+    final res = await withRemoteTimeout(_client.get(_uri), kHitokotoTimeout, '一言');
     if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw StateError('一言请求失败：${res.statusCode}');
+      throw RemoteServiceException(
+        '一言请求失败：${res.statusCode}',
+        statusCode: res.statusCode,
+      );
     }
     final decoded = jsonDecode(utf8.decode(res.bodyBytes));
     if (decoded is! Map) {
-      throw const FormatException('一言返回非 JSON 对象');
+      throw RemoteServiceException('一言返回非 JSON 对象');
     }
     final text = '${decoded['hitokoto'] ?? ''}'.trim();
     if (text.isEmpty) {
-      throw const FormatException('一言正文为空');
+      throw RemoteServiceException('一言正文为空');
     }
     return HitokotoQuote(
       text: text,
