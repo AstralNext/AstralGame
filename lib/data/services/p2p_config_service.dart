@@ -61,10 +61,12 @@ class P2PConfigService {
             ? 'enable_udp_broadcast_relay = true\n'
             : '';
 
-    // 关闭 DHCP 时，把用户填写的固定 IP 写入 [flags].virtual_ipv4。
+    // 关闭 DHCP 时，把用户填写的固定 IP 写入 EasyTier 顶层 ipv4 键（与 dhcp 平级）。
+    // 不能写进 [flags]：flags 只认预定义键，未知键会被 EasyTier 静默丢弃，
+    // 导致 DHCP 已关、固定 IP 又没生效，虚拟网卡无 IP（UI 表现为"未分配 IP"）。
     final trimmedIp = virtualIp?.trim() ?? '';
-    final virtualIpFlag = (!isDhcp && trimmedIp.isNotEmpty)
-        ? 'virtual_ipv4 = "${_escapeString(trimmedIp)}"\n'
+    final fixedIpv4Line = (!isDhcp && trimmedIp.isNotEmpty)
+        ? 'ipv4 = "${_escapeString(trimmedIp)}"\n'
         : '';
 
     final identityBlock = '''
@@ -85,6 +87,7 @@ network_secret = "${_escapeString(roomPassword)}"
 instance_name = "AstralGame"
 hostname = "${_escapeString(hostname)}"
 dhcp = $isDhcp
+$fixedIpv4Line
 listeners = [
     "tcp://0.0.0.0:0",
     "udp://0.0.0.0:0",
@@ -94,7 +97,6 @@ $identityBlock
 ${peerBlock.isNotEmpty ? '$peerBlock\n\n' : ''}${_flagsBlock(
       disableP2p: disableP2p,
       udpBroadcastFlag: udpBroadcastFlag,
-      virtualIpFlag: virtualIpFlag,
       protocol: protocol,
     )}
 ''';
@@ -104,7 +106,6 @@ ${peerBlock.isNotEmpty ? '$peerBlock\n\n' : ''}${_flagsBlock(
   static String _flagsBlock({
     required bool disableP2p,
     required String udpBroadcastFlag,
-    required String virtualIpFlag,
     required GameAssistNetworkProtocol protocol,
   }) {
     final quic = protocol == GameAssistNetworkProtocol.tcp
@@ -122,7 +123,8 @@ enable_relay_foreign_network_quic = false
     return '''
 [flags]
 disable_p2p = $disableP2p
-$udpBroadcastFlag${virtualIpFlag}data_compress_algo = 2
+$udpBroadcastFlag
+data_compress_algo = 2
 default_protocol = "tcp"
 dev_name = "ASGAME"
 disable_kcp_input = true
