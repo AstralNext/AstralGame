@@ -6,9 +6,11 @@ part 'active_room_session.g.dart';
 
 /// 短码 / 离线邀请载荷：共享 network_name + network_secret（旧版进网方式）。
 @freezed
-@JsonSerializable(explicitToJson: true)
 abstract class RoomInvitePayload with _$RoomInvitePayload {
   const RoomInvitePayload._();
+
+  // ignore: invalid_annotation_target
+  @JsonSerializable(explicitToJson: true)
   const factory RoomInvitePayload({
     @Default(1) final int v,
     @JsonKey(name: 'game_id') required final String gameId,

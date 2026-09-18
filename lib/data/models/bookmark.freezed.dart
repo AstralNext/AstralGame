@@ -15,7 +15,7 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$Bookmark {
 
- int get id; String get customName; RoomInvitePayload get payload; String? get originalShortCode; String? get originalOfflineToken; DateTime get savedAt; DateTime? get lastUsedAt; bool get pinned;
+ int get id; String get customName; RoomInvitePayload get payload; DateTime get savedAt; DateTime? get lastUsedAt; bool get pinned;
 /// Create a copy of Bookmark
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -28,16 +28,16 @@ $BookmarkCopyWith<Bookmark> get copyWith => _$BookmarkCopyWithImpl<Bookmark>(thi
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is Bookmark&&(identical(other.id, id) || other.id == id)&&(identical(other.customName, customName) || other.customName == customName)&&(identical(other.payload, payload) || other.payload == payload)&&(identical(other.originalShortCode, originalShortCode) || other.originalShortCode == originalShortCode)&&(identical(other.originalOfflineToken, originalOfflineToken) || other.originalOfflineToken == originalOfflineToken)&&(identical(other.savedAt, savedAt) || other.savedAt == savedAt)&&(identical(other.lastUsedAt, lastUsedAt) || other.lastUsedAt == lastUsedAt)&&(identical(other.pinned, pinned) || other.pinned == pinned));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is Bookmark&&(identical(other.id, id) || other.id == id)&&(identical(other.customName, customName) || other.customName == customName)&&(identical(other.payload, payload) || other.payload == payload)&&(identical(other.savedAt, savedAt) || other.savedAt == savedAt)&&(identical(other.lastUsedAt, lastUsedAt) || other.lastUsedAt == lastUsedAt)&&(identical(other.pinned, pinned) || other.pinned == pinned));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,customName,payload,originalShortCode,originalOfflineToken,savedAt,lastUsedAt,pinned);
+int get hashCode => Object.hash(runtimeType,id,customName,payload,savedAt,lastUsedAt,pinned);
 
 @override
 String toString() {
-  return 'Bookmark(id: $id, customName: $customName, payload: $payload, originalShortCode: $originalShortCode, originalOfflineToken: $originalOfflineToken, savedAt: $savedAt, lastUsedAt: $lastUsedAt, pinned: $pinned)';
+  return 'Bookmark(id: $id, customName: $customName, payload: $payload, savedAt: $savedAt, lastUsedAt: $lastUsedAt, pinned: $pinned)';
 }
 
 
@@ -48,7 +48,7 @@ abstract mixin class $BookmarkCopyWith<$Res>  {
   factory $BookmarkCopyWith(Bookmark value, $Res Function(Bookmark) _then) = _$BookmarkCopyWithImpl;
 @useResult
 $Res call({
- int id, String customName, RoomInvitePayload payload, String? originalShortCode, String? originalOfflineToken, DateTime savedAt, DateTime? lastUsedAt, bool pinned
+ int id, String customName, RoomInvitePayload payload, DateTime savedAt, DateTime? lastUsedAt, bool pinned
 });
 
 
@@ -65,14 +65,12 @@ class _$BookmarkCopyWithImpl<$Res>
 
 /// Create a copy of Bookmark
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? customName = null,Object? payload = null,Object? originalShortCode = freezed,Object? originalOfflineToken = freezed,Object? savedAt = null,Object? lastUsedAt = freezed,Object? pinned = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? customName = null,Object? payload = null,Object? savedAt = null,Object? lastUsedAt = freezed,Object? pinned = null,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as int,customName: null == customName ? _self.customName : customName // ignore: cast_nullable_to_non_nullable
 as String,payload: null == payload ? _self.payload : payload // ignore: cast_nullable_to_non_nullable
-as RoomInvitePayload,originalShortCode: freezed == originalShortCode ? _self.originalShortCode : originalShortCode // ignore: cast_nullable_to_non_nullable
-as String?,originalOfflineToken: freezed == originalOfflineToken ? _self.originalOfflineToken : originalOfflineToken // ignore: cast_nullable_to_non_nullable
-as String?,savedAt: null == savedAt ? _self.savedAt : savedAt // ignore: cast_nullable_to_non_nullable
+as RoomInvitePayload,savedAt: null == savedAt ? _self.savedAt : savedAt // ignore: cast_nullable_to_non_nullable
 as DateTime,lastUsedAt: freezed == lastUsedAt ? _self.lastUsedAt : lastUsedAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,pinned: null == pinned ? _self.pinned : pinned // ignore: cast_nullable_to_non_nullable
 as bool,
@@ -169,10 +167,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int id,  String customName,  RoomInvitePayload payload,  String? originalShortCode,  String? originalOfflineToken,  DateTime savedAt,  DateTime? lastUsedAt,  bool pinned)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int id,  String customName,  RoomInvitePayload payload,  DateTime savedAt,  DateTime? lastUsedAt,  bool pinned)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _Bookmark() when $default != null:
-return $default(_that.id,_that.customName,_that.payload,_that.originalShortCode,_that.originalOfflineToken,_that.savedAt,_that.lastUsedAt,_that.pinned);case _:
+return $default(_that.id,_that.customName,_that.payload,_that.savedAt,_that.lastUsedAt,_that.pinned);case _:
   return orElse();
 
 }
@@ -190,10 +188,10 @@ return $default(_that.id,_that.customName,_that.payload,_that.originalShortCode,
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int id,  String customName,  RoomInvitePayload payload,  String? originalShortCode,  String? originalOfflineToken,  DateTime savedAt,  DateTime? lastUsedAt,  bool pinned)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int id,  String customName,  RoomInvitePayload payload,  DateTime savedAt,  DateTime? lastUsedAt,  bool pinned)  $default,) {final _that = this;
 switch (_that) {
 case _Bookmark():
-return $default(_that.id,_that.customName,_that.payload,_that.originalShortCode,_that.originalOfflineToken,_that.savedAt,_that.lastUsedAt,_that.pinned);case _:
+return $default(_that.id,_that.customName,_that.payload,_that.savedAt,_that.lastUsedAt,_that.pinned);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -210,10 +208,10 @@ return $default(_that.id,_that.customName,_that.payload,_that.originalShortCode,
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int id,  String customName,  RoomInvitePayload payload,  String? originalShortCode,  String? originalOfflineToken,  DateTime savedAt,  DateTime? lastUsedAt,  bool pinned)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int id,  String customName,  RoomInvitePayload payload,  DateTime savedAt,  DateTime? lastUsedAt,  bool pinned)?  $default,) {final _that = this;
 switch (_that) {
 case _Bookmark() when $default != null:
-return $default(_that.id,_that.customName,_that.payload,_that.originalShortCode,_that.originalOfflineToken,_that.savedAt,_that.lastUsedAt,_that.pinned);case _:
+return $default(_that.id,_that.customName,_that.payload,_that.savedAt,_that.lastUsedAt,_that.pinned);case _:
   return null;
 
 }
@@ -225,14 +223,12 @@ return $default(_that.id,_that.customName,_that.payload,_that.originalShortCode,
 
 @JsonSerializable(explicitToJson: true)
 class _Bookmark extends Bookmark {
-  const _Bookmark({required this.id, required this.customName, required this.payload, this.originalShortCode, this.originalOfflineToken, required this.savedAt, this.lastUsedAt, this.pinned = false}): super._();
+  const _Bookmark({required this.id, required this.customName, required this.payload, required this.savedAt, this.lastUsedAt, this.pinned = false}): super._();
   factory _Bookmark.fromJson(Map<String, dynamic> json) => _$BookmarkFromJson(json);
 
 @override final  int id;
 @override final  String customName;
 @override final  RoomInvitePayload payload;
-@override final  String? originalShortCode;
-@override final  String? originalOfflineToken;
 @override final  DateTime savedAt;
 @override final  DateTime? lastUsedAt;
 @override@JsonKey() final  bool pinned;
@@ -250,16 +246,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Bookmark&&(identical(other.id, id) || other.id == id)&&(identical(other.customName, customName) || other.customName == customName)&&(identical(other.payload, payload) || other.payload == payload)&&(identical(other.originalShortCode, originalShortCode) || other.originalShortCode == originalShortCode)&&(identical(other.originalOfflineToken, originalOfflineToken) || other.originalOfflineToken == originalOfflineToken)&&(identical(other.savedAt, savedAt) || other.savedAt == savedAt)&&(identical(other.lastUsedAt, lastUsedAt) || other.lastUsedAt == lastUsedAt)&&(identical(other.pinned, pinned) || other.pinned == pinned));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Bookmark&&(identical(other.id, id) || other.id == id)&&(identical(other.customName, customName) || other.customName == customName)&&(identical(other.payload, payload) || other.payload == payload)&&(identical(other.savedAt, savedAt) || other.savedAt == savedAt)&&(identical(other.lastUsedAt, lastUsedAt) || other.lastUsedAt == lastUsedAt)&&(identical(other.pinned, pinned) || other.pinned == pinned));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,customName,payload,originalShortCode,originalOfflineToken,savedAt,lastUsedAt,pinned);
+int get hashCode => Object.hash(runtimeType,id,customName,payload,savedAt,lastUsedAt,pinned);
 
 @override
 String toString() {
-  return 'Bookmark(id: $id, customName: $customName, payload: $payload, originalShortCode: $originalShortCode, originalOfflineToken: $originalOfflineToken, savedAt: $savedAt, lastUsedAt: $lastUsedAt, pinned: $pinned)';
+  return 'Bookmark(id: $id, customName: $customName, payload: $payload, savedAt: $savedAt, lastUsedAt: $lastUsedAt, pinned: $pinned)';
 }
 
 
@@ -270,7 +266,7 @@ abstract mixin class _$BookmarkCopyWith<$Res> implements $BookmarkCopyWith<$Res>
   factory _$BookmarkCopyWith(_Bookmark value, $Res Function(_Bookmark) _then) = __$BookmarkCopyWithImpl;
 @override @useResult
 $Res call({
- int id, String customName, RoomInvitePayload payload, String? originalShortCode, String? originalOfflineToken, DateTime savedAt, DateTime? lastUsedAt, bool pinned
+ int id, String customName, RoomInvitePayload payload, DateTime savedAt, DateTime? lastUsedAt, bool pinned
 });
 
 
@@ -287,14 +283,12 @@ class __$BookmarkCopyWithImpl<$Res>
 
 /// Create a copy of Bookmark
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? customName = null,Object? payload = null,Object? originalShortCode = freezed,Object? originalOfflineToken = freezed,Object? savedAt = null,Object? lastUsedAt = freezed,Object? pinned = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? customName = null,Object? payload = null,Object? savedAt = null,Object? lastUsedAt = freezed,Object? pinned = null,}) {
   return _then(_Bookmark(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as int,customName: null == customName ? _self.customName : customName // ignore: cast_nullable_to_non_nullable
 as String,payload: null == payload ? _self.payload : payload // ignore: cast_nullable_to_non_nullable
-as RoomInvitePayload,originalShortCode: freezed == originalShortCode ? _self.originalShortCode : originalShortCode // ignore: cast_nullable_to_non_nullable
-as String?,originalOfflineToken: freezed == originalOfflineToken ? _self.originalOfflineToken : originalOfflineToken // ignore: cast_nullable_to_non_nullable
-as String?,savedAt: null == savedAt ? _self.savedAt : savedAt // ignore: cast_nullable_to_non_nullable
+as RoomInvitePayload,savedAt: null == savedAt ? _self.savedAt : savedAt // ignore: cast_nullable_to_non_nullable
 as DateTime,lastUsedAt: freezed == lastUsedAt ? _self.lastUsedAt : lastUsedAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,pinned: null == pinned ? _self.pinned : pinned // ignore: cast_nullable_to_non_nullable
 as bool,

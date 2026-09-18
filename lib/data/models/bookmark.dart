@@ -10,17 +10,19 @@ part 'bookmark.g.dart';
 /// 本地收藏的房间：完整保存 [RoomInvitePayload]，加入时无需再查短码服务。
 ///
 /// 仅用户主动触发「⭐ 收藏」写入；不再有"加入历史"这套自动写入机制。
+///
+/// 不存短码/管理令牌：短码绑定当次房间、房主退出即作废，存进收藏只会误导
+/// （显示死码）并制造无意义的回写；加入与分享时都会按需 create 新码。
 @freezed
-@JsonSerializable(explicitToJson: true)
 abstract class Bookmark with _$Bookmark {
   const Bookmark._();
 
+  // ignore: invalid_annotation_target
+  @JsonSerializable(explicitToJson: true)
   const factory Bookmark({
     required final int id,
     required final String customName,
     required final RoomInvitePayload payload,
-    final String? originalShortCode,
-    final String? originalOfflineToken,
     required final DateTime savedAt,
     final DateTime? lastUsedAt,
     @Default(false) final bool pinned,
@@ -38,8 +40,6 @@ abstract class Bookmark with _$Bookmark {
     buf.write(' ');
     buf.write((payload.displayName ?? '').toLowerCase());
     buf.write(' ');
-    buf.write((originalShortCode ?? '').toLowerCase());
-    buf.write(' ');
     buf.write(payload.gameId.toLowerCase());
     return buf.toString();
   }
@@ -53,10 +53,6 @@ abstract class Bookmark with _$Bookmark {
     if (payload.gameName.trim().isNotEmpty) return payload.gameName.trim();
     return payload.networkName;
   }
-
-  /// 收藏时无短码（如：从离线邀请直接收藏），也能给一个可展示的"标识"。
-  String get codeLabel =>
-      originalShortCode?.isNotEmpty == true ? originalShortCode! : '离线';
 
   /// 这条收藏对应的 payload 内容哈希（gameName + networkName + networkSecret + peers 有序列表）。
   ///

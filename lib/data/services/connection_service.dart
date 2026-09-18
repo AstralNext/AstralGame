@@ -335,15 +335,6 @@ class ConnectionService {
         epoch: epoch,
       );
       linked = true;
-      // 加入成功：如果 session 里有新 create 的短码（从收藏/离线加入的情况），
-      // 回写到匹配的 bookmark，之后在收藏页点分享就能直接复用
-      if (resolvedShortCode != null && resolvedShortCode.isNotEmpty) {
-        unawaited(_roomState.refreshBookmarkShareCode(
-          payload,
-          shortCode: resolvedShortCode,
-          adminToken: adminToken,
-        ));
-      }
       return session;
     } on ConnectionAbortedException {
       rethrow;

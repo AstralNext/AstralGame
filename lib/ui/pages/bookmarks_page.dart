@@ -262,23 +262,13 @@ class _BookmarksPageState extends State<BookmarksPage> {
   }
 
   Future<void> _handleShare(Bookmark b) async {
-    // 每次都 create 新短码（旧的早就过期了），并回写到 bookmark
+    // 每次都 create 新短码（旧码随房主退出早已作废），不回写收藏
     String? shareCode;
-    String? adminToken;
     try {
       final result = await _connectionService.createShareCodeForPayload(
         b.payload,
       );
       shareCode = result.code;
-      adminToken = result.adminToken;
-      // 回写到 bookmark，之后 Dashboard 会话分享也能用新短码
-      unawaited(
-        _roomState.refreshBookmarkShareCode(
-          b.payload,
-          shortCode: shareCode,
-          adminToken: adminToken,
-        ),
-      );
     } on ShareCodeException catch (e) {
       if (mounted) {
         showAppSnackBar(context, '短码服务暂不可用（${e.message}），改用离线邀请链接');

@@ -49,17 +49,6 @@ class _DashboardPageState extends State<DashboardPage> {
       shareCode = result.code;
       final updated = session.copyWithNullable(shortCode: result.code);
       _roomState.setSession(updated);
-      // 同时回写到匹配的收藏
-      final payload = _connectionService.payloadFromCurrentSession();
-      if (payload != null) {
-        unawaited(
-          _roomState.refreshBookmarkShareCode(
-            payload,
-            shortCode: result.code,
-            adminToken: result.adminToken,
-          ),
-        );
-      }
     } on ShareCodeException catch (e) {
       if (mounted) showAppSnackBar(context, '短码服务暂不可用（${e.message}）');
     } catch (e) {
@@ -133,11 +122,7 @@ class _DashboardPageState extends State<DashboardPage> {
       if (mounted) showAppSnackBar(context, '还没有可收藏的房间配置');
       return;
     }
-    final session = _roomState.session.value;
-    final bookmark = await _roomState.quickSaveBookmark(
-      payload,
-      originalShortCode: session?.shortCode,
-    );
+    final bookmark = await _roomState.quickSaveBookmark(payload);
     if (!mounted) return;
     showAppSnackBar(context, '已加入收藏：${bookmark.customName}');
   }
@@ -268,11 +253,7 @@ class _DashboardPageState extends State<DashboardPage> {
     try {
       final resolved = await _connectionService.resolveInvitePayload(raw);
       if (!mounted) return;
-      final bookmark = await _roomState.quickSaveBookmark(
-        resolved.payload,
-        originalShortCode: resolved.shortCode,
-        originalOfflineToken: resolved.offlineToken,
-      );
+      final bookmark = await _roomState.quickSaveBookmark(resolved.payload);
       if (!mounted) return;
       showAppSnackBar(context, '已加入收藏：${bookmark.customName}');
     } on ShareCodeException catch (e) {

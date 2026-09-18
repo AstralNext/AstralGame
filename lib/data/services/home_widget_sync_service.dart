@@ -56,9 +56,7 @@ class HomeWidgetSyncService {
       );
       await HomeWidget.saveWidgetData<String>(
         HomeWidgetKeys.connectRoomCode,
-        first?.originalShortCode?.isNotEmpty == true
-            ? first!.originalShortCode!
-            : first?.payload.networkName ?? '',
+        first?.payload.networkName ?? '',
       );
       await HomeWidget.saveWidgetData<String>(
         HomeWidgetKeys.connectStatus,
@@ -77,7 +75,7 @@ class HomeWidgetSyncService {
     } else {
       final code = roomState.activeShareCode ??
           roomState.connectedRoomName.value ??
-          first?.originalShortCode ??
+          first?.payload.networkName ??
           '';
       await HomeWidget.saveWidgetData<String>(
         HomeWidgetKeys.connectRoomLabel,
@@ -194,9 +192,7 @@ class HomeWidgetSyncService {
 
   static Map<String, dynamic> _bookmarkToWidgetJson(Bookmark b) => {
         'label': bookmarkDisplayLabel(b),
-        'code': b.originalShortCode?.isNotEmpty == true
-            ? b.originalShortCode!
-            : b.payload.networkName,
+        'code': b.payload.networkName,
         'network': b.payload.networkName,
         'id': b.id,
       };
