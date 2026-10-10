@@ -69,8 +69,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: bdf75dd432344cea98d7e0e93caf3e714eb84803
-      resolved-ref: bdf75dd432344cea98d7e0e93caf3e714eb84803
+      ref: "7ecbc5ee34045c5205ab67111353c053139edccf"
+      resolved-ref: "7ecbc5ee34045c5205ab67111353c053139edccf"
       url: "https://github.com/ldoubil/astral_rust_core.git"
     source: git
     version: "0.1.0"
