@@ -21,12 +21,15 @@ on:
     branches: [main]
     paths:
       - 'lib/**'
+      - 'rust/**'
+      - 'rust_builder/**'
       - 'android/**'
       - 'ios/**'
       - 'linux/**'
       - 'macos/**'
       - 'windows/**'
       - 'assets/**'
+      - 'dlls/**'
       - 'installer/**'
       - 'tools/raft_astral_net/**'
       - 'tools/valheim_astral_net/**'
@@ -35,6 +38,8 @@ on:
       - 'tools/smartdns/**'
       - 'pubspec.yaml'
       - 'pubspec.lock'
+      - 'cargokit_options.yaml'
+      - 'flutter_rust_bridge.yaml'
       - '.github/workflows/build.yml'
       - '.github/workflows/release.yml'
 
@@ -187,8 +192,8 @@ jobs:
           & nasm -v
 
       - name: 📚 Get dependencies
-        # Rust 核心（rust/ + rust_builder/）已内化到本仓；仅 vpn_service_plugin 跟远端 main tip。
-        run: flutter pub upgrade vpn_service_plugin
+        # Rust 核心（rust/ + rust_builder/）已内化到本仓，依赖全部按 pubspec/lock 锁定解析。
+        run: flutter pub get
         shell: bash
 
       # 只缓存 crates 源码（registry/git），不缓存 cargokit/target 编译产物。
