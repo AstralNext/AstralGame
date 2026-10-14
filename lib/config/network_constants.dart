@@ -37,6 +37,11 @@ const kDefaultLanMulticastPort = 4445;
 String get kDefaultLanMulticastEndpoint =>
     '$kDefaultLanMulticastIpV4:$kDefaultLanMulticastPort';
 
+// --- EasyTier ---
+
+/// EasyTier peer 默认监听端口；URL 未显式带端口时作为 TCP 探测目标端口。
+const kEasyTierDefaultPort = 11010;
+
 // --- SCFA / Forged Alliance 专属 ---
 
 /// SCFA 加入方回包只用 127.0.0.1（避免 192.168.x 被游戏丢包）。

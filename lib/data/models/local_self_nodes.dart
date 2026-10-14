@@ -1,6 +1,6 @@
 import 'package:astral_game/data/models/enhanced_node_info.dart';
 import 'package:astral_game/utils/net_addr.dart';
-import 'package:astral_rust_core/p2p_service.dart' show KVNodeInfo;
+import 'package:astral_game/src/rust/api/p2p.dart' show KVNodeInfo;
 
 /// EasyTier / astral_rust_core 会同时给出：
 /// - `peer_id=0` 合成本机哨兵（带 `my_node_info.virtual_ipv4`）

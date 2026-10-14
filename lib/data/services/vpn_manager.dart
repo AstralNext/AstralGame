@@ -2,25 +2,26 @@ import 'package:astral_game/data/state/vpn_state.dart';
 import 'package:astral_game/utils/client_runtime_info.dart';
 import 'package:astral_game/utils/input_validator.dart';
 import 'package:astral_game/utils/logger.dart';
-import 'package:astral_rust_core/p2p_service.dart';
+import 'package:astral_game/src/rust/api/p2p.dart' show setTunFd;
 import 'package:vpn_service_plugin/vpn_service_plugin.dart';
 
 /// AstralGame 侧 VPN：委托 [AndroidVpnSession]，状态写入 [VpnState]。
 class VpnManager {
-  VpnManager(this.vpnState, P2PService p2p)
-      : _session = AndroidVpnSession(
-          applyTunFd: p2p.setTunFd,
-          log: (level, message) {
-            final msg = '[VpnManager] $message';
-            if (level == 'error') {
-              appLogger.e(msg);
-            } else if (level == 'warn') {
-              appLogger.w(msg);
-            } else {
-              appLogger.i(msg);
-            }
-          },
-        ) {
+  VpnManager(this.vpnState)
+    : _session = AndroidVpnSession(
+        applyTunFd: (instanceId, fd) =>
+            setTunFd(instanceId: instanceId, fd: fd),
+        log: (level, message) {
+          final msg = '[VpnManager] $message';
+          if (level == 'error') {
+            appLogger.e(msg);
+          } else if (level == 'warn') {
+            appLogger.w(msg);
+          } else {
+            appLogger.i(msg);
+          }
+        },
+      ) {
     _session.onRevokedBySystem = (_) async {
       vpnState.setRunning(false);
       vpnState.setConnecting(false);
@@ -49,8 +50,9 @@ class VpnManager {
         .toList(growable: false);
 
     final packageName = ClientRuntimeInfo.packageName;
-    final disallowed =
-        packageName.isEmpty ? const <String>[] : <String>[packageName];
+    final disallowed = packageName.isEmpty
+        ? const <String>[]
+        : <String>[packageName];
 
     final ok = await _session.start(
       instanceId: instanceId,

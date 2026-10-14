@@ -5,6 +5,7 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   file_selector_linux
   gtk
+  isar_community_flutter_libs
   screen_retriever_linux
   tray_manager
   url_launcher_linux
@@ -12,8 +13,8 @@ list(APPEND FLUTTER_PLUGIN_LIST
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST
-  astral_rust_core
   jni
+  rust_lib_astral_game
 )
 
 set(PLUGIN_BUNDLED_LIBRARIES)

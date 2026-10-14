@@ -19,7 +19,8 @@ class AstralGameApp extends StatefulWidget {
   State<AstralGameApp> createState() => _AstralGameAppState();
 }
 
-class _AstralGameAppState extends State<AstralGameApp> with WidgetsBindingObserver {
+class _AstralGameAppState extends State<AstralGameApp>
+    with WidgetsBindingObserver {
   bool _disposed = false;
   final _widgetLaunchHandler = HomeWidgetLaunchHandler(
     navigation: getIt<ShellNavigationService>(),
@@ -78,7 +79,9 @@ class _AstralGameAppState extends State<AstralGameApp> with WidgetsBindingObserv
         builder: (context, child) => JoinLinkBinder(
           child: FloatingOverlayBinder(
             child: HomeWidgetRefreshBinder(
-              child: ThemeWaterDropHost(child: child ?? const SizedBox.shrink()),
+              child: ThemeWaterDropHost(
+                child: child ?? const SizedBox.shrink(),
+              ),
             ),
           ),
         ),

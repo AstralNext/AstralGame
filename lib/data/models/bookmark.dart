@@ -13,12 +13,14 @@ part 'bookmark.g.dart';
 ///
 /// 不存短码/管理令牌：短码绑定当次房间、房主退出即作废，存进收藏只会误导
 /// （显示死码）并制造无意义的回写；加入与分享时都会按需 create 新码。
-@freezed
+@Freezed(toJson: false)
 abstract class Bookmark with _$Bookmark {
   const Bookmark._();
 
+  // 只保留 fromJson：唯一读取方是 BookmarkStore 的旧版 bookmarks.json 一次性导入，
+  // 迁移到 Isar 后已无任何写 JSON 的路径，故不再生成 toJson。
   // ignore: invalid_annotation_target
-  @JsonSerializable(explicitToJson: true)
+  @JsonSerializable(createToJson: false)
   const factory Bookmark({
     required final int id,
     required final String customName,
@@ -65,6 +67,12 @@ abstract class Bookmark with _$Bookmark {
       contentHash == hashInviteContent(other);
 }
 
+/// 收藏排序：置顶优先，其余按 [Bookmark.sortKey] 倒序（最近用过/最近收藏在前）。
+int compareBookmarks(Bookmark a, Bookmark b) {
+  if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
+  return b.sortKey.compareTo(a.sortKey);
+}
+
 /// 生成不与 [takenNames] 重名的收藏名：重名时追加序号（"星露谷局"、"星露谷局 2"…）。
 String uniqueBookmarkName(Iterable<String> takenNames, String baseName) {
   final name = baseName.trim();
@@ -92,8 +100,7 @@ String autoBookmarkName(RoomInvitePayload p) {
 /// 参与哈希的字段：gameName / networkName / networkSecret / peers.uri（先排序保证稳定）。
 /// 不参与：customName / displayName / originalShortCode / pinned / savedAt 等"皮肤"字段。
 String hashInviteContent(RoomInvitePayload p) {
-  final sortedPeers = (p.peers.map((e) => e.uri).toList()..sort())
-      .join('|');
+  final sortedPeers = (p.peers.map((e) => e.uri).toList()..sort()).join('|');
   final input = [
     p.gameId,
     p.gameName,

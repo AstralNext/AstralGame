@@ -16,12 +16,3 @@ _Bookmark _$BookmarkFromJson(Map<String, dynamic> json) => _Bookmark(
       : DateTime.parse(json['lastUsedAt'] as String),
   pinned: json['pinned'] as bool? ?? false,
 );
-
-Map<String, dynamic> _$BookmarkToJson(_Bookmark instance) => <String, dynamic>{
-  'id': instance.id,
-  'customName': instance.customName,
-  'payload': instance.payload.toJson(),
-  'savedAt': instance.savedAt.toIso8601String(),
-  'lastUsedAt': instance.lastUsedAt?.toIso8601String(),
-  'pinned': instance.pinned,
-};

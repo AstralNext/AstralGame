@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:astral_game/data/models/enhanced_node_info.dart';
-import 'package:astral_rust_core/p2p_service.dart';
+import 'package:astral_game/src/rust/api/p2p.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 KVNodeInfo _kv({

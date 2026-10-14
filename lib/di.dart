@@ -24,7 +24,7 @@ import 'package:astral_game/data/services/open_games_service.dart';
 import 'package:astral_game/data/services/room_assist_service.dart';
 import 'package:astral_game/data/services/windows_process_watch.dart';
 import 'package:astral_game/data/services/windows_time_sync_service.dart';
-import 'package:astral_game/data/services/room_persistence_service.dart';
+import 'package:astral_game/data/services/bookmark_store.dart';
 import 'package:astral_game/data/services/screen_state_service.dart';
 import 'package:astral_game/data/services/shell_navigation_service.dart';
 import 'package:astral_game/data/services/server_persistence_service.dart';
@@ -43,7 +43,7 @@ import 'package:astral_game/utils/client_runtime_info.dart';
 import 'package:astral_game/utils/logger.dart';
 import 'package:astral_game/utils/ping_util.dart';
 import 'package:astral_game/utils/runtime_platform.dart';
-import 'package:astral_rust_core/p2p_service.dart';
+import 'package:astral_game/src/rust/frb_generated.dart';
 import 'package:get_it/get_it.dart';
 import 'package:logger/logger.dart';
 import 'package:path/path.dart' as p;
@@ -80,7 +80,17 @@ Future<void> setupDI() async {
   // 为了保证 dispose 顺序（先创建的后销毁），每次 setupDI 前清空列表。
   _disposeCallbacks.clear();
 
-  final prefs = await SharedPreferences.getInstance();
+  // 启动期这几项互不依赖（prefs / 支持目录 / Rust 动态库 / 本机环境 / 收藏库），
+  // 先一起发起再按需 await，避免串行叠加成"启动要等几秒"。
+  final prefsFuture = SharedPreferences.getInstance();
+  final supportDirFuture = getApplicationSupportDirectory();
+  final rustInitFuture = RustLib.init();
+  final runtimeInfoFuture = ClientRuntimeInfo.warmUp();
+  final bookmarkStoreFuture = supportDirFuture.then(
+    (dir) => IsarBookmarkStore.open(p.join(dir.path, 'db')),
+  );
+
+  final prefs = await prefsFuture;
   getIt.registerSingleton<SharedPreferences>(prefs);
 
   final appLog = Logger(
@@ -92,7 +102,7 @@ Future<void> setupDI() async {
     ),
   );
   setAppLogger(appLog);
-  final supportDir = await getApplicationSupportDirectory();
+  final supportDir = await supportDirFuture;
   final settings = AppSettingsService(prefs, supportDir: supportDir);
   await settings.warmUpAvatar();
   getIt.registerSingleton<AppSettingsService>(settings);
@@ -102,9 +112,9 @@ Future<void> setupDI() async {
   getIt.registerSingleton<ShellNavigationService>(ShellNavigationService());
   getIt.registerSingleton<ShortcutService>(const ShortcutService());
 
-  getIt.registerLazySingleton<P2PService>(() => P2PService());
-  unawaited(getIt<P2PService>().ensureInitialized());
-  await ClientRuntimeInfo.warmUp();
+  // 初始化 FRB：加载 Rust 动态库并运行 #[frb(init)] 引导（启动共享 P2P runtime）。
+  await rustInitFuture;
+  await runtimeInfoFuture;
 
   getIt.registerSingleton<ConnectivityStatusService>(
     ConnectivityStatusService(),
@@ -128,14 +138,13 @@ Future<void> setupDI() async {
     unawaited(ensureWindowsAliyunNtp());
   }
 
-  getIt.registerSingleton<PeerRpcRouter>(PeerRpcRouter(getIt<P2PService>()));
+  getIt.registerSingleton<PeerRpcRouter>(PeerRpcRouter());
   _registerDispose<PeerRpcRouter>((s) => s.stop());
-  getIt.registerSingleton<PeerRpcClient>(PeerRpcClient(getIt<P2PService>()));
+  getIt.registerSingleton<PeerRpcClient>(PeerRpcClient());
   _registerDispose<PeerRpcClient>((s) => s.dispose());
 
   getIt.registerLazySingleton<NodeManagementService>(
     () => NodeManagementService(
-      p2pService: getIt<P2PService>(),
       appSettings: getIt<AppSettingsService>(),
       peerRpc: getIt<PeerRpcClient>(),
       connectivity: getIt<ConnectivityStatusService>(),
@@ -163,7 +172,6 @@ Future<void> setupDI() async {
   _registerDispose<WindowsProcessWatch>((s) => s.dispose());
   getIt.registerLazySingleton<RoomAssistService>(
     () => RoomAssistService(
-      getIt<P2PService>(),
       getIt<GameAssistRulesService>(),
       getIt<WindowsProcessWatch>(),
     ),
@@ -226,21 +234,18 @@ Future<void> setupDI() async {
 
   getIt.registerLazySingleton<BookmarkSearchState>(() => BookmarkSearchState());
 
-  getIt.registerLazySingleton<RoomPersistenceService>(
-    () => RoomPersistenceService(),
-  );
+  // 收藏持久化：Isar（打开时顺带一次性导入旧版 bookmarks.json）。
+  final bookmarkStore = await bookmarkStoreFuture;
+  getIt.registerSingleton<BookmarkStore>(bookmarkStore);
 
   final roomState = getIt<RoomState>();
-  roomState.initPersistence(getIt<RoomPersistenceService>());
+  roomState.initPersistence(bookmarkStore);
   await roomState.loadFromPersistence();
 
-  getIt.registerLazySingleton<VpnManager>(
-    () => VpnManager(getIt<VpnState>(), getIt<P2PService>()),
-  );
+  getIt.registerLazySingleton<VpnManager>(() => VpnManager(getIt<VpnState>()));
   _registerDispose<VpnManager>((s) => s.dispose());
   getIt.registerLazySingleton<ConnectionService>(
     () => ConnectionService(
-      getIt<P2PService>(),
       getIt<P2PConfigService>(),
       getIt<NodeManagementService>(),
       getIt<RoomState>(),

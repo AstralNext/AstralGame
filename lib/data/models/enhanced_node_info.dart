@@ -2,7 +2,7 @@ import 'dart:typed_data';
 
 import 'package:astral_game/config/network_constants.dart';
 import 'package:astral_game/utils/net_addr.dart';
-import 'package:astral_rust_core/p2p_service.dart' show KVNodeInfo;
+import 'package:astral_game/src/rust/api/p2p.dart' show KVNodeInfo;
 import 'package:flutter/foundation.dart' show listEquals, mapEquals;
 
 /// 在 [`KVNodeInfo`] 上叠加 peer-RPC（`user.getInfo`）返回的昵称与头像等资料。

@@ -6,6 +6,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   app_links
   connectivity_plus
   file_selector_windows
+  isar_community_flutter_libs
   screen_retriever_windows
   share_plus
   tray_manager
@@ -14,8 +15,8 @@ list(APPEND FLUTTER_PLUGIN_LIST
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST
-  astral_rust_core
   jni
+  rust_lib_astral_game
 )
 
 set(PLUGIN_BUNDLED_LIBRARIES)

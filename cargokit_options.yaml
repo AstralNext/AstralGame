@@ -1,1 +1,4 @@
-use_precompiled_binaries: true
+# 本机/CI 均安装 Rust 工具链，直接本地 cargo 编译。
+# 置 true 时 cargokit 会先请求 GitHub Releases 下载预编译产物；
+# 国内网络出现连接级异常（SocketException，而非 404）时，cargokit 不会回退本地编译而会直接崩溃（退出码 -1）。
+use_precompiled_binaries: false

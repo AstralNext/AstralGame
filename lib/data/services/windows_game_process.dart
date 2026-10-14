@@ -1,7 +1,6 @@
-
 import 'package:astral_game/utils/logger.dart';
 import 'package:astral_game/utils/runtime_platform.dart';
-import 'package:astral_rust_core/astral_rust_core.dart' as rust;
+import 'package:astral_game/src/rust/api/process.dart' as rust;
 import 'package:path/path.dart' as p;
 
 /// 本机某个游戏进程及其 UDP 监听口（Windows）。
@@ -32,7 +31,8 @@ bool windowsExeMatches(String exe, String wantRaw) {
 
 bool windowsExeMatchesAny(WindowsGameProcess proc, List<String> names) {
   for (final name in names) {
-    if (windowsExeMatches(proc.exe, name) || windowsExeMatches(proc.path, name)) {
+    if (windowsExeMatches(proc.exe, name) ||
+        windowsExeMatches(proc.path, name)) {
       return true;
     }
   }

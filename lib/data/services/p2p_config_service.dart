@@ -8,7 +8,6 @@ import 'package:astral_game/utils/logger.dart';
 import 'package:astral_game/utils/runtime_platform.dart';
 
 class P2PConfigService {
-
   P2PConfigService(this._appSettings, this._serverState);
   final AppSettingsService _appSettings;
   final ServerState _serverState;
@@ -27,6 +26,7 @@ class P2PConfigService {
   ///
   /// [isDhcp] 控制是否让 EasyTier 自动分配虚拟 IP；为 false 时使用
   /// [virtualIp] 作为固定 IP（写入 [flags].virtual_ipv4）。
+  /// [isDhcpv6] 控制 EasyTier 是否自动分配虚拟 IPv6（顶层 `dhcpv6`）。
   String buildTomlConfig(
     String roomName,
     String roomPassword, {
@@ -34,6 +34,7 @@ class P2PConfigService {
     bool? enableUdpBroadcastRelay,
     GameAssistNetworkProtocol protocol = GameAssistNetworkProtocol.udp,
     bool isDhcp = true,
+    bool isDhcpv6 = true,
     String? virtualIp,
   }) {
     final disableP2p = _appSettings.isDisableP2p();
@@ -44,9 +45,7 @@ class P2PConfigService {
     // peersOverride == null：建房，用本机当前启用的服务器。
     final peers = <PeerEndpoint>[];
     if (peersOverride != null) {
-      peers.addAll(
-        peersOverride.where((p) => p.uri.trim().isNotEmpty),
-      );
+      peers.addAll(peersOverride.where((p) => p.uri.trim().isNotEmpty));
     } else {
       peers.addAll(enabledPeers());
     }
@@ -58,8 +57,8 @@ class P2PConfigService {
         enableUdpBroadcastRelay ?? _appSettings.isEnableUdpBroadcastRelay();
     final udpBroadcastFlag =
         RuntimePlatform.operatingSystem == 'windows' && udpRelay
-            ? 'enable_udp_broadcast_relay = true\n'
-            : '';
+        ? 'enable_udp_broadcast_relay = true\n'
+        : '';
 
     // 关闭 DHCP 时，把用户填写的固定 IP 写入 EasyTier 顶层 ipv4 键（与 dhcp 平级）。
     // 不能写进 [flags]：flags 只认预定义键，未知键会被 EasyTier 静默丢弃，
@@ -69,7 +68,8 @@ class P2PConfigService {
         ? 'ipv4 = "${_escapeString(trimmedIp)}"\n'
         : '';
 
-    final identityBlock = '''
+    final identityBlock =
+        '''
 [network_identity]
 network_name = "${_escapeString(roomName)}"
 network_secret = "${_escapeString(roomPassword)}"
@@ -77,7 +77,7 @@ network_secret = "${_escapeString(roomPassword)}"
 
     appLogger.i(
       '[P2PConfigService] buildTomlConfig room=$roomName '
-      'shared_secret=true dhcp=$isDhcp disable_p2p=$disableP2p '
+      'shared_secret=true dhcp=$isDhcp dhcpv6=$isDhcpv6 disable_p2p=$disableP2p '
       'protocol=${protocol.name} udp_broadcast_relay=$udpRelay '
       'virtual_ip=${(!isDhcp && trimmedIp.isNotEmpty) ? trimmedIp : "auto"} '
       'peers=${peers.length}',
@@ -87,6 +87,7 @@ network_secret = "${_escapeString(roomPassword)}"
 instance_name = "AstralGame"
 hostname = "${_escapeString(hostname)}"
 dhcp = $isDhcp
+dhcpv6 = $isDhcpv6
 $fixedIpv4Line
 listeners = [
     "tcp://0.0.0.0:0",
@@ -94,11 +95,7 @@ listeners = [
 ]
 
 $identityBlock
-${peerBlock.isNotEmpty ? '$peerBlock\n\n' : ''}${_flagsBlock(
-      disableP2p: disableP2p,
-      udpBroadcastFlag: udpBroadcastFlag,
-      protocol: protocol,
-    )}
+${peerBlock.isNotEmpty ? '$peerBlock\n\n' : ''}${_flagsBlock(disableP2p: disableP2p, udpBroadcastFlag: udpBroadcastFlag, protocol: protocol)}
 ''';
   }
 

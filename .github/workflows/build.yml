@@ -187,8 +187,8 @@ jobs:
           & nasm -v
 
       - name: 📚 Get dependencies
-        # git 包（astral_rust_core / vpn_service_plugin）始终跟远端 main tip，不钉 lock 里的旧 resolved-ref。
-        run: flutter pub upgrade astral_rust_core vpn_service_plugin
+        # Rust 核心（rust/ + rust_builder/）已内化到本仓；仅 vpn_service_plugin 跟远端 main tip。
+        run: flutter pub upgrade vpn_service_plugin
         shell: bash
 
       # 只缓存 crates 源码（registry/git），不缓存 cargokit/target 编译产物。

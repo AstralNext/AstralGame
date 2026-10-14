@@ -9,7 +9,7 @@ import 'package:astral_game/utils/client_runtime_info.dart';
 import 'package:astral_game/utils/logger.dart';
 import 'package:astral_game/utils/runtime_platform.dart';
 import 'package:astral_game/config/constants.dart';
-import 'package:astral_rust_core/p2p_service.dart';
+import 'package:astral_game/src/rust/api/p2p.dart';
 
 import '../models/enhanced_node_info.dart';
 import '../models/local_self_nodes.dart';
@@ -30,20 +30,17 @@ import 'peer_rpc/peer_rpc_exception.dart';
 /// - 发送节点事件
 class NodeManagementService {
   NodeManagementService({
-    required P2PService p2pService,
     required AppSettingsService appSettings,
     required PeerRpcClient peerRpc,
     ConnectivityStatusService? connectivity,
     FirewallService? firewall,
     IspInfoService? ispInfo,
-  }) : _p2pService = p2pService,
-       _appSettings = appSettings,
+  }) : _appSettings = appSettings,
        _peerRpc = peerRpc,
        _connectivity = connectivity,
        _firewall = firewall,
        _ispInfo = ispInfo;
 
-  final P2PService _p2pService;
   final AppSettingsService _appSettings;
   final PeerRpcClient _peerRpc;
   final ConnectivityStatusService? _connectivity;
@@ -209,7 +206,7 @@ class NodeManagementService {
 
   Future<void> _refreshMyPeerId(String instanceId) async {
     try {
-      final id = await _p2pService.myPeerId(instanceId);
+      final id = await myPeerId(instanceId: instanceId);
       // 防止 stop() 之后才返回时把状态污染回去。
       if (currentInstanceId.value == instanceId) {
         _myPeerId = id;
@@ -322,7 +319,7 @@ class NodeManagementService {
     _pollInFlight = true;
     try {
       if (currentInstanceId.value != instanceId) return;
-      final status = await _p2pService.getNetworkStatus(instanceId);
+      final status = await getNetworkStatus(instanceId: instanceId);
       _updateNetworkStatusSignal(status);
 
       final prevUsers = userNodes.value;
@@ -523,7 +520,7 @@ class NodeManagementService {
     appLogger.w(
       '[NodeManagementService] 已连接 ${waited.inSeconds}s 仍无虚拟 IP；'
       'nodes=[$preview]。请对照 [EasyTier] 是否出现 '
-      'tun device ready / dhcp ip changed / tun device error',
+      'tun device ready / dhcp ip changed / dhcp ipv6 changed / tun device error',
     );
   }
 

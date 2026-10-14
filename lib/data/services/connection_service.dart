@@ -19,7 +19,7 @@ import 'package:astral_game/data/state/room_state.dart';
 import 'package:astral_game/utils/logger.dart';
 import 'package:astral_game/utils/room_share.dart';
 import 'package:astral_game/utils/runtime_platform.dart';
-import 'package:astral_rust_core/p2p_service.dart';
+import 'package:astral_game/src/rust/api/p2p.dart';
 import 'package:signals/signals_core.dart';
 
 /// 连接服务：建房 / 进房（6 位 32 进制短码或离线 Base64）/ 会话，不落盘房间历史。
@@ -27,7 +27,6 @@ import 'package:signals/signals_core.dart';
 /// 进网方式：双方共享随机 [network_name] + [network_secret]。
 class ConnectionService {
   ConnectionService(
-    this._p2pService,
     this._p2pConfig,
     this._nodeManagement,
     this._roomState,
@@ -42,7 +41,6 @@ class ConnectionService {
     this._peerRpcRouter,
   );
 
-  final P2PService _p2pService;
   final P2PConfigService _p2pConfig;
   final NodeManagementService _nodeManagement;
   final RoomState _roomState;
@@ -206,7 +204,7 @@ class ConnectionService {
   /// 解析邀请输入（短码/离线）并返回完整 payload，**不真正加入房间**。
   /// 用于「⭐ 解析并收藏」等场景。
   Future<({RoomInvitePayload payload, String? shortCode, String? offlineToken})>
-      resolveInvitePayload(String raw) async {
+  resolveInvitePayload(String raw) async {
     final token = requireJoinInviteToken(raw);
     if (looksLikeShortCode(token)) {
       final normalized = normalizeShareCode(token);
@@ -219,10 +217,7 @@ class ConnectionService {
 
   Future<ActiveRoomSession> joinWithInviteInput(String raw) async {
     final resolved = await resolveInvitePayload(raw);
-    return joinWithPayload(
-      resolved.payload,
-      shortCode: resolved.shortCode,
-    );
+    return joinWithPayload(resolved.payload, shortCode: resolved.shortCode);
   }
 
   /// 当前应分享的一条 URL（短码优先，否则离线）。
@@ -241,13 +236,13 @@ class ConnectionService {
   /// 收藏页分享、成员侧临时分享都走这个入口。创建成功后**不会**自动写入 session，
   /// 调用方决定是否持久化（如 bookmark.lastShareCode）。
   Future<({String code, String adminToken, String expiresAt})>
-      createShareCodeForPayload(RoomInvitePayload payload) {
+  createShareCodeForPayload(RoomInvitePayload payload) {
     return _shareCodes.create(payload);
   }
 
   /// 为当前会话动态创建一条新短码（房主/成员均可调）。
   Future<({String code, String adminToken, String expiresAt})>
-      createShareCodeForCurrentSession() {
+  createShareCodeForCurrentSession() {
     final session = _roomState.session.value;
     if (session == null) {
       throw StateError('未连接房间，无法生成短码');
@@ -270,8 +265,7 @@ class ConnectionService {
   Future<ActiveRoomSession> joinWithPayload(
     RoomInvitePayload payload, {
     String? shortCode,
-  }) =>
-      _joinWithPayload(payload, shortCode: shortCode);
+  }) => _joinWithPayload(payload, shortCode: shortCode);
 
   /// 依据当前会话生成一条完整 payload（用于「收藏当前房间」）。
   RoomInvitePayload? payloadFromCurrentSession() {
@@ -390,12 +384,8 @@ class ConnectionService {
     _isConnecting = true;
     String? createdInstanceId;
     try {
-      await _p2pService.ensureInitialized();
       if (_nodeManagement.isRunning) {
-        await disconnect(
-          clearSession: false,
-          abortLink: false,
-        );
+        await disconnect(clearSession: false, abortLink: false);
       }
       if (RuntimePlatform.isAndroid) {
         _vpnManager.startListening();
@@ -424,6 +414,7 @@ class ConnectionService {
         enableUdpBroadcastRelay: udpRelay,
         protocol: protocol,
         isDhcp: _appSettings.getIsDhcp(),
+        isDhcpv6: _appSettings.getIsDhcpv6(),
         virtualIp: _appSettings.getVirtualIp(),
       );
       appLogger.i(
@@ -433,25 +424,28 @@ class ConnectionService {
         '$configToml'
         '----- TOML end -----',
       );
-      createdInstanceId = await _p2pService.createInstance(
+      createdInstanceId = await createInstance(
         configToml: configToml,
         watchEvent: true,
       );
       if (!_isLinkActive(epoch)) {
-        await _p2pService.closeInstance(createdInstanceId);
+        await closeInstance(instanceId: createdInstanceId);
         createdInstanceId = null;
         return false;
       }
       appLogger.i('[ConnectionService] 实例已创建 id=$createdInstanceId');
-      final isRunning = await _p2pService.isEasytierRunning(createdInstanceId);
+      final isRunning = await _waitUntilRunning(
+        createdInstanceId,
+        isAborted: () => !_isLinkActive(epoch),
+      );
       if (!_isLinkActive(epoch)) {
-        await _p2pService.closeInstance(createdInstanceId);
+        await closeInstance(instanceId: createdInstanceId);
         createdInstanceId = null;
         return false;
       }
       if (!isRunning) {
         appLogger.e('[ConnectionService] 实例启动异常 id=$createdInstanceId');
-        await _p2pService.closeInstance(createdInstanceId);
+        await closeInstance(instanceId: createdInstanceId);
         createdInstanceId = null;
         return false;
       }
@@ -459,7 +453,7 @@ class ConnectionService {
       await _bindPeerRpc(createdInstanceId);
       if (!_isLinkActive(epoch)) {
         await _unbindPeerRpc();
-        await _p2pService.closeInstance(createdInstanceId);
+        await closeInstance(instanceId: createdInstanceId);
         createdInstanceId = null;
         return false;
       }
@@ -469,18 +463,13 @@ class ConnectionService {
       if (RuntimePlatform.isAndroid) {
         final vpnOk = await _startAndroidVpnWhenIpReady(createdInstanceId);
         if (!_isLinkActive(epoch)) {
-          await disconnect(
-            clearSession: false,
-            abortLink: false,
-          );
+          await disconnect(clearSession: false, abortLink: false);
           createdInstanceId = null;
           return false;
         }
         if (!vpnOk) {
           appLogger.e('[ConnectionService] Android VPN 启动失败，回滚连接');
-          await disconnect(
-            forceEndNotice: '虚拟网络（VPN）启动失败，请检查权限后重试',
-          );
+          await disconnect(forceEndNotice: '虚拟网络（VPN）启动失败，请检查权限后重试');
           createdInstanceId = null;
           return false;
         }
@@ -492,7 +481,7 @@ class ConnectionService {
       _disarmGuestPresenceWatch();
       if (createdInstanceId != null) {
         try {
-          await _p2pService.closeInstance(createdInstanceId);
+          await closeInstance(instanceId: createdInstanceId);
         } catch (closeError, closeSt) {
           appLogger.e(
             '[ConnectionService] 回滚实例失败: $closeError',
@@ -552,7 +541,7 @@ class ConnectionService {
     }
     if (instanceId != null) {
       try {
-        await _p2pService.closeInstance(instanceId);
+        await closeInstance(instanceId: instanceId);
       } catch (e, st) {
         appLogger.e('[ConnectionService] 断开异常: $e', error: e, stackTrace: st);
       }
@@ -577,9 +566,7 @@ class ConnectionService {
         return;
       }
       // 共享密码模式无法按凭据识别房主：有任意远端成员即视为房间仍有人。
-      final hasOther = nodes.any(
-        (n) => !_nodeManagement.isLocalPeer(n.peerId),
-      );
+      final hasOther = nodes.any((n) => !_nodeManagement.isLocalPeer(n.peerId));
       if (hasOther) {
         _hostMissingSince = null;
         if (!_roomState.hostOnline.value) {
@@ -603,6 +590,28 @@ class ConnectionService {
     _guestPresenceDispose?.call();
     _guestPresenceDispose = null;
     _hostMissingSince = null;
+  }
+
+  /// 等待 EasyTier 实例真正进入 Running，超时返回 false。
+  ///
+  /// `create_instance` 只是 spawn 了 `instance.start()` 就立刻返回，实例要经过
+  /// Starting 才到 Running（建虚拟网卡、绑监听、DHCP 都是异步的），冷启动后第一次
+  /// 开房这段最慢。旧实现只查一次 [isEasytierRunning] 就当成失败回滚，会出现
+  /// "启动软件后的第一个房间刚建好就被拆掉"。
+  ///
+  /// [isAborted] 返回 true（如用户中途取消连接）时立即放弃等待。
+  Future<bool> _waitUntilRunning(
+    String instanceId, {
+    required bool Function() isAborted,
+    Duration timeout = const Duration(seconds: 8),
+    Duration interval = const Duration(milliseconds: 200),
+  }) async {
+    final deadline = DateTime.now().add(timeout);
+    while (true) {
+      if (await isEasytierRunning(instanceId: instanceId)) return true;
+      if (isAborted() || !DateTime.now().isBefore(deadline)) return false;
+      await Future.delayed(interval);
+    }
   }
 
   Future<bool> _startAndroidVpnWhenIpReady(String instanceId) async {
@@ -658,8 +667,10 @@ class ConnectionService {
   String _randomId(int len) {
     const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
     final r = Random.secure();
-    return List.generate(len, (_) => alphabet[r.nextInt(alphabet.length)])
-        .join();
+    return List.generate(
+      len,
+      (_) => alphabet[r.nextInt(alphabet.length)],
+    ).join();
   }
 }
 

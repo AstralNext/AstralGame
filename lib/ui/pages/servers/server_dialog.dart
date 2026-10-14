@@ -1,15 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:astral_game/di.dart';
 import 'package:astral_game/data/state/server_state.dart';
 import 'package:astral_game/data/models/server_mod.dart';
+import 'package:astral_game/data/services/server_probe_service.dart';
 
 import 'blocked_servers.dart';
 
 Future<void> showAddServerDialog(BuildContext context) async {
   return showDialog(
     context: context,
-    builder: (context) =>
-        const ServerDialog(title: '添加服务器', confirmText: '添加'),
+    builder: (context) => const ServerDialog(title: '添加服务器', confirmText: '添加'),
   );
 }
 
@@ -25,7 +27,6 @@ Future<void> showEditServerDialog(
 }
 
 class ServerDialog extends StatefulWidget {
-
   const ServerDialog({
     super.key,
     required this.title,
@@ -44,6 +45,8 @@ class _ServerDialogState extends State<ServerDialog> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _urlController = TextEditingController();
+  final _probeService = ServerProbeService();
+  bool _probing = false;
 
   @override
   void initState() {
@@ -62,7 +65,7 @@ class _ServerDialogState extends State<ServerDialog> {
     super.dispose();
   }
 
-  void _saveServer() {
+  Future<void> _saveServer() async {
     if (!_formKey.currentState!.validate()) return;
     final server = ServerMod(
       id: widget.server?.id,
@@ -73,19 +76,49 @@ class _ServerDialogState extends State<ServerDialog> {
     );
 
     if (widget.server == null) {
-      getIt<ServerState>().addServer(server);
+      // 添加前先做一次「加入节点」探测，非 EasyTier 服务器需二次确认。
+      setState(() => _probing = true);
+      final result = await _probeService.probe(server);
+      if (!mounted) return;
+      setState(() => _probing = false);
+      if (!result.isEasyTier && !await _confirmNonEasyTier(server.url)) return;
+      if (!mounted) return;
+      await getIt<ServerState>().addServer(server);
     } else {
-      getIt<ServerState>().updateServer(server);
+      await getIt<ServerState>().updateServer(server);
     }
+    if (!mounted) return;
     Navigator.of(context).pop();
+  }
+
+  /// 探测到非 ET 服务器时的二次确认；返回 true 表示仍要添加。
+  Future<bool> _confirmNonEasyTier(String url) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('非 EasyTier 服务器'),
+        content: Text('检测到 "$url" 不是 EasyTier 服务器，可能无法正常联机。\n是否仍然继续添加？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('继续添加'),
+          ),
+        ],
+      ),
+    );
+    return confirmed ?? false;
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final urlLocked = widget.server != null &&
-        BlockedServers.isBlocked(widget.server!.url);
+    final urlLocked =
+        widget.server != null && BlockedServers.isBlocked(widget.server!.url);
 
     return AlertDialog(
       title: Text(widget.title),
@@ -124,7 +157,7 @@ class _ServerDialogState extends State<ServerDialog> {
                   controller: _urlController,
                   enabled: !urlLocked,
                   textInputAction: TextInputAction.done,
-                  onFieldSubmitted: (_) => _saveServer(),
+                  onFieldSubmitted: (_) => unawaited(_saveServer()),
                   decoration: InputDecoration(
                     labelText: '地址',
                     hintText: 'tcp://192.168.1.10:11010',
@@ -137,8 +170,9 @@ class _ServerDialogState extends State<ServerDialog> {
                       return '请输入地址';
                     }
                     final trimmed = value.trim();
-                    final hasScheme = RegExp(r'^[a-zA-Z][a-zA-Z0-9+.-]*://')
-                        .hasMatch(trimmed);
+                    final hasScheme = RegExp(
+                      r'^[a-zA-Z][a-zA-Z0-9+.-]*://',
+                    ).hasMatch(trimmed);
                     if (!hasScheme) {
                       return '请输入完整地址，例如 tcp://example.com:11010';
                     }
@@ -152,12 +186,25 @@ class _ServerDialogState extends State<ServerDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: _probing ? null : () => Navigator.of(context).pop(),
           child: const Text('取消'),
         ),
         FilledButton(
-          onPressed: _saveServer,
-          child: Text(widget.confirmText),
+          onPressed: _probing ? null : () => unawaited(_saveServer()),
+          child: _probing
+              ? const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    SizedBox(width: 8),
+                    Text('检测中…'),
+                  ],
+                )
+              : Text(widget.confirmText),
         ),
       ],
     );

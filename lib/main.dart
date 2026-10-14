@@ -42,6 +42,9 @@ Future<void> main() async {
     });
   }
 
+  // 初始化完成后再 runApp：`waitUntilReadyToShow` 要等首帧才 show 窗口，
+  // 因此不会出现中间的空窗口或加载页——双击后直接进主界面。
+  // 启动耗时已在 setupDI 内做了并发化，尽量压短这段等待。
   await setupDI();
   await registerJoinProtocol();
 

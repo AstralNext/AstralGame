@@ -22,6 +22,9 @@ class SettingsState {
   /// 网络：DHCP 自动分配虚拟 IP（关后可手动设置）。
   final isDhcp = signal(true);
 
+  /// 网络：DHCPv6 自动分配虚拟 IPv6（EasyTier `dhcpv6`；关后不分配虚拟 IPv6）。
+  final isDhcpv6 = signal(true);
+
   /// 网络：手动填写的固定虚拟 IP（仅 isDhcp=false 时生效）。
   final virtualIp = signal('10.147.0.0');
 
@@ -32,6 +35,7 @@ class SettingsState {
     enableUdpBroadcastRelay.value = _settings.isEnableUdpBroadcastRelay();
     floatingOverlayEnabled.value = _settings.isFloatingOverlayEnabled();
     isDhcp.value = _settings.getIsDhcp();
+    isDhcpv6.value = _settings.getIsDhcpv6();
     virtualIp.value = _settings.getVirtualIp();
     if (RuntimePlatform.isAndroid) {
       syncHomeWidgetTheme(appThemeId.value);
@@ -46,6 +50,7 @@ class SettingsState {
       _settings.setEnableUdpBroadcastRelay(enableUdpBroadcastRelay.value),
       _settings.setFloatingOverlayEnabled(floatingOverlayEnabled.value),
       _settings.setIsDhcp(isDhcp.value),
+      _settings.setIsDhcpv6(isDhcpv6.value),
       _settings.setVirtualIp(virtualIp.value),
     ]);
     if (RuntimePlatform.isAndroid) {

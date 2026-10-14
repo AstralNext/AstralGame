@@ -22,7 +22,7 @@ class AppConstants {
 
   static const Duration pingTimeout = Duration(seconds: 5);
 
-  /// 服务器列表 ICMP ping 周期。过短会对节点形成持续探测。
+  /// 服务器列表 TCP 探测周期。过短会对节点形成持续探测。
   static const Duration serverPingInterval = Duration(minutes: 2);
 
   // 主机名过滤（中继节点不进成员列表）

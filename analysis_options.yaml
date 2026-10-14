@@ -9,6 +9,12 @@
 # packages, and plugins designed to encourage good coding practices.
 include: package:flutter_lints/flutter.yaml
 
+analyzer:
+  exclude:
+    # cargokit 构建工具（vendored，独立 pubspec：github/ed25519_edwards 等），
+    # 不作为 app 包解析，排除以避免误报。
+    - rust_builder/cargokit/**
+
 linter:
   # The lint rules applied to this project can be customized in the
   # section below to disable rules from the `package:flutter_lints/flutter.yaml`

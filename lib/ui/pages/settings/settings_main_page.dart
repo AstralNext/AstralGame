@@ -222,6 +222,17 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
             settingsState.saveToPersistence();
           },
         ),
+        _switchRow(
+          icon: Icons.public_outlined,
+          title: '自动分配虚拟 IPv6',
+          subtitle: () =>
+              settingsState.isDhcpv6.value ? 'DHCPv6 已开启' : '关闭后不分配虚拟 IPv6',
+          value: () => settingsState.isDhcpv6.value,
+          onChanged: (value) {
+            settingsState.isDhcpv6.value = value;
+            settingsState.saveToPersistence();
+          },
+        ),
         (index, count) => Watch((context) {
           final isDhcp = settingsState.isDhcp.value;
           final ip = settingsState.virtualIp.value;

@@ -20,6 +20,7 @@ class AppSettingsService {
   static const String _keyAppThemeIndex = 'app_theme_index';
 
   static const String _keyIsDhcp = 'is_dhcp';
+  static const String _keyIsDhcpv6 = 'is_dhcpv6';
   static const String _keyVirtualIp = 'virtual_ip';
 
   final SharedPreferences _prefs;
@@ -163,6 +164,11 @@ class AppSettingsService {
   bool getIsDhcp() => _prefs.getBool(_keyIsDhcp) ?? true;
   Future<void> setIsDhcp(bool value) async =>
       await _prefs.setBool(_keyIsDhcp, value);
+
+  /// 是否使用 DHCPv6 自动分配虚拟 IPv6（EasyTier `dhcpv6`）
+  bool getIsDhcpv6() => _prefs.getBool(_keyIsDhcpv6) ?? true;
+  Future<void> setIsDhcpv6(bool value) async =>
+      await _prefs.setBool(_keyIsDhcpv6, value);
 
   /// 获取虚拟 IP
   String getVirtualIp() =>

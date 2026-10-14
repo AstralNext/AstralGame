@@ -22,8 +22,6 @@ mixin _$Bookmark {
 @pragma('vm:prefer-inline')
 $BookmarkCopyWith<Bookmark> get copyWith => _$BookmarkCopyWithImpl<Bookmark>(this as Bookmark, _$identity);
 
-  /// Serializes this Bookmark to a JSON map.
-  Map<String, dynamic> toJson();
 
 
 @override
@@ -221,7 +219,7 @@ return $default(_that.id,_that.customName,_that.payload,_that.savedAt,_that.last
 
 /// @nodoc
 
-@JsonSerializable(explicitToJson: true)
+@JsonSerializable(createToJson: false)
 class _Bookmark extends Bookmark {
   const _Bookmark({required this.id, required this.customName, required this.payload, required this.savedAt, this.lastUsedAt, this.pinned = false}): super._();
   factory _Bookmark.fromJson(Map<String, dynamic> json) => _$BookmarkFromJson(json);
@@ -239,10 +237,7 @@ class _Bookmark extends Bookmark {
 @pragma('vm:prefer-inline')
 _$BookmarkCopyWith<_Bookmark> get copyWith => __$BookmarkCopyWithImpl<_Bookmark>(this, _$identity);
 
-@override
-Map<String, dynamic> toJson() {
-  return _$BookmarkToJson(this, );
-}
+
 
 @override
 bool operator ==(Object other) {

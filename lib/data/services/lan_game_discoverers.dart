@@ -9,7 +9,7 @@ import 'package:astral_game/data/services/lan_inject_guard.dart';
 import 'package:astral_game/data/services/lan_payload_parsers.dart';
 import 'package:astral_game/data/services/lan_process_udp_discoverer.dart';
 import 'package:astral_game/utils/logger.dart';
-import 'package:astral_rust_core/astral_rust_core.dart';
+import 'package:astral_game/src/rust/api/multicast.dart';
 
 /// 某条发现规则在本机扫到的候选（尚未绑定虚拟 IP）。
 class DiscoveredGameHit {
