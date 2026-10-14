@@ -29,6 +29,7 @@ Commands:
   stop         停止 DNS 绑定服务
   restart      重启 DNS 绑定服务
   status       查看服务状态
+  deploy-conf <文件>  用指定文件替换 smartdns.conf 并重启 SmartDNS（失败回滚）
   help         显示帮助
 
 Service name: {}
@@ -74,6 +75,10 @@ fn main() {
             "stop" => ctl::stop(),
             "restart" => ctl::restart(),
             "status" => ctl::status(),
+            "deploy-conf" => match args.get(1) {
+                Some(path) => ctl::deploy_conf_from(std::path::Path::new(path)),
+                None => Err("deploy-conf 需要一个配置文件路径参数".to_string()),
+            },
             other => {
                 eprintln!("unknown command: {other}\n");
                 print_help();

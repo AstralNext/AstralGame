@@ -60,10 +60,27 @@ const kBroadcastIpV4 = '255.255.255.255';
 /// 默认虚拟 IP（ZeroTier 风格），用于本地虚拟网卡未配置时的回退值。
 const kDefaultVirtualIpV4 = '10.147.18.24';
 
+// --- 房间虚拟网段（DHCP 初始网段） ---
+
+/// 建房时 EasyTier DHCP 的初始 IPv4 网段。
+///
+/// EasyTier 的 `dhcp` 字段接受 bool 或 CIDR 字符串；显式给网段可避开默认的
+/// `10.126.126.0/24`，也远离家用常见的 10.x / 192.168.x。前缀需 ≤30。
+const kRoomDhcpIpv4Cidr = '100.100.100.0/24';
+
+/// 建房时 EasyTier DHCPv6 的初始 IPv6 网段（ULA，须落在 `fc00::/7` 内且前缀 ≤126）。
+const kRoomDhcpIpv6Cidr = 'fdae::/120';
+
 // --- 远程服务 ---
 
 /// astral-share 短码服务地址。
 const kShareCodeServiceBaseUrl = 'http://103.194.107.25:8080/';
+
+/// SmartDNS 配置（`smartdns.conf`）的远端下发地址，与 gamerules.json 同域。
+///
+/// 客户端只在网络加速已启用时同步；远端内容要过 `looksLikeSmartDnsConf` 校验，
+/// 部署失败由 auto_dns_binder 回滚到上一版。
+const kSmartDnsConfUrl = 'https://next.astral.fan/smartdns.conf';
 
 /// astral-share 短码服务请求超时：短码只是锦上添花（有离线邀请兜底），
 /// 不能让建房/分享等关键路径被无超时请求无限挂起。
@@ -86,6 +103,9 @@ const kIspInfoTimeout = Duration(seconds: 8);
 
 /// 游戏规则目录（gamerules.json）：有 asset/磁盘缓存多级回退。
 const kGameRulesTimeout = Duration(seconds: 12);
+
+/// SmartDNS 配置下发（smartdns.conf）：启动时同步一次，失败就保留本地配置。
+const kSmartDnsConfTimeout = Duration(seconds: 10);
 
 /// GitHub Releases 更新检查：GitHub 在国内访问慢，给最宽时限。
 const kUpdateCheckTimeout = Duration(seconds: 15);

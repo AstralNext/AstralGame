@@ -240,6 +240,74 @@ pub fn restart() -> Result<(), String> {
     start()
 }
 
+/// 轮询指定 SCM 服务是否进入 Running（最多等 [timeout]）。
+fn service_running(name: &str, timeout: Duration) -> bool {
+    let Ok(manager) = manager(ServiceManagerAccess::CONNECT) else {
+        return false;
+    };
+    let start = Instant::now();
+    loop {
+        let running = manager
+            .open_service(name, ServiceAccess::QUERY_STATUS)
+            .ok()
+            .and_then(|service| service.query_status().ok())
+            .is_some_and(|status| status.current_state == ServiceState::Running);
+        if running {
+            return true;
+        }
+        if start.elapsed() > timeout {
+            return false;
+        }
+        thread::sleep(Duration::from_millis(300));
+    }
+}
+
+/// 用外部文件替换 SmartDNS 配置并重启服务；新配置起不来则回滚到上一版。
+///
+/// 客户端（Flutter 侧）把远端下发的 `smartdns.conf` 落到临时文件后调这里，
+/// 由本服务负责写 `%ProgramData%\smartdns` 与重启服务，客户端不直接碰。
+pub fn deploy_conf_from(src: &std::path::Path) -> Result<(), String> {
+    if !src.is_file() {
+        return Err(format!("配置源文件不存在: {}", src.display()));
+    }
+    let incoming = std::fs::read(src).map_err(|err| format!("读取配置源失败: {err}"))?;
+    if incoming.is_empty() {
+        return Err("配置源为空，已忽略".to_string());
+    }
+
+    let dest = paths::smartdns_conf_path();
+    if let Some(parent) = dest.parent() {
+        fs_create(parent).map_err(|err| format!("创建配置目录失败: {err}"))?;
+    }
+
+    // 内容一致就别白重启一次 DNS。
+    if std::fs::read(&dest).is_ok_and(|current| current == incoming) {
+        log::info("smartdns.conf 无变化，跳过");
+        return Ok(());
+    }
+
+    let backup = dest.with_extension("conf.bak");
+    if dest.is_file() {
+        std::fs::copy(&dest, &backup).map_err(|err| format!("备份旧配置失败: {err}"))?;
+    }
+    std::fs::copy(src, &dest).map_err(|err| format!("写入新配置失败: {err}"))?;
+    log::info(&format!("已部署 {}", dest.display()));
+
+    let _ = smartdns::restart_service();
+    if service_running(paths::SMARTDNS_SERVICE_NAME, Duration::from_secs(10)) {
+        log::info("新配置已生效");
+        return Ok(());
+    }
+
+    log::warn("新配置未能启动 SmartDNS，回滚到上一版");
+    if backup.is_file() {
+        std::fs::copy(&backup, &dest).map_err(|err| format!("回滚配置失败: {err}"))?;
+        let _ = smartdns::restart_service();
+        let _ = service_running(paths::SMARTDNS_SERVICE_NAME, Duration::from_secs(10));
+    }
+    Err("新配置未能启动 SmartDNS，已回滚".to_string())
+}
+
 pub fn status() -> Result<(), String> {
     let manager = manager(ServiceManagerAccess::CONNECT).map_err(fmt_svc)?;
     match manager.open_service(paths::SERVICE_NAME, ServiceAccess::QUERY_STATUS) {

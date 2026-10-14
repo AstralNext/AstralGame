@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:astral_game/config/network_constants.dart';
 import 'package:astral_game/data/models/game_assist_rules.dart';
 import 'package:astral_game/data/models/server_mod.dart';
 import 'package:astral_game/data/services/app_settings_service.dart';
@@ -24,9 +25,9 @@ class P2PConfigService {
 
   /// 构建 TOML：双方共享 [roomPassword] 作为 network_secret（旧版密码进房）。
   ///
-  /// [isDhcp] 控制是否让 EasyTier 自动分配虚拟 IP；为 false 时使用
-  /// [virtualIp] 作为固定 IP（写入 [flags].virtual_ipv4）。
-  /// [isDhcpv6] 控制 EasyTier 是否自动分配虚拟 IPv6（顶层 `dhcpv6`）。
+  /// [isDhcp] 控制是否让 EasyTier 自动分配虚拟 IP；打开时用 [kRoomDhcpIpv4Cidr]
+  /// 作为初始网段，关闭时使用 [virtualIp] 作为固定 IP（写入顶层 `ipv4`）。
+  /// [isDhcpv6] 控制是否自动分配虚拟 IPv6；打开时用 [kRoomDhcpIpv6Cidr]。
   String buildTomlConfig(
     String roomName,
     String roomPassword, {
@@ -68,6 +69,14 @@ class P2PConfigService {
         ? 'ipv4 = "${_escapeString(trimmedIp)}"\n'
         : '';
 
+    // 打开 DHCP 时直接写"初始网段"而不是裸 true：EasyTier 的 `dhcp` / `dhcpv6`
+    // 字段接受 bool 或 CIDR 字符串（untagged DhcpConfig）。显式给网段可避开默认
+    // 的 10.126.126.0/24 与 fd6b:8c2d:91e4::/64，减少与家用网段撞车。
+    final dhcpLine = isDhcp ? 'dhcp = "$kRoomDhcpIpv4Cidr"' : 'dhcp = false';
+    final dhcpv6Line = isDhcpv6
+        ? 'dhcpv6 = "$kRoomDhcpIpv6Cidr"'
+        : 'dhcpv6 = false';
+
     final identityBlock =
         '''
 [network_identity]
@@ -80,14 +89,16 @@ network_secret = "${_escapeString(roomPassword)}"
       'shared_secret=true dhcp=$isDhcp dhcpv6=$isDhcpv6 disable_p2p=$disableP2p '
       'protocol=${protocol.name} udp_broadcast_relay=$udpRelay '
       'virtual_ip=${(!isDhcp && trimmedIp.isNotEmpty) ? trimmedIp : "auto"} '
+      'ipv4_cidr=${isDhcp ? kRoomDhcpIpv4Cidr : "-"} '
+      'ipv6_cidr=${isDhcpv6 ? kRoomDhcpIpv6Cidr : "-"} '
       'peers=${peers.length}',
     );
 
     return '''
 instance_name = "AstralGame"
 hostname = "${_escapeString(hostname)}"
-dhcp = $isDhcp
-dhcpv6 = $isDhcpv6
+$dhcpLine
+$dhcpv6Line
 $fixedIpv4Line
 listeners = [
     "tcp://0.0.0.0:0",

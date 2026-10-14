@@ -27,6 +27,7 @@ import 'package:astral_game/data/services/windows_time_sync_service.dart';
 import 'package:astral_game/data/services/bookmark_store.dart';
 import 'package:astral_game/data/services/screen_state_service.dart';
 import 'package:astral_game/data/services/shell_navigation_service.dart';
+import 'package:astral_game/data/services/smart_dns_config_updater.dart';
 import 'package:astral_game/data/services/server_persistence_service.dart';
 import 'package:astral_game/data/services/shortcut_service.dart';
 import 'package:astral_game/data/services/share_code_service.dart';
@@ -133,8 +134,17 @@ Future<void> setupDI() async {
   getIt.registerLazySingleton<NetworkOptimizeService>(
     () => NetworkOptimizeService(),
   );
+  getIt.registerLazySingleton<SmartDnsConfigUpdater>(
+    () => SmartDnsConfigUpdater(
+      networkOptimize: getIt<NetworkOptimizeService>(),
+      cacheDir: Directory(p.join(supportDir.path, 'dns')),
+    ),
+  );
+  _registerDispose<SmartDnsConfigUpdater>((s) => s.close());
   if (RuntimePlatform.isWindows) {
     unawaited(getIt<NetworkOptimizeService>().refresh());
+    // 网络加速已启用时，顺带把远端 smartdns.conf 同步下来（失败保留本地配置）。
+    unawaited(getIt<SmartDnsConfigUpdater>().checkAndApply());
     unawaited(ensureWindowsAliyunNtp());
   }
 
