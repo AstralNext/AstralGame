@@ -204,6 +204,12 @@ class _ServersMainPageState extends State<ServersMainPage> {
                     : latency != null
                     ? _getLatencyColor(latency, colorScheme)
                     : _getStatusColor(status, colorScheme);
+                // 手机不展示服务器地址（IP 对玩家没意义，界面也更干净）；
+                // 名称本身就是地址时也没必要再把同一串显示两遍。
+                final showAddress =
+                    !RuntimePlatform.isMobile &&
+                    server.name.trim().toLowerCase() !=
+                        addressLine.trim().toLowerCase();
 
                 // 不用 ListTile：窄屏下 leading/trailing 会把标题与地址挤成一团，
                 // 且多行 subtitle 还会顶出高度约束。改成「名称行 + 地址整行 + 元信息行」
@@ -239,25 +245,30 @@ class _ServersMainPageState extends State<ServersMainPage> {
                                 ),
                               ),
                               if (RuntimePlatform.isDesktop)
-                                Icon(
-                                  Icons.drag_indicator,
-                                  size: 16,
-                                  color: colorScheme.outline,
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 8),
+                                  child: Icon(
+                                    Icons.drag_indicator,
+                                    size: 18,
+                                    color: colorScheme.outline,
+                                  ),
                                 ),
-                              Transform.scale(
-                                scale: 0.85,
-                                child: Switch(
-                                  value: server.enable,
-                                  onChanged: (value) {
-                                    _serverState.toggleServerEnabled(
-                                      server.id,
-                                      value,
-                                    );
-                                  },
-                                ),
+                              Switch(
+                                value: server.enable,
+                                // 去掉默认的 48px 触摸外扩，控件贴合行高，视觉不再虚胖
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                                onChanged: (value) {
+                                  _serverState.toggleServerEnabled(
+                                    server.id,
+                                    value,
+                                  );
+                                },
                               ),
                               PopupMenuButton<String>(
                                 tooltip: '更多操作',
+                                iconSize: 20,
+                                padding: const EdgeInsets.all(4),
                                 onSelected: (value) {
                                   if (value == 'edit') {
                                     _openEditDialog(context, server);
@@ -271,16 +282,20 @@ class _ServersMainPageState extends State<ServersMainPage> {
                             ],
                           ),
                           // 地址独占一整行：窄屏不再被左右控件挤压，一行省略号即可
-                          Padding(
-                            padding: const EdgeInsets.only(left: 14, right: 8),
-                            child: Text(
-                              addressLine,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(color: colorScheme.outline),
+                          if (showAddress)
+                            Padding(
+                              padding: const EdgeInsets.only(
+                                left: 14,
+                                right: 8,
+                              ),
+                              child: Text(
+                                addressLine,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(color: colorScheme.outline),
+                              ),
                             ),
-                          ),
                           // 延迟 + 探测状态同一行，放不下时探测文案自己省略
                           Padding(
                             padding: const EdgeInsets.only(
