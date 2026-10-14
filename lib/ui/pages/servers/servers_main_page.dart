@@ -8,6 +8,7 @@ import 'package:astral_game/di.dart';
 import 'package:astral_game/data/state/server_state.dart';
 import 'package:astral_game/config/constants.dart';
 import 'package:astral_game/data/models/server_mod.dart';
+import 'package:astral_game/utils/runtime_platform.dart';
 
 import 'server_dialog.dart';
 import 'blocked_servers.dart';
@@ -138,13 +139,16 @@ class _ServersMainPageState extends State<ServersMainPage> {
       }
 
       final anyProbing = probingIds.isNotEmpty;
+      // 与全站一致的 600 断点；窄屏收紧左右边距，给内容更多横向空间。
+      final isNarrow = MediaQuery.sizeOf(context).width < 600;
+      final hPad = isNarrow ? 12.0 : AppDimensions.pagePaddingH;
       return Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppDimensions.pagePaddingH,
+            padding: EdgeInsets.fromLTRB(
+              hPad,
               AppDimensions.pagePaddingV,
-              AppDimensions.pagePaddingH,
+              hPad,
               0,
             ),
             child: Row(
@@ -166,10 +170,10 @@ class _ServersMainPageState extends State<ServersMainPage> {
           ),
           Expanded(
             child: ReorderableListView.builder(
-              padding: const EdgeInsets.fromLTRB(
-                AppDimensions.pagePaddingH,
+              padding: EdgeInsets.fromLTRB(
+                hPad,
                 AppDimensions.sectionGap,
-                AppDimensions.pagePaddingH,
+                hPad,
                 88,
               ),
               itemCount: servers.length,
@@ -195,181 +199,158 @@ class _ServersMainPageState extends State<ServersMainPage> {
                 final addressLine = BlockedServers.isBlocked(server.url)
                     ? '***'
                     : server.url;
-                final subtitleText = addressLine;
+                final statusColor = probing
+                    ? AppColors.info
+                    : latency != null
+                    ? _getLatencyColor(latency, colorScheme)
+                    : _getStatusColor(status, colorScheme);
 
-                return ReorderableDragStartListener(
-                  key: ValueKey(server.id),
-                  index: index,
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: AstralCard(
-                      padding: EdgeInsets.zero,
-                      child: ListTile(
-                        leading: SizedBox(
-                          width: 56,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
+                // 不用 ListTile：窄屏下 leading/trailing 会把标题与地址挤成一团，
+                // 且多行 subtitle 还会顶出高度约束。改成「名称行 + 地址整行 + 元信息行」
+                // 的纵向卡片，窄屏宽屏同一套排版，只是边距与控件取舍不同。
+                final card = Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: AstralCard(
+                    padding: EdgeInsets.zero,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 10, 6, 10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
                             children: [
                               Container(
                                 width: 4,
-                                height: 40,
+                                height: 20,
                                 decoration: BoxDecoration(
-                                  color: probing
-                                      ? AppColors.info
-                                      : latency != null
-                                      ? _getLatencyColor(latency, colorScheme)
-                                      : _getStatusColor(status, colorScheme),
+                                  color: statusColor,
                                   borderRadius: BorderRadius.circular(2),
                                 ),
                               ),
-                              const SizedBox(width: 8),
+                              const SizedBox(width: 10),
                               Expanded(
-                                child: probing
-                                    ? const Align(
-                                        alignment: Alignment.centerLeft,
-                                        child: SizedBox(
-                                          width: 14,
-                                          height: 14,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                          ),
-                                        ),
-                                      )
-                                    : Text(
-                                        latency != null ? '${latency}ms' : '--',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .labelMedium
-                                            ?.copyWith(
-                                              color: colorScheme.outline,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                      ),
+                                child: Text(
+                                  server.name,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (RuntimePlatform.isDesktop)
+                                Icon(
+                                  Icons.drag_indicator,
+                                  size: 16,
+                                  color: colorScheme.outline,
+                                ),
+                              Transform.scale(
+                                scale: 0.85,
+                                child: Switch(
+                                  value: server.enable,
+                                  onChanged: (value) {
+                                    _serverState.toggleServerEnabled(
+                                      server.id,
+                                      value,
+                                    );
+                                  },
+                                ),
+                              ),
+                              PopupMenuButton<String>(
+                                tooltip: '更多操作',
+                                onSelected: (value) {
+                                  if (value == 'edit') {
+                                    _openEditDialog(context, server);
+                                  } else if (value == 'delete') {
+                                    _showDeleteConfirmDialog(server);
+                                  }
+                                },
+                                itemBuilder: (context) =>
+                                    _serverMenuItems(context, server),
                               ),
                             ],
                           ),
-                        ),
-                        title: Text(
-                          server.name,
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              subtitleText,
-                              maxLines: 2,
+                          // 地址独占一整行：窄屏不再被左右控件挤压，一行省略号即可
+                          Padding(
+                            padding: const EdgeInsets.only(left: 14, right: 8),
+                            child: Text(
+                              addressLine,
+                              maxLines: 1,
                               overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: colorScheme.outline),
                             ),
-                            if (probing)
-                              _buildProbeStatus(context, const Text('探测中…'))
-                            else if (probe != null)
-                              _buildProbeStatus(
-                                context,
-                                probe.isEasyTier
-                                    ? Text(
-                                        'EasyTier ${probe.version} · 协议 '
-                                        'v${probe.protocolVersion}',
-                                      )
-                                    : const Text('非 EasyTier 服务器'),
-                                isWarning: !probe.isEasyTier,
-                              ),
-                          ],
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Transform.scale(
-                              scale: 0.8,
-                              child: Switch(
-                                value: server.enable,
-                                onChanged: (value) {
-                                  _serverState.toggleServerEnabled(
-                                    server.id,
-                                    value,
-                                  );
-                                },
-                              ),
+                          ),
+                          // 延迟 + 探测状态同一行，放不下时探测文案自己省略
+                          Padding(
+                            padding: const EdgeInsets.only(
+                              left: 14,
+                              right: 8,
+                              top: 4,
                             ),
-                            const SizedBox(width: 4),
-                            PopupMenuButton<String>(
-                              onSelected: (value) {
-                                if (value == 'edit') {
-                                  if (BlockedServers.isBlocked(server.url)) {
-                                    showAppSnackBar(
-                                      context,
-                                      '此服务器不可编辑',
-                                      duration: const Duration(seconds: 2),
-                                    );
-                                  } else {
-                                    showEditServerDialog(
-                                      context,
-                                      server: server,
-                                    );
-                                  }
-                                } else if (value == 'delete') {
-                                  _showDeleteConfirmDialog(server);
-                                }
-                              },
-                              itemBuilder: (context) {
-                                final isBlocked = BlockedServers.isBlocked(
-                                  server.url,
-                                );
-                                final scheme = Theme.of(context).colorScheme;
-                                return [
-                                  PopupMenuItem(
-                                    value: 'edit',
-                                    child: Row(
-                                      children: [
-                                        Icon(
-                                          Icons.edit_outlined,
-                                          size: 18,
-                                          color: isBlocked
-                                              ? scheme.outline
-                                              : scheme.primary,
+                            child: Row(
+                              children: [
+                                if (probing)
+                                  const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                else
+                                  Text(
+                                    latency != null ? '${latency}ms' : '--',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelMedium
+                                        ?.copyWith(
+                                          color: colorScheme.outline,
+                                          fontWeight: FontWeight.w600,
                                         ),
-                                        const SizedBox(width: 12),
-                                        Text(
-                                          '编辑',
-                                          style: TextStyle(
-                                            color: isBlocked
-                                                ? scheme.outline
-                                                : null,
+                                  ),
+                                if (probing || probe != null) ...[
+                                  const SizedBox(width: 10),
+                                  Flexible(
+                                    child: probing
+                                        ? _buildProbeStatus(
+                                            context,
+                                            const Text('探测中…'),
+                                          )
+                                        : _buildProbeStatus(
+                                            context,
+                                            probe!.isEasyTier
+                                                ? Text(
+                                                    'EasyTier ${probe.version}'
+                                                    ' · 协议 '
+                                                    'v${probe.protocolVersion}',
+                                                  )
+                                                : const Text('非 EasyTier 服务器'),
+                                            isWarning: !probe.isEasyTier,
                                           ),
-                                        ),
-                                      ],
-                                    ),
                                   ),
-                                  PopupMenuItem(
-                                    value: 'delete',
-                                    child: Row(
-                                      children: [
-                                        Icon(
-                                          Icons.delete_outline,
-                                          size: 18,
-                                          color: scheme.error,
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Text(
-                                          '删除',
-                                          style: TextStyle(color: scheme.error),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ];
-                              },
+                                ],
+                              ],
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
                 );
+
+                // 触屏长按拖拽，避免与列表滚动抢手势；桌面端鼠标可直接拖。
+                return RuntimePlatform.isDesktop
+                    ? ReorderableDragStartListener(
+                        key: ValueKey(server.id),
+                        index: index,
+                        child: card,
+                      )
+                    : ReorderableDelayedDragStartListener(
+                        key: ValueKey(server.id),
+                        index: index,
+                        child: card,
+                      );
               },
             ),
           ),
@@ -419,5 +400,56 @@ class _ServersMainPageState extends State<ServersMainPage> {
         ],
       ),
     );
+  }
+
+  /// 「更多操作」菜单里的编辑 / 删除两项（宽窄屏共用）。
+  List<PopupMenuEntry<String>> _serverMenuItems(
+    BuildContext context,
+    ServerMod server,
+  ) {
+    final isBlocked = BlockedServers.isBlocked(server.url);
+    final scheme = Theme.of(context).colorScheme;
+    return [
+      PopupMenuItem(
+        value: 'edit',
+        child: Row(
+          children: [
+            Icon(
+              Icons.edit_outlined,
+              size: 18,
+              color: isBlocked ? scheme.outline : scheme.primary,
+            ),
+            const SizedBox(width: 12),
+            Text(
+              '编辑',
+              style: TextStyle(color: isBlocked ? scheme.outline : null),
+            ),
+          ],
+        ),
+      ),
+      PopupMenuItem(
+        value: 'delete',
+        child: Row(
+          children: [
+            Icon(Icons.delete_outline, size: 18, color: scheme.error),
+            const SizedBox(width: 12),
+            Text('删除', style: TextStyle(color: scheme.error)),
+          ],
+        ),
+      ),
+    ];
+  }
+
+  /// 编辑服务器；被拦截的内置服务器不允许改，提示一下即可。
+  void _openEditDialog(BuildContext context, ServerMod server) {
+    if (BlockedServers.isBlocked(server.url)) {
+      showAppSnackBar(
+        context,
+        '此服务器不可编辑',
+        duration: const Duration(seconds: 2),
+      );
+      return;
+    }
+    showEditServerDialog(context, server: server);
   }
 }

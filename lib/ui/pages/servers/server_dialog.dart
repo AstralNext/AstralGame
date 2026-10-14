@@ -121,6 +121,10 @@ class _ServerDialogState extends State<ServerDialog> {
         widget.server != null && BlockedServers.isBlocked(widget.server!.url);
 
     return AlertDialog(
+      // 窄屏收紧默认 insetPadding（左右各 40 太浪费），给输入框留出宽度
+      insetPadding: MediaQuery.sizeOf(context).width < 600
+          ? const EdgeInsets.symmetric(horizontal: 20, vertical: 24)
+          : null,
       title: Text(widget.title),
       content: SizedBox(
         width: 420,
