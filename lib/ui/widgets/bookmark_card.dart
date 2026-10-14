@@ -1,9 +1,12 @@
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/models/bookmark.dart';
 import 'package:astral_game/data/models/game_catalog.dart';
+import 'package:astral_game/data/services/bookmark_cover_store.dart';
+import 'package:astral_game/di.dart';
 import 'package:astral_game/ui/widgets/astral_card.dart';
 import 'package:astral_game/utils/room_display.dart';
 import 'package:flutter/material.dart';
+import 'package:signals/signals_flutter.dart';
 
 /// 收藏卡片操作集合（窄屏横卡 / 宽屏网格卡共用）。
 class BookmarkCardActions {
@@ -14,6 +17,8 @@ class BookmarkCardActions {
     required this.onEdit,
     required this.onDelete,
     required this.onTogglePin,
+    required this.onChangeCover,
+    required this.onRemoveCover,
   });
 
   final VoidCallback onJoin;
@@ -22,6 +27,12 @@ class BookmarkCardActions {
   final VoidCallback onEdit;
   final VoidCallback onDelete;
   final VoidCallback onTogglePin;
+
+  /// 选一张本地图片作为该收藏的封面。
+  final VoidCallback onChangeCover;
+
+  /// 去掉自定义封面，回到游戏默认封面。
+  final VoidCallback onRemoveCover;
 }
 
 /// 窄屏横版卡片：封面左 + 信息中 + 更多菜单右，点击整卡=加入房间。
@@ -171,20 +182,40 @@ class BookmarkGridCard extends StatelessWidget {
   }
 }
 
-/// 封面：注册过的游戏用媒体图（cover 填充），否则用游戏名兜底块。
+/// 封面：优先用户自定义封面，其次注册过的游戏用媒体图（cover 填充），
+/// 都没有时用游戏名兜底块。
 class _Cover extends StatelessWidget {
   const _Cover({required this.bookmark});
   final Bookmark bookmark;
 
   @override
   Widget build(BuildContext context) {
-    final game = GameCatalog.byId(bookmark.payload.gameId);
-    if (game == null) return _FallbackCover(bookmark: bookmark);
-    return GameMediaImage(
-      source: game.resolvedGridAsset,
-      errorBuilder: (_, _, _) => _FallbackCover(bookmark: bookmark),
-    );
+    final store = getIt<BookmarkCoverStore>();
+    return Watch((context) {
+      // 换/移除封面后靠 revision 触发重建
+      store.revision.value;
+      final custom = store.fileFor(bookmark.id);
+      if (custom != null) {
+        return Image.file(
+          custom,
+          fit: BoxFit.cover,
+          gaplessPlayback: true,
+          errorBuilder: (_, _, _) => _gameCover(bookmark),
+        );
+      }
+      return _gameCover(bookmark);
+    });
   }
+}
+
+/// 游戏自带封面（可能来自本地 asset，也可能走线上 CDN）。
+Widget _gameCover(Bookmark bookmark) {
+  final game = GameCatalog.byId(bookmark.payload.gameId);
+  if (game == null) return _FallbackCover(bookmark: bookmark);
+  return GameMediaImage(
+    source: game.resolvedGridAsset,
+    errorBuilder: (_, _, _) => _FallbackCover(bookmark: bookmark),
+  );
 }
 
 class _FallbackCover extends StatelessWidget {
@@ -272,51 +303,69 @@ class BookmarkActionsMenu extends StatelessWidget {
           )
         : icon;
 
-    return PopupMenuButton<String>(
-      tooltip: '更多操作',
-      position: PopupMenuPosition.under,
-      color: palette.card,
-      onSelected: (key) => switch (key) {
-        'pin' => actions.onTogglePin(),
-        'share' => actions.onShare(),
-        'shortcut' => actions.onShortcut(),
-        'edit' => actions.onEdit(),
-        'delete' => actions.onDelete(),
-        _ => {},
-      },
-      itemBuilder: (_) => [
-        PopupMenuItem(
-          value: 'pin',
-          child: _MenuItemRow(
-            icon: bookmark.pinned
-                ? Icons.push_pin_rounded
-                : Icons.push_pin_outlined,
-            label: bookmark.pinned ? '取消置顶' : '置顶',
+    final store = getIt<BookmarkCoverStore>();
+    return Watch((context) {
+      final hasCover = store.hasCover(bookmark.id);
+      return PopupMenuButton<String>(
+        tooltip: '更多操作',
+        position: PopupMenuPosition.under,
+        color: palette.card,
+        onSelected: (key) => switch (key) {
+          'pin' => actions.onTogglePin(),
+          'share' => actions.onShare(),
+          'shortcut' => actions.onShortcut(),
+          'cover' => actions.onChangeCover(),
+          'remove_cover' => actions.onRemoveCover(),
+          'edit' => actions.onEdit(),
+          'delete' => actions.onDelete(),
+          _ => {},
+        },
+        itemBuilder: (_) => [
+          PopupMenuItem(
+            value: 'pin',
+            child: _MenuItemRow(
+              icon: bookmark.pinned
+                  ? Icons.push_pin_rounded
+                  : Icons.push_pin_outlined,
+              label: bookmark.pinned ? '取消置顶' : '置顶',
+            ),
           ),
-        ),
-        const PopupMenuItem(
-          value: 'share',
-          child: _MenuItemRow(icon: Icons.share_rounded, label: '分享'),
-        ),
-        const PopupMenuItem(
-          value: 'shortcut',
-          child: _MenuItemRow(icon: Icons.shortcut_rounded, label: '快捷方式'),
-        ),
-        const PopupMenuItem(
-          value: 'edit',
-          child: _MenuItemRow(icon: Icons.edit_rounded, label: '编辑'),
-        ),
-        PopupMenuItem(
-          value: 'delete',
-          child: _MenuItemRow(
-            icon: Icons.delete_outline,
-            label: '删除',
-            color: palette.error,
+          const PopupMenuItem(
+            value: 'share',
+            child: _MenuItemRow(icon: Icons.share_rounded, label: '分享'),
           ),
-        ),
-      ],
-      child: trigger,
-    );
+          const PopupMenuItem(
+            value: 'shortcut',
+            child: _MenuItemRow(icon: Icons.shortcut_rounded, label: '快捷方式'),
+          ),
+          const PopupMenuItem(
+            value: 'cover',
+            child: _MenuItemRow(icon: Icons.image_outlined, label: '更换封面'),
+          ),
+          if (hasCover)
+            const PopupMenuItem(
+              value: 'remove_cover',
+              child: _MenuItemRow(
+                icon: Icons.hide_image_outlined,
+                label: '移除封面',
+              ),
+            ),
+          const PopupMenuItem(
+            value: 'edit',
+            child: _MenuItemRow(icon: Icons.edit_rounded, label: '编辑'),
+          ),
+          PopupMenuItem(
+            value: 'delete',
+            child: _MenuItemRow(
+              icon: Icons.delete_outline,
+              label: '删除',
+              color: palette.error,
+            ),
+          ),
+        ],
+        child: trigger,
+      );
+    });
   }
 }
 

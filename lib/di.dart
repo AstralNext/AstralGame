@@ -25,6 +25,7 @@ import 'package:astral_game/data/services/room_assist_service.dart';
 import 'package:astral_game/data/services/windows_process_watch.dart';
 import 'package:astral_game/data/services/windows_time_sync_service.dart';
 import 'package:astral_game/data/services/bookmark_store.dart';
+import 'package:astral_game/data/services/bookmark_cover_store.dart';
 import 'package:astral_game/data/services/screen_state_service.dart';
 import 'package:astral_game/data/services/shell_navigation_service.dart';
 import 'package:astral_game/data/services/smart_dns_config_updater.dart';
@@ -247,6 +248,13 @@ Future<void> setupDI() async {
   // 收藏持久化：Isar（打开时顺带一次性导入旧版 bookmarks.json）。
   final bookmarkStore = await bookmarkStoreFuture;
   getIt.registerSingleton<BookmarkStore>(bookmarkStore);
+
+  // 收藏自定义封面：图片落盘在支持目录，不占 Isar 空间。
+  getIt.registerLazySingleton<BookmarkCoverStore>(
+    () => BookmarkCoverStore(
+      directory: Directory(p.join(supportDir.path, 'covers')),
+    ),
+  );
 
   final roomState = getIt<RoomState>();
   roomState.initPersistence(bookmarkStore);

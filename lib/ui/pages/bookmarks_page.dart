@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/models/bookmark.dart';
+import 'package:astral_game/data/services/bookmark_cover_store.dart';
 import 'package:astral_game/data/services/connection_service.dart';
 import 'package:astral_game/data/services/share_code_service.dart';
 import 'package:astral_game/data/services/shell_navigation_service.dart';
@@ -18,6 +21,7 @@ import 'package:astral_game/ui/widgets/section_header.dart';
 import 'package:astral_game/utils/room_display.dart';
 import 'package:astral_game/utils/room_share.dart';
 import 'package:astral_game/utils/room_share_actions.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:signals/signals_flutter.dart';
 
@@ -144,6 +148,8 @@ class _BookmarksPageState extends State<BookmarksPage> {
         onEdit: () => _handleEdit(b),
         onDelete: () => _handleDelete(b),
         onTogglePin: () => _togglePin(b),
+        onChangeCover: () => _handleChangeCover(b),
+        onRemoveCover: () => _handleRemoveCover(b),
       );
       return grid
           ? BookmarkGridCard(bookmark: b, actions: actions)
@@ -331,5 +337,40 @@ class _BookmarksPageState extends State<BookmarksPage> {
       actionLabel: '撤销',
       onAction: () => _roomState.upsertBookmark(b),
     );
+  }
+
+  /// 更换封面：选本地图片 → 落盘到支持目录；卡片靠 store.revision 自动刷新。
+  Future<void> _handleChangeCover(Bookmark b) async {
+    try {
+      final picked = await FilePicker.platform.pickFiles(
+        dialogTitle: '选择封面图片',
+        type: FileType.image,
+        withData: true,
+        lockParentWindow: true,
+      );
+      final file = picked?.files.single;
+      if (file == null) return;
+      Uint8List? bytes = file.bytes;
+      final path = file.path;
+      if (bytes == null && path != null) {
+        bytes = await File(path).readAsBytes();
+      }
+      if (bytes == null || bytes.isEmpty) {
+        if (mounted) showAppSnackBar(context, '读取图片失败');
+        return;
+      }
+      final ok = await getIt<BookmarkCoverStore>().save(b.id, bytes);
+      if (!mounted) return;
+      showAppSnackBar(context, ok ? '已更新封面' : '保存封面失败');
+    } catch (e) {
+      if (mounted) showAppSnackBar(context, '选择图片失败：$e');
+    }
+  }
+
+  /// 移除自定义封面，回到游戏默认封面。
+  Future<void> _handleRemoveCover(Bookmark b) async {
+    await getIt<BookmarkCoverStore>().remove(b.id);
+    if (!mounted) return;
+    showAppSnackBar(context, '已恢复默认封面');
   }
 }
