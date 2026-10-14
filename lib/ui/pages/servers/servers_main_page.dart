@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/ui/widgets/app_snack_bar.dart';
 import 'package:astral_game/ui/widgets/astral_card.dart';
@@ -211,143 +213,151 @@ class _ServersMainPageState extends State<ServersMainPage> {
                     server.name.trim().toLowerCase() !=
                         addressLine.trim().toLowerCase();
 
-                // 不用 ListTile：窄屏下 leading/trailing 会把标题与地址挤成一团，
-                // 且多行 subtitle 还会顶出高度约束。改成「名称行 + 地址整行 + 元信息行」
-                // 的纵向卡片，窄屏宽屏同一套排版，只是边距与控件取舍不同。
+                // 卡片：左侧信息列（名称 / 地址 / 延迟+探测），右侧开关垂直居中。
+                // 触屏端编辑、删除走侧滑；桌面端用「更多」菜单。
                 final card = Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: AstralCard(
                     padding: EdgeInsets.zero,
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 10, 6, 10),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                      padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+                      child: Row(
                         children: [
-                          Row(
-                            children: [
-                              Container(
-                                width: 4,
-                                height: 20,
-                                decoration: BoxDecoration(
-                                  color: statusColor,
-                                  borderRadius: BorderRadius.circular(2),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  server.name,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              if (RuntimePlatform.isDesktop)
-                                Padding(
-                                  padding: const EdgeInsets.only(left: 8),
-                                  child: Icon(
-                                    Icons.drag_indicator,
-                                    size: 18,
-                                    color: colorScheme.outline,
-                                  ),
-                                ),
-                              Switch(
-                                value: server.enable,
-                                // 去掉默认的 48px 触摸外扩，控件贴合行高，视觉不再虚胖
-                                materialTapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
-                                onChanged: (value) {
-                                  _serverState.toggleServerEnabled(
-                                    server.id,
-                                    value,
-                                  );
-                                },
-                              ),
-                              PopupMenuButton<String>(
-                                tooltip: '更多操作',
-                                iconSize: 20,
-                                padding: const EdgeInsets.all(4),
-                                onSelected: (value) {
-                                  if (value == 'edit') {
-                                    _openEditDialog(context, server);
-                                  } else if (value == 'delete') {
-                                    _showDeleteConfirmDialog(server);
-                                  }
-                                },
-                                itemBuilder: (context) =>
-                                    _serverMenuItems(context, server),
-                              ),
-                            ],
-                          ),
-                          // 地址独占一整行：窄屏不再被左右控件挤压，一行省略号即可
-                          if (showAddress)
-                            Padding(
-                              padding: const EdgeInsets.only(
-                                left: 14,
-                                right: 8,
-                              ),
-                              child: Text(
-                                addressLine,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(color: colorScheme.outline),
-                              ),
-                            ),
-                          // 延迟 + 探测状态同一行，放不下时探测文案自己省略
-                          Padding(
-                            padding: const EdgeInsets.only(
-                              left: 14,
-                              right: 8,
-                              top: 4,
-                            ),
-                            child: Row(
+                          Expanded(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                if (probing)
-                                  const SizedBox(
-                                    width: 14,
-                                    height: 14,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: 4,
+                                      height: 20,
+                                      decoration: BoxDecoration(
+                                        color: statusColor,
+                                        borderRadius: BorderRadius.circular(2),
+                                      ),
                                     ),
-                                  )
-                                else
-                                  Text(
-                                    latency != null ? '${latency}ms' : '--',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .labelMedium
-                                        ?.copyWith(
-                                          color: colorScheme.outline,
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        server.name,
+                                        style: const TextStyle(
                                           fontWeight: FontWeight.w600,
                                         ),
-                                  ),
-                                if (probing || probe != null) ...[
-                                  const SizedBox(width: 10),
-                                  Flexible(
-                                    child: probing
-                                        ? _buildProbeStatus(
-                                            context,
-                                            const Text('探测中…'),
-                                          )
-                                        : _buildProbeStatus(
-                                            context,
-                                            probe!.isEasyTier
-                                                ? Text(
-                                                    'EasyTier ${probe.version}'
-                                                    ' · 协议 '
-                                                    'v${probe.protocolVersion}',
-                                                  )
-                                                : const Text('非 EasyTier 服务器'),
-                                            isWarning: !probe.isEasyTier,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                // 地址独占一整行（手机上不显示）
+                                if (showAddress)
+                                  Padding(
+                                    padding: const EdgeInsets.only(
+                                      left: 14,
+                                      top: 4,
+                                    ),
+                                    child: Text(
+                                      addressLine,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(
+                                            color: colorScheme.outline,
                                           ),
+                                    ),
                                   ),
-                                ],
+                                // 延迟 + 探测状态同一行，放不下时探测文案自己省略
+                                Padding(
+                                  padding: const EdgeInsets.only(
+                                    left: 14,
+                                    top: 4,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      if (probing)
+                                        const SizedBox(
+                                          width: 14,
+                                          height: 14,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      else
+                                        Text(
+                                          latency != null
+                                              ? '${latency}ms'
+                                              : '--',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .labelMedium
+                                              ?.copyWith(
+                                                color: colorScheme.outline,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                        ),
+                                      if (probing || probe != null) ...[
+                                        const SizedBox(width: 10),
+                                        Flexible(
+                                          child: probing
+                                              ? _buildProbeStatus(
+                                                  context,
+                                                  const Text('探测中…'),
+                                                )
+                                              : _buildProbeStatus(
+                                                  context,
+                                                  probe!.isEasyTier
+                                                      ? Text(
+                                                          'EasyTier '
+                                                          '${probe.version}'
+                                                          ' · 协议 '
+                                                          'v${probe.protocolVersion}',
+                                                        )
+                                                      : const Text(
+                                                          '非 EasyTier 服务器',
+                                                        ),
+                                                  isWarning: !probe.isEasyTier,
+                                                ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
                               ],
                             ),
                           ),
+                          const SizedBox(width: 4),
+                          // 相对整张卡片垂直居中
+                          Switch(
+                            value: server.enable,
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            onChanged: (value) {
+                              _serverState.toggleServerEnabled(
+                                server.id,
+                                value,
+                              );
+                            },
+                          ),
+                          // 触屏用侧滑，不再放菜单
+                          if (RuntimePlatform.isDesktop)
+                            PopupMenuButton<String>(
+                              tooltip: '更多操作',
+                              iconSize: 20,
+                              padding: const EdgeInsets.all(4),
+                              onSelected: (value) {
+                                if (value == 'edit') {
+                                  _openEditDialog(context, server);
+                                } else if (value == 'delete') {
+                                  unawaited(_handleDelete(server));
+                                }
+                              },
+                              itemBuilder: (context) =>
+                                  _serverMenuItems(context, server),
+                            ),
                         ],
                       ),
                     ),
@@ -355,7 +365,7 @@ class _ServersMainPageState extends State<ServersMainPage> {
                 );
 
                 // 触屏长按拖拽，避免与列表滚动抢手势；桌面端鼠标可直接拖。
-                return RuntimePlatform.isDesktop
+                final draggable = RuntimePlatform.isDesktop
                     ? ReorderableDragStartListener(
                         key: ValueKey(server.id),
                         index: index,
@@ -366,6 +376,23 @@ class _ServersMainPageState extends State<ServersMainPage> {
                         index: index,
                         child: card,
                       );
+                if (!RuntimePlatform.isMobile) return draggable;
+
+                // 手机：右滑编辑、左滑删除（删除前确认），替代桌面端的「更多」菜单
+                return Dismissible(
+                  key: ValueKey('server-swipe-${server.id}'),
+                  background: _swipeActionHint(context, edit: true),
+                  secondaryBackground: _swipeActionHint(context, edit: false),
+                  confirmDismiss: (direction) async {
+                    if (direction == DismissDirection.startToEnd) {
+                      _openEditDialog(context, server);
+                      return false;
+                    }
+                    return _confirmDelete(server);
+                  },
+                  onDismissed: (_) => _serverState.removeServer(server.id),
+                  child: draggable,
+                );
               },
             ),
           ),
@@ -393,31 +420,67 @@ class _ServersMainPageState extends State<ServersMainPage> {
     );
   }
 
-  void _showDeleteConfirmDialog(ServerMod server) {
-    showDialog(
+  /// 删除确认；返回 true 表示用户确认删除。
+  Future<bool> _confirmDelete(ServerMod server) async {
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('删除服务器'),
         content: Text('确定要删除服务器 "${server.name}" 吗？此操作不可撤销。'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(context).pop(false),
             child: const Text('取消'),
           ),
           TextButton(
-            onPressed: () {
-              _serverState.removeServer(server.id);
-              Navigator.of(context).pop();
-            },
+            onPressed: () => Navigator.of(context).pop(true),
             style: TextButton.styleFrom(foregroundColor: AppColors.error),
             child: const Text('删除'),
           ),
         ],
       ),
     );
+    return confirmed ?? false;
   }
 
-  /// 「更多操作」菜单里的编辑 / 删除两项（宽窄屏共用）。
+  /// 桌面端「更多」菜单的删除入口（触屏端走侧滑）。
+  Future<void> _handleDelete(ServerMod server) async {
+    if (await _confirmDelete(server)) {
+      _serverState.removeServer(server.id);
+    }
+  }
+
+  /// 侧滑时露出的提示块：右滑编辑 / 左滑删除。
+  Widget _swipeActionHint(BuildContext context, {required bool edit}) {
+    final scheme = Theme.of(context).colorScheme;
+    final color = edit ? scheme.primary : AppColors.error;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      alignment: edit ? Alignment.centerLeft : Alignment.centerRight,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            edit ? Icons.edit_outlined : Icons.delete_outline,
+            size: 20,
+            color: color,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            edit ? '编辑' : '删除',
+            style: TextStyle(color: color, fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 桌面端「更多操作」菜单里的编辑 / 删除两项（触屏端改用侧滑）。
   List<PopupMenuEntry<String>> _serverMenuItems(
     BuildContext context,
     ServerMod server,
