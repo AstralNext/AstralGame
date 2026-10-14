@@ -18,7 +18,6 @@ import 'package:astral_game/ui/widgets/bookmark_edit_dialog.dart';
 import 'package:astral_game/ui/widgets/empty_state.dart';
 import 'package:astral_game/ui/widgets/page_navigator.dart';
 import 'package:astral_game/ui/widgets/section_header.dart';
-import 'package:astral_game/utils/room_display.dart';
 import 'package:astral_game/utils/room_share.dart';
 import 'package:astral_game/utils/room_share_actions.dart';
 import 'package:file_picker/file_picker.dart';
@@ -328,15 +327,12 @@ class _BookmarksPageState extends State<BookmarksPage> {
     if (mounted) showAppSnackBar(context, '已更新');
   }
 
+  /// 删除收藏。
+  ///
+  /// 刻意不弹底部提示：桌面端 SnackBar 在鼠标悬停时会一直挂着（悬停会取消自动关闭），
+  /// 挡在页面上很碍事，所以这里删完即止（撤销入口一并去掉）。
   Future<void> _handleDelete(Bookmark b) async {
     await _roomState.removeBookmark(b.id);
-    if (!mounted) return;
-    showAppSnackBar(
-      context,
-      '已取消收藏：${bookmarkDisplayLabel(b)}',
-      actionLabel: '撤销',
-      onAction: () => _roomState.upsertBookmark(b),
-    );
   }
 
   /// 更换封面：选本地图片 → 落盘到支持目录；卡片靠 store.revision 自动刷新。
