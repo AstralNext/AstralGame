@@ -84,6 +84,7 @@ flutter:
     - assets/icon.ico
     - assets/games/
     - assets/games/ark/
+    - assets/games/baldurs_gate_3/
     - assets/games/dont_starve_together/
     - assets/games/factorio/
     - assets/games/forged_alliance/

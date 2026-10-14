@@ -1,6 +1,19 @@
 {
-  "version": 5,
+  "version": 9,
   "games": [
+    {
+      "id": "baldurs_gate_3",
+      "name": "Baldur's Gate 3",
+      "name_zh": "博德之门3",
+      "description": "D&D 规则，支持最多 4 人联机",
+      "color": "#7A5230",
+      "icon": "auto_awesome",
+      "steam_app_id": 1086940,
+      "icon_asset": "games/baldurs_gate_3/icon.jpg",
+      "grid_asset": "games/baldurs_gate_3/grid.jpg",
+      "show_in_picker": true,
+      "sort": 12
+    },
     {
       "id": "minecraft",
       "name": "Minecraft",
