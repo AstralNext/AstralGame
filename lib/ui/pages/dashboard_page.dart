@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:astral_game/data/models/bookmark.dart';
 import 'package:astral_game/data/models/game_catalog.dart';
 import 'package:astral_game/data/services/connection_service.dart';
 import 'package:astral_game/data/services/game_assist_rules_service.dart';
@@ -12,6 +13,7 @@ import 'package:astral_game/di.dart';
 import 'package:astral_game/ui/pages/dashboard_narrow_layout.dart';
 import 'package:astral_game/ui/pages/dashboard_wide_layout.dart';
 import 'package:astral_game/ui/widgets/app_snack_bar.dart';
+import 'package:astral_game/ui/widgets/bookmark_edit_dialog.dart';
 import 'package:astral_game/ui/widgets/confirm_dialog.dart';
 import 'package:astral_game/ui/widgets/create_room_dialog.dart';
 import 'package:astral_game/ui/widgets/dashboard_home_panel.dart';
@@ -117,12 +119,20 @@ class _DashboardPageState extends State<DashboardPage> {
       );
       return;
     }
-    // 未收藏 → 一键收藏，自动命名（重名自动加序号），不弹窗
+    // 未收藏 → 弹命名框，预填自动名，用户可改
     if (payload == null) {
       if (mounted) showAppSnackBar(context, '还没有可收藏的房间配置');
       return;
     }
-    final bookmark = await _roomState.quickSaveBookmark(payload);
+    final name = await showBookmarkNameDialog(
+      context,
+      initialName: autoBookmarkName(payload),
+    );
+    if (name == null) return; // 用户取消
+    final bookmark = await _roomState.quickSaveBookmark(
+      payload,
+      customName: name,
+    );
     if (!mounted) return;
     showAppSnackBar(context, '已加入收藏：${bookmark.customName}');
   }
@@ -253,7 +263,17 @@ class _DashboardPageState extends State<DashboardPage> {
     try {
       final resolved = await _connectionService.resolveInvitePayload(raw);
       if (!mounted) return;
-      final bookmark = await _roomState.quickSaveBookmark(resolved.payload);
+      final payload = resolved.payload;
+      // 弹命名框，预填自动名，用户可改
+      final name = await showBookmarkNameDialog(
+        context,
+        initialName: autoBookmarkName(payload),
+      );
+      if (name == null) return; // 用户取消
+      final bookmark = await _roomState.quickSaveBookmark(
+        payload,
+        customName: name,
+      );
       if (!mounted) return;
       showAppSnackBar(context, '已加入收藏：${bookmark.customName}');
     } on ShareCodeException catch (e) {

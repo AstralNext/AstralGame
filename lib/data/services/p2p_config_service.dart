@@ -27,7 +27,8 @@ class P2PConfigService {
   ///
   /// [isDhcp] 控制是否让 EasyTier 自动分配虚拟 IP；打开时用 [kRoomDhcpIpv4Cidr]
   /// 作为初始网段，关闭时使用 [virtualIp] 作为固定 IP（写入顶层 `ipv4`）。
-  /// [isDhcpv6] 控制是否自动分配虚拟 IPv6；打开时用 [kRoomDhcpIpv6Cidr]。
+  /// [isDhcpv6] 控制是否自动分配虚拟 IPv6；打开时用 [kRoomDhcpIpv6Cidr]，
+  /// 关闭时使用 [virtualIpv6] 作为固定 IPv6（写入顶层 `ipv6`）。
   String buildTomlConfig(
     String roomName,
     String roomPassword, {
@@ -37,6 +38,7 @@ class P2PConfigService {
     bool isDhcp = true,
     bool isDhcpv6 = true,
     String? virtualIp,
+    String? virtualIpv6,
   }) {
     final disableP2p = _appSettings.isDisableP2p();
     final rawUsername = _appSettings.getUsername().trim();
@@ -69,6 +71,12 @@ class P2PConfigService {
         ? 'ipv4 = "${_escapeString(trimmedIp)}"\n'
         : '';
 
+    // 关闭 DHCPv6 时，把用户填写的固定 IPv6 写入 EasyTier 顶层 ipv6 键（与 dhcpv6 平级）。
+    final trimmedIpv6 = virtualIpv6?.trim() ?? '';
+    final fixedIpv6Line = (!isDhcpv6 && trimmedIpv6.isNotEmpty)
+        ? 'ipv6 = "${_escapeString(trimmedIpv6)}"\n'
+        : '';
+
     // 打开 DHCP 时直接写"初始网段"而不是裸 true：EasyTier 的 `dhcp` / `dhcpv6`
     // 字段接受 bool 或 CIDR 字符串（untagged DhcpConfig）。显式给网段可避开默认
     // 的 10.126.126.0/24 与 fd6b:8c2d:91e4::/64，减少与家用网段撞车。
@@ -89,6 +97,7 @@ network_secret = "${_escapeString(roomPassword)}"
       'shared_secret=true dhcp=$isDhcp dhcpv6=$isDhcpv6 disable_p2p=$disableP2p '
       'protocol=${protocol.name} udp_broadcast_relay=$udpRelay '
       'virtual_ip=${(!isDhcp && trimmedIp.isNotEmpty) ? trimmedIp : "auto"} '
+      'virtual_ipv6=${(!isDhcpv6 && trimmedIpv6.isNotEmpty) ? trimmedIpv6 : "auto"} '
       'ipv4_cidr=${isDhcp ? kRoomDhcpIpv4Cidr : "-"} '
       'ipv6_cidr=${isDhcpv6 ? kRoomDhcpIpv6Cidr : "-"} '
       'peers=${peers.length}',
@@ -99,7 +108,7 @@ instance_name = "AstralGame"
 hostname = "${_escapeString(hostname)}"
 $dhcpLine
 $dhcpv6Line
-$fixedIpv4Line
+$fixedIpv4Line$fixedIpv6Line
 listeners = [
     "tcp://0.0.0.0:0",
     "udp://0.0.0.0:0",
@@ -134,7 +143,7 @@ disable_p2p = $disableP2p
 $udpBroadcastFlag
 data_compress_algo = 2
 default_protocol = "tcp"
-dev_name = "ASGAME"
+dev_name = "ASGame"
 disable_kcp_input = true
 disable_relay_kcp = true
 enable_relay_foreign_network_kcp = false

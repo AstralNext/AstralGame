@@ -60,6 +60,9 @@ const kBroadcastIpV4 = '255.255.255.255';
 /// 默认虚拟 IP（ZeroTier 风格），用于本地虚拟网卡未配置时的回退值。
 const kDefaultVirtualIpV4 = '10.147.18.24';
 
+/// 默认虚拟 IPv6（取自 DHCPv6 网段 fdae::/120）。
+const kDefaultVirtualIpV6 = 'fdae::2';
+
 // --- 房间虚拟网段（DHCP 初始网段） ---
 
 /// 建房时 EasyTier DHCP 的初始 IPv4 网段。

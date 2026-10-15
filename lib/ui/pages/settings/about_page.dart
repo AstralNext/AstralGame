@@ -102,7 +102,7 @@ class AboutPage extends StatelessWidget {
             rows: [
               (index, count) => AstralGroupedTile(
                 icon: Icons.update_outlined,
-                label: '检查更新',
+                label: '手动检查更新',
                 index: index,
                 count: count,
                 onTap: () => updateService.checkForUpdates(context),
@@ -119,26 +119,15 @@ class AboutPage extends StatelessWidget {
               ),
               (index, count) => AstralGroupedTile(
                 icon: Icons.download_outlined,
-                label: '前往下载',
-                subtitle: 'next.astral.fan/game',
+                label: '手动下载',
                 index: index,
                 count: count,
                 onTap: () => updateService.openDownloadPage(),
                 trailing: const Icon(Icons.open_in_new, size: 18),
               ),
               (index, count) => AstralGroupedTile(
-                icon: Icons.link_outlined,
-                label: 'GitHub',
-                subtitle: 'AstralNext/AstralGame',
-                index: index,
-                count: count,
-                onTap: () => _launchUrl(AppConstants.githubRepoPage),
-                trailing: const Icon(Icons.open_in_new, size: 18),
-              ),
-              (index, count) => AstralGroupedTile(
                 icon: Icons.bug_report_outlined,
                 label: '反馈问题',
-                subtitle: 'AstralGame Issues',
                 index: index,
                 count: count,
                 onTap: () => _launchUrl(AppConstants.githubIssuesPage),

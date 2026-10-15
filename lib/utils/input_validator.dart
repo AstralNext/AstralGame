@@ -51,6 +51,20 @@ class InputValidator {
     return null;
   }
 
+  /// 验证 IPv6 地址。
+  static String? validateIPv6(String? value) {
+    final v = value?.trim() ?? '';
+    if (v.isEmpty) {
+      return '请输入 IP 地址';
+    }
+    try {
+      Uri.parseIPv6Address(v);
+    } catch (e) {
+      return '无效的 IPv6 地址';
+    }
+    return null;
+  }
+
   /// 验证 CIDR（必须带前缀，如 `192.168.1.0/24`）。
   static String? validateCidr(String? value) {
     final v = value?.trim() ?? '';

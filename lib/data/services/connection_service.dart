@@ -416,6 +416,7 @@ class ConnectionService {
         isDhcp: _appSettings.getIsDhcp(),
         isDhcpv6: _appSettings.getIsDhcpv6(),
         virtualIp: _appSettings.getVirtualIp(),
+        virtualIpv6: _appSettings.getVirtualIpv6(),
       );
       appLogger.i(
         '[ConnectionService] $purpose 启动实例 network=$networkName '

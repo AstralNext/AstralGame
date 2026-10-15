@@ -22,6 +22,7 @@ class AppSettingsService {
   static const String _keyIsDhcp = 'is_dhcp';
   static const String _keyIsDhcpv6 = 'is_dhcpv6';
   static const String _keyVirtualIp = 'virtual_ip';
+  static const String _keyVirtualIpv6 = 'virtual_ipv6';
 
   final SharedPreferences _prefs;
   final Directory? _supportDir;
@@ -175,4 +176,10 @@ class AppSettingsService {
       _prefs.getString(_keyVirtualIp) ?? kDefaultVirtualIpV4;
   Future<void> setVirtualIp(String value) async =>
       await _prefs.setString(_keyVirtualIp, value);
+
+  /// 获取虚拟 IPv6
+  String getVirtualIpv6() =>
+      _prefs.getString(_keyVirtualIpv6) ?? kDefaultVirtualIpV6;
+  Future<void> setVirtualIpv6(String value) async =>
+      await _prefs.setString(_keyVirtualIpv6, value);
 }

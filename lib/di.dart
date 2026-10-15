@@ -8,6 +8,7 @@ import 'package:astral_game/data/services/isp_info_service.dart';
 import 'package:astral_game/data/services/firewall_service.dart';
 import 'package:astral_game/data/services/hitokoto_service.dart';
 import 'package:astral_game/data/services/join_link_service.dart';
+import 'package:astral_game/data/services/linux_capability_service.dart';
 import 'package:astral_game/data/services/alcy_wallpaper_service.dart';
 import 'package:astral_game/data/services/network_optimize_service.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
@@ -45,6 +46,7 @@ import 'package:astral_game/utils/client_runtime_info.dart';
 import 'package:astral_game/utils/logger.dart';
 import 'package:astral_game/utils/ping_util.dart';
 import 'package:astral_game/utils/runtime_platform.dart';
+import 'package:astral_game/src/rust/api/p2p.dart' show subscribeCoreLogs;
 import 'package:astral_game/src/rust/frb_generated.dart';
 import 'package:get_it/get_it.dart';
 import 'package:logger/logger.dart';
@@ -262,6 +264,10 @@ Future<void> setupDI() async {
 
   getIt.registerLazySingleton<VpnManager>(() => VpnManager(getIt<VpnState>()));
   _registerDispose<VpnManager>((s) => s.dispose());
+  // Linux 桌面：tun 需要 CAP_NET_ADMIN，这里负责检测与一键授权。
+  getIt.registerLazySingleton<LinuxCapabilityService>(
+    LinuxCapabilityService.new,
+  );
   getIt.registerLazySingleton<ConnectionService>(
     () => ConnectionService(
       getIt<P2PConfigService>(),
@@ -286,6 +292,23 @@ Future<void> setupDI() async {
   );
 
   await _initPeerRpcRouter();
+  _initEasyTierCoreLogs();
+}
+
+/// 订阅 EasyTier 内核事件流并打到应用日志。
+///
+/// tun device error / dhcp ip changed / dhcp ipv6 changed 这类关键信息只在
+/// `subscribe_core_logs` 上给出；此前没有任何地方订阅，虚拟网卡起不来时
+/// 日志里只剩「已连接 Ns 仍无虚拟 IP」这种结果，看不到原因。
+void _initEasyTierCoreLogs() {
+  final subscription = subscribeCoreLogs().listen((event) {
+    final message = event.message.trim();
+    if (message.isEmpty) return;
+    appLogger.i('[EasyTier] $message');
+  }, onError: (Object e) => appLogger.w('[EasyTier] 内核日志流异常: $e'));
+  _disposeCallbacks.add(() {
+    unawaited(subscription.cancel());
+  });
 }
 
 /// 释放所有服务资源（按注册逆序执行清理回调）。

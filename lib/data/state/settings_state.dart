@@ -1,4 +1,5 @@
 import 'package:astral_game/config/app_theme_id.dart';
+import 'package:astral_game/config/network_constants.dart';
 import 'package:astral_game/data/services/app_settings_service.dart';
 import 'package:astral_game/data/services/home_widget_theme_sync.dart';
 import 'package:astral_game/utils/runtime_platform.dart';
@@ -28,6 +29,9 @@ class SettingsState {
   /// 网络：手动填写的固定虚拟 IP（仅 isDhcp=false 时生效）。
   final virtualIp = signal('10.147.0.0');
 
+  /// 网络：手动填写的固定虚拟 IPv6（仅 isDhcp=false 时生效）。
+  final virtualIpv6 = signal(kDefaultVirtualIpV6);
+
   void loadFromPersistence() {
     closeMinimize.value = _settings.getCloseMinimize();
     appThemeId.value = AppThemeIdCodec.fromIndex(_settings.getAppThemeIndex());
@@ -37,6 +41,7 @@ class SettingsState {
     isDhcp.value = _settings.getIsDhcp();
     isDhcpv6.value = _settings.getIsDhcpv6();
     virtualIp.value = _settings.getVirtualIp();
+    virtualIpv6.value = _settings.getVirtualIpv6();
     if (RuntimePlatform.isAndroid) {
       syncHomeWidgetTheme(appThemeId.value);
     }
@@ -52,6 +57,7 @@ class SettingsState {
       _settings.setIsDhcp(isDhcp.value),
       _settings.setIsDhcpv6(isDhcpv6.value),
       _settings.setVirtualIp(virtualIp.value),
+      _settings.setVirtualIpv6(virtualIpv6.value),
     ]);
     if (RuntimePlatform.isAndroid) {
       await syncHomeWidgetTheme(appThemeId.value);

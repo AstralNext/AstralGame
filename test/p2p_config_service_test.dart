@@ -21,6 +21,8 @@ void main() {
     expect(toml, contains('dhcpv6 = "$kRoomDhcpIpv6Cidr"'));
     expect(toml, isNot(contains('dhcp = true')));
     expect(toml, isNot(contains('dhcpv6 = true')));
+    // 开启 DHCP(v6) 时不应写固定 ipv6 顶层键
+    expect(toml, isNot(contains('ipv6 = ')));
   });
 
   test('关闭 DHCP 时写 false，固定 IP 落到顶层 ipv4', () {
@@ -30,11 +32,13 @@ void main() {
       isDhcp: false,
       isDhcpv6: false,
       virtualIp: '10.0.0.8',
+      virtualIpv6: 'fdae::2',
     );
 
     expect(toml, contains('dhcp = false'));
     expect(toml, contains('dhcpv6 = false'));
     expect(toml, contains('ipv4 = "10.0.0.8"'));
+    expect(toml, contains('ipv6 = "fdae::2"'));
     // 关闭 DHCP 时不应再写网段
     expect(toml, isNot(contains(kRoomDhcpIpv4Cidr)));
   });

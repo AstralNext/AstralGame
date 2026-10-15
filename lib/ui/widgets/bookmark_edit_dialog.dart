@@ -10,8 +10,8 @@ class BookmarkEditorResult {
 
 /// 「编辑收藏」Dialog：改名 / 置顶。
 ///
-/// 新建收藏已改为一键收藏（自动命名，见 `RoomState.quickSaveBookmark`），
-/// 不再弹命名框；此 Dialog 只用于收藏页等处的后续编辑。
+/// 收藏房间时会先弹命名框（见 [showBookmarkNameDialog]），由用户确认/修改名字；
+/// 此 Dialog 用于收藏页等处的后续编辑（改名 / 置顶）。
 class BookmarkEditorDialog extends StatefulWidget {
   const BookmarkEditorDialog({super.key, required this.bookmark});
 
@@ -88,10 +88,7 @@ class _BookmarkEditorDialogState extends State<BookmarkEditorDialog> {
           onPressed: () => Navigator.pop(context),
           child: const Text('取消'),
         ),
-        FilledButton(
-          onPressed: _submit,
-          child: const Text('保存'),
-        ),
+        FilledButton(onPressed: _submit, child: const Text('保存')),
       ],
     );
   }
@@ -111,4 +108,53 @@ Future<Bookmark?> showBookmarkEditor(
     customName: result.customName,
     pinned: result.pinned,
   );
+}
+
+/// 收藏房间前的命名框：预填自动名 [initialName]（默认全选，方便直接改写），
+/// 用户确认后返回 trim 后的名字；取消返回 null。
+Future<String?> showBookmarkNameDialog(
+  BuildContext context, {
+  required String initialName,
+}) {
+  final controller = TextEditingController(
+    text: initialName,
+  )..selection = TextSelection(baseOffset: 0, extentOffset: initialName.length);
+  final formKey = GlobalKey<FormState>();
+  return showDialog<String>(
+    context: context,
+    builder: (dialogContext) {
+      void submit() {
+        if (formKey.currentState?.validate() != true) return;
+        Navigator.pop(dialogContext, controller.text.trim());
+      }
+
+      return AlertDialog(
+        title: const Text('收藏房间'),
+        content: SizedBox(
+          width: 420,
+          child: Form(
+            key: formKey,
+            autovalidateMode: AutovalidateMode.onUserInteraction,
+            child: TextFormField(
+              controller: controller,
+              decoration: const InputDecoration(
+                labelText: '名字',
+                border: OutlineInputBorder(),
+              ),
+              autofocus: true,
+              validator: (v) => (v ?? '').trim().isEmpty ? '名字不能为空' : null,
+              onFieldSubmitted: (_) => submit(),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+          FilledButton(onPressed: submit, child: const Text('保存')),
+        ],
+      );
+    },
+  ).whenComplete(controller.dispose);
 }

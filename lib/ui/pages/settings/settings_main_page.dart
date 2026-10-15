@@ -1,4 +1,5 @@
 import 'package:astral_game/config/app_dimensions.dart';
+import 'package:astral_game/config/network_constants.dart';
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/di.dart';
 import 'package:astral_game/data/state/settings_state.dart';
@@ -9,9 +10,11 @@ import 'package:astral_game/ui/widgets/astral_grouped_tile.dart';
 import 'package:astral_game/ui/widgets/astral_settings_section.dart';
 import 'package:astral_game/ui/widgets/confirm_dialog.dart';
 import 'package:astral_game/ui/widgets/fade_in_section.dart';
+import 'package:astral_game/ui/widgets/linux_capability_prompt.dart';
 import 'package:astral_game/ui/navigation/astral_page_route.dart';
 import 'package:astral_game/ui/widgets/theme_picker_sheet.dart';
 import 'package:astral_game/data/services/floating_overlay_service.dart';
+import 'package:astral_game/data/services/linux_capability_service.dart';
 import 'package:astral_game/data/services/network_optimize_service.dart';
 import 'package:astral_game/utils/input_validator.dart';
 import 'package:astral_game/utils/runtime_platform.dart';
@@ -111,7 +114,8 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
               ),
               _switchRow(
                 icon: Icons.science_outlined,
-                title: '测试版频道',
+                title: '使用测试版本',
+                subtitle: () => '非专业用户不要开启此选项',
                 value: () => updateState.beta.value,
                 onChanged: updateState.setBeta,
               ),
@@ -208,107 +212,140 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
   }
 
   Widget _buildNetworkSection(SettingsState settingsState) {
-    return AstralSettingsFormCard(
-      title: '网络',
-      rows: [
-        _switchRow(
-          icon: Icons.settings_ethernet_outlined,
-          title: '自动分配虚拟网络 IP',
-          subtitle: () =>
-              settingsState.isDhcp.value ? 'DHCP 已开启' : '关闭后可手动设置固定 IP',
-          value: () => settingsState.isDhcp.value,
-          onChanged: (value) {
-            settingsState.isDhcp.value = value;
-            settingsState.saveToPersistence();
-          },
-        ),
-        _switchRow(
-          icon: Icons.public_outlined,
-          title: '自动分配虚拟 IPv6',
-          subtitle: () =>
-              settingsState.isDhcpv6.value ? 'DHCPv6 已开启' : '关闭后不分配虚拟 IPv6',
-          value: () => settingsState.isDhcpv6.value,
-          onChanged: (value) {
-            settingsState.isDhcpv6.value = value;
-            settingsState.saveToPersistence();
-          },
-        ),
-        (index, count) => Watch((context) {
-          final isDhcp = settingsState.isDhcp.value;
-          final ip = settingsState.virtualIp.value;
-          return AstralGroupedTile(
-            icon: Icons.lan_outlined,
-            label: '虚拟网络 IP',
-            subtitle: isDhcp ? '当前为自动分配模式' : ip,
-            index: index,
-            count: count,
-            onTap: isDhcp ? null : () => _editVirtualIp(settingsState),
-            trailing: isDhcp
-                ? null
-                : FilledButton.tonal(
-                    onPressed: () => _editVirtualIp(settingsState),
-                    child: const Text('编辑'),
-                  ),
-          );
-        }),
-        _switchRow(
-          icon: Icons.hub_outlined,
-          title: '禁用 P2P',
-          subtitle: () => '仅通过中继通信',
-          value: () => settingsState.disableP2p.value,
-          onChanged: (v) {
-            settingsState.disableP2p.value = v;
-            settingsState.saveToPersistence();
-          },
-        ),
-        if (RuntimePlatform.operatingSystem == 'windows') ...[
+    return Watch((context) {
+      final isDhcp = settingsState.isDhcp.value;
+      final virtualIp = settingsState.virtualIp.value;
+      final virtualIpv6 = settingsState.virtualIpv6.value;
+      return AstralSettingsFormCard(
+        title: '网络',
+        rows: [
           _switchRow(
-            icon: Icons.settings_input_antenna,
-            title: '强制 UDP 广播转发',
-            subtitle: () => '覆盖游戏规则；多数游戏由线上规则自动开启，重连后生效',
-            value: () => settingsState.enableUdpBroadcastRelay.value,
-            onChanged: (v) {
-              settingsState.enableUdpBroadcastRelay.value = v;
+            icon: Icons.settings_ethernet_outlined,
+            title: '自动分配虚拟IP',
+            value: () => settingsState.isDhcp.value,
+            onChanged: (value) {
+              settingsState.isDhcp.value = value;
+              settingsState.isDhcpv6.value = value;
               settingsState.saveToPersistence();
             },
           ),
-          (index, count) => Watch((context) {
-            final optimize = getIt<NetworkOptimizeService>();
-            final busy = optimize.busy.value;
-            return AstralGroupedTile(
-              icon: Icons.speed_outlined,
-              label: '网络加速（仅限中国大陆）',
-              subtitle: busy ? '正在安装或卸载…' : '自动选择最低延迟的网址 IP',
+          if (!isDhcp) ...[
+            (index, count) => AstralGroupedTile(
+              icon: Icons.lan_outlined,
+              label: '虚拟IPv4地址',
+              subtitle: virtualIp,
               index: index,
               count: count,
-              onTap: busy
-                  ? null
-                  : () => _onNetworkOptimizeChanged(
-                      context,
-                      optimize,
-                      !optimize.installed.value,
-                    ),
-              trailing: Switch.adaptive(
-                value: optimize.installed.value,
-                onChanged: busy
-                    ? null
-                    : (v) => _onNetworkOptimizeChanged(context, optimize, v),
+              onTap: () => _editVirtualIp(settingsState),
+              trailing: FilledButton.tonal(
+                onPressed: () => _editVirtualIp(settingsState),
+                child: const Text('编辑'),
               ),
-            );
-          }),
-        ],
-        if (_isAndroid)
-          (index, count) => AstralGroupedTile(
-            icon: Icons.route_outlined,
-            label: '自定义 VPN 路由',
-            subtitle: '额外 CIDR；默认含虚拟网段、组播、广播',
-            index: index,
-            count: count,
-            onTap: () => Navigator.of(
-              context,
-            ).push<void>(astralPageRoute(const VpnRoutesPage())),
+            ),
+            (index, count) => AstralGroupedTile(
+              icon: Icons.public_outlined,
+              label: '虚拟IPv6地址',
+              subtitle: virtualIpv6,
+              index: index,
+              count: count,
+              onTap: () => _editVirtualIpv6(settingsState),
+              trailing: FilledButton.tonal(
+                onPressed: () => _editVirtualIpv6(settingsState),
+                child: const Text('编辑'),
+              ),
+            ),
+          ],
+          _switchRow(
+            icon: Icons.hub_outlined,
+            title: '禁用 P2P',
+            subtitle: () => '仅通过中继通信',
+            value: () => settingsState.disableP2p.value,
+            onChanged: (v) {
+              settingsState.disableP2p.value = v;
+              settingsState.saveToPersistence();
+            },
           ),
-      ],
+          if (RuntimePlatform.operatingSystem == 'windows') ...[
+            _switchRow(
+              icon: Icons.settings_input_antenna,
+              title: '强制 UDP 广播转发',
+              subtitle: () => '在其他类游戏中开启，重新连接房间后生效',
+              value: () => settingsState.enableUdpBroadcastRelay.value,
+              onChanged: (v) {
+                settingsState.enableUdpBroadcastRelay.value = v;
+                settingsState.saveToPersistence();
+              },
+            ),
+            (index, count) => Watch((context) {
+              final optimize = getIt<NetworkOptimizeService>();
+              final busy = optimize.busy.value;
+              return AstralGroupedTile(
+                icon: Icons.speed_outlined,
+                label: '网络加速（仅限中国大陆）',
+                subtitle: busy ? '正在安装或卸载…' : '自动选择最低延迟的IP',
+                index: index,
+                count: count,
+                onTap: busy
+                    ? null
+                    : () => _onNetworkOptimizeChanged(
+                        context,
+                        optimize,
+                        !optimize.installed.value,
+                      ),
+                trailing: Switch.adaptive(
+                  value: optimize.installed.value,
+                  onChanged: busy
+                      ? null
+                      : (v) => _onNetworkOptimizeChanged(context, optimize, v),
+                ),
+              );
+            }),
+          ],
+          if (_isAndroid)
+            (index, count) => AstralGroupedTile(
+              icon: Icons.route_outlined,
+              label: '自定义 VPN 路由',
+              subtitle: '额外 CIDR；默认含虚拟网段、组播、广播',
+              index: index,
+              count: count,
+              onTap: () => Navigator.of(
+                context,
+              ).push<void>(astralPageRoute(const VpnRoutesPage())),
+            ),
+          if (RuntimePlatform.isLinux)
+            (index, count) => Watch((context) {
+              final capability = getIt<LinuxCapabilityService>();
+              final ready = capability.canCreateTun;
+              final pending = capability.pendingRestart.value;
+              return AstralGroupedTile(
+                icon: Icons.shield_outlined,
+                label: '虚拟网卡权限',
+                subtitle: ready
+                    ? '已具备 CAP_NET_ADMIN'
+                    : pending
+                    ? '已授权，重启应用后生效'
+                    : '缺少 CAP_NET_ADMIN，加入房间会拿不到虚拟 IP',
+                index: index,
+                count: count,
+                onTap: ready ? null : () => _onGrantLinuxCapability(context),
+                trailing: ready
+                    ? null
+                    : FilledButton.tonal(
+                        onPressed: () => _onGrantLinuxCapability(context),
+                        child: const Text('授权'),
+                      ),
+              );
+            }),
+        ],
+      );
+    });
+  }
+
+  /// Linux：经 polkit 给可执行文件补 CAP_NET_ADMIN / CAP_NET_RAW。
+  Future<void> _onGrantLinuxCapability(BuildContext context) async {
+    await showLinuxCapabilityPrompt(
+      context,
+      capability: getIt<LinuxCapabilityService>(),
     );
   }
 
@@ -356,6 +393,52 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
     controller.dispose();
     if (result != true || !mounted) return;
     settingsState.virtualIp.value = controller.text.trim();
+    await settingsState.saveToPersistence();
+  }
+
+  Future<void> _editVirtualIpv6(SettingsState settingsState) async {
+    final controller = TextEditingController(
+      text: settingsState.virtualIpv6.value,
+    );
+    final formKey = GlobalKey<FormState>();
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('编辑虚拟 IPv6 地址'),
+        content: Form(
+          key: formKey,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          child: TextFormField(
+            controller: controller,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'IPv6',
+              hintText: kDefaultVirtualIpV6,
+              prefixIcon: Icon(Icons.public_outlined),
+              border: OutlineInputBorder(),
+            ),
+            validator: InputValidator.validateIPv6,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (formKey.currentState?.validate() == true) {
+                Navigator.of(ctx).pop(true);
+              }
+            },
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (result != true || !mounted) return;
+    settingsState.virtualIpv6.value = controller.text.trim();
     await settingsState.saveToPersistence();
   }
 

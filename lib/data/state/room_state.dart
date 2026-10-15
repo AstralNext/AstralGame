@@ -95,14 +95,21 @@ class RoomState {
     return _enqueue(() => _upsertLocked(bookmark));
   }
 
-  /// 一键收藏：自动命名（游戏名 → 房间名 → 网络名），重名自动加序号，不弹任何 UI。
+  /// 收藏房间：名字由调用方传入（[customName]，通常是用户在命名框里输入/确认的名字），
+  /// 未传或为空时回退到自动命名（游戏名 → 房间名 → 网络名）；两种情况下都做重名去重
+  /// （重名自动加序号）。本方法不弹任何 UI。
   ///
   /// 不存短码：短码绑定当次房间、房主退出即作废；加入与分享时按需 create 新码。
-  Future<Bookmark> quickSaveBookmark(RoomInvitePayload payload) {
+  Future<Bookmark> quickSaveBookmark(
+    RoomInvitePayload payload, {
+    String? customName,
+  }) {
     return _enqueue(() async {
+      final trimmed = customName?.trim() ?? '';
+      final baseName = trimmed.isNotEmpty ? trimmed : autoBookmarkName(payload);
       final name = uniqueBookmarkName(
         bookmarksList.value.map((b) => b.customName),
-        autoBookmarkName(payload),
+        baseName,
       );
       final now = DateTime.now();
       final bookmark = Bookmark(
