@@ -107,7 +107,20 @@ esac
 ''';
 
   /// bundle 里动态库目录对应的 ld.so.conf.d 配置（仅在 secure 模式挡路时写入）。
-  static const String _ldSoConfPath = '/etc/ld.so.conf.d/astral-game.conf';
+  ///
+  /// 文件名带 lib 目录的短哈希：发行包自带 `/etc/ld.so.conf.d/astral-game.conf`，
+  /// 这里若写同名文件，pacman 会因「文件系统中已存在」而拒绝安装（文件冲突）。
+  static String _ldSoConfPath(String libDir) =>
+      '/etc/ld.so.conf.d/astral-game-${_fnv1a(libDir)}.conf';
+
+  /// FNV-1a 32 位：只为生成稳定的短文件名，不用于安全用途。
+  static String _fnv1a(String value) {
+    var hash = 0x811c9dc5;
+    for (final unit in value.codeUnits) {
+      hash = ((hash ^ unit) * 0x01000193) & 0xffffffff;
+    }
+    return hash.toRadixString(16).padLeft(8, '0');
+  }
 
   /// 经 pkexec 给 [executablePath] 打 setcap，并保证打完还能加载动态库；
   /// 成功后置 [pendingRestart]。
@@ -130,6 +143,8 @@ esac
       return LinuxCapabilityGrant.failed;
     }
 
+    final libDir = p.join(p.dirname(executablePath), 'lib');
+
     try {
       final result = await Process.run('pkexec', [
         sh,
@@ -137,9 +152,9 @@ esac
         _grantScript,
         'astral-grant',
         executablePath,
-        p.join(p.dirname(executablePath), 'lib'),
+        libDir,
         ldconfig,
-        _ldSoConfPath,
+        _ldSoConfPath(libDir),
         setcap,
       ]);
       final code = result.exitCode;
