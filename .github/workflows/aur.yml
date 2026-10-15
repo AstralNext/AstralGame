@@ -90,6 +90,8 @@ jobs:
           chown -R builder .
           runuser -u builder -- env HOME=/home/builder \
             makepkg --printsrcinfo > .SRCINFO
+          # 交回 root：下面的 git 操作以 root 跑，仓库属 builder 会被 git 判为 dubious ownership
+          chown -R root:root .
 
           # 首次推送时远端是空仓库，明确用 AUR 的默认分支名。
           git symbolic-ref HEAD refs/heads/master

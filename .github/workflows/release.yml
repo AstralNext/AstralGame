@@ -201,4 +201,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.ASTRAL_SITE_TOKEN || secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.release.outputs.tag }}
-        run: gh release upload "$TAG" /tmp/pkg/astral-game-bin-*.pkg.tar.zst --clobber
+        run: |
+          set -euo pipefail
+          # makepkg 默认还会产一个 -debug 子包，Release 不要它。
+          PKG=$(ls /tmp/pkg/astral-game-bin-*.pkg.tar.zst | grep -v -- -debug- | head -1)
+          echo "上传: $PKG"
+          # 显式 -R：容器里以 root 跑，gh 靠 git 探测仓库会报 dubious ownership。
+          gh release upload "$TAG" "$PKG" --clobber -R "$GITHUB_REPOSITORY"
