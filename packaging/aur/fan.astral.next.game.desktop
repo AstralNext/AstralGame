@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=Astral Game
+Comment=面向联机游戏的虚拟局域网客户端
+Comment[zh_CN]=面向联机游戏的虚拟局域网客户端
+Exec=astral-game
+Icon=astral-game
+Terminal=false
+# 只留一个主分类，避免应用在菜单里出现两次（desktop-file-validate 的 hint）
+Categories=Game;
+# 文件名与 GTK application id（linux/CMakeLists.txt 的 APPLICATION_ID）保持一致，
+# Wayland 下合成器就是按 app_id 找同名 .desktop 来关联图标与任务栏分组的。
+StartupWMClass=fan.astral.next.game
+Keywords=lan;game;virtual;virtual-network;联机;虚拟局域网;

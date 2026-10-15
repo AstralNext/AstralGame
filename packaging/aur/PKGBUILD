@@ -1,0 +1,47 @@
+# Maintainer: AstralNext <astral@astral.fan>
+#
+# AUR 上只发二进制包（astral-game-bin）：产物由 .github/workflows/build.yml 在
+# Ubuntu 上编译好，随 GitHub Release 一起发布，本包只做搬运与系统集成。
+# 发版不要手改这里——.github/workflows/aur.yml 会自动 bump pkgver / sha256sums。
+pkgname=astral-game-bin
+pkgver=1.5.1
+pkgrel=1
+pkgdesc='面向联机游戏的虚拟局域网客户端（预编译产物）'
+arch=('x86_64')
+url='https://next.astral.fan/game/'
+# 上游仓库未附许可证文件，暂时标 unknown
+license=('unknown')
+# libcap 是 .install 里 setcap 用的；polkit 只在玩家未授权时兜底弹一次授权框。
+depends=('gtk3' 'libayatana-appindicator' 'libcap')
+optdepends=('polkit: 缺少网络能力时用 pkexec 一键授权')
+provides=('astral-game')
+conflicts=('astral-game')
+install="$pkgname.install"
+source=(
+  "$pkgname-$pkgver.tar.gz::https://github.com/AstralNext/AstralGame/releases/download/v$pkgver/astral-game-$pkgver-linux-x64.tar.gz"
+  'fan.astral.next.game.desktop'
+)
+sha256sums=('88f120655ae6ab4d10e2054321c0952899e88d7c7c77364e70b02c33b471e2b4' 'SKIP')
+
+package() {
+  # 产物根目录就是 astral_game + data/ + lib/，整块落到 /opt 保持相对结构：
+  # Flutter 引擎按「可执行文件所在目录」找 data/，lib/ 是插件与 Rust 核心。
+  install -d "$pkgdir/opt/astral-game"
+  cp -a astral_game data lib "$pkgdir/opt/astral-game/"
+
+  # 用软链而不是包装脚本：Dart 通过 /proc/self/exe 解析真实路径来找 data/，
+  # 软链解析后仍是 /opt/astral-game/astral_game，和直接启动行为一致。
+  install -d "$pkgdir/usr/bin"
+  ln -s /opt/astral-game/astral_game "$pkgdir/usr/bin/astral-game"
+
+  # 关键：打了 file capabilities 的进程处于 secure-execution，glibc 会忽略产物
+  # 自带的 $ORIGIN/lib，只认 ld.so.cache，所以必须把 lib 目录交给动态链接器。
+  install -d "$pkgdir/etc/ld.so.conf.d"
+  printf '%s\n' '/opt/astral-game/lib' > "$pkgdir/etc/ld.so.conf.d/astral-game.conf"
+  chmod 644 "$pkgdir/etc/ld.so.conf.d/astral-game.conf"
+
+  install -Dm644 "$srcdir/fan.astral.next.game.desktop" \
+    "$pkgdir/usr/share/applications/fan.astral.next.game.desktop"
+  install -Dm644 data/flutter_assets/assets/logo.png \
+    "$pkgdir/usr/share/icons/hicolor/512x512/apps/astral-game.png"
+}

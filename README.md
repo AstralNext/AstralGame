@@ -18,6 +18,21 @@ Rust 核心已用 flutter_rust_bridge 内化到本仓：
 
 CI：`.github/workflows/build.yml`（含 Windows 安装包）。
 
+## Linux 安装
+
+Arch 用户最省事的方式：Release 里会附带一个 Arch 包，一条命令装（pacman 原生支持 URL，yay 也能 `yay -U <url>`）：
+
+```bash
+# 把 <版本> 换成 Release 里的实际版本号，例如 1.5.1
+sudo pacman -U https://github.com/AstralNext/AstralGame/releases/latest/download/astral-game-bin-<版本>-1-x86_64.pkg.tar.zst
+```
+
+包会把程序装到 `/opt/astral-game`，并自动补上建虚拟网卡所需的 `cap_net_admin` / `cap_net_raw`；
+打包与系统集成的细节见 [packaging/aur](packaging/aur)。
+
+其它发行版 / 不想装包：下载 Release 里的 `astral-game-<版本>-linux-x64.tar.gz` 解压直接运行，
+首次启动会提示一次「立即授权」来补网络权限。
+
 ## 游戏规则 / 封面
 
 规则 JSON 写法见 [docs/gamerules.md](docs/gamerules.md)。

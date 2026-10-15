@@ -1,0 +1,26 @@
+# pacman 不会保留文件上的 security.capability xattr，必须在装完后补：
+# 没有 CAP_NET_ADMIN 就建不了 tun 虚拟网卡（表现为「连上了但一直没虚拟 IP」）。
+_post_setcap() {
+  ldconfig 2>/dev/null || true
+
+  if ! command -v setcap >/dev/null 2>&1; then
+    echo '>>> 未找到 setcap（libcap 缺失）：首次启动会提示「立即授权」，按提示走一次即可。' >&2
+    return 0
+  fi
+
+  if ! setcap cap_net_admin,cap_net_raw+ep /opt/astral-game/astral_game; then
+    echo '>>> setcap 失败：首次启动会提示「立即授权」，按提示走一次即可。' >&2
+  fi
+}
+
+post_install() {
+  _post_setcap
+}
+
+post_upgrade() {
+  _post_setcap
+}
+
+post_remove() {
+  ldconfig 2>/dev/null || true
+}

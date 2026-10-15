@@ -27,6 +27,9 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.cfg.outputs.version }}
+      tag: ${{ steps.cfg.outputs.tag }}
     steps:
       - name: 检出
         uses: actions/checkout@v5
@@ -143,3 +146,59 @@ jobs:
           # shellcheck disable=SC2206
           files=(release/*)
           gh "${args[@]}" "${files[@]}"
+
+  # 顺带产出 Arch 包（.pkg.tar.zst）并挂到同一个 Release：
+  # 玩家不装 AUR 也能一条命令装 —— pacman 原生支持 URL：
+  #   sudo pacman -U https://github.com/.../releases/download/<tag>/astral-game-bin-<版本>-1-x86_64.pkg.tar.zst
+  # makepkg 只有 Arch 环境有，且拒绝以 root 运行，所以跑在 Arch 容器里 + 普通用户。
+  pkg:
+    needs: release
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: ⚙️ 安装打包工具
+        run: |
+          pacman -Sy --noconfirm --needed --disable-download-timeout \
+            base-devel git github-cli
+          useradd -m builder
+
+      - name: 📥 检出
+        uses: actions/checkout@v5
+
+      - name: 📥 拉取 Linux 产物
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: build.yml
+          name: astral-game-linux-x64
+          path: _dl/linux
+          search_artifacts: true
+          if_no_artifact_found: fail
+
+      - name: 📦 makepkg 出 Arch 包
+        env:
+          VER: ${{ needs.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/pkg && cd /tmp/pkg
+          cp "$GITHUB_WORKSPACE"/packaging/aur/PKGBUILD \
+             "$GITHUB_WORKSPACE"/packaging/aur/astral-game-bin.install \
+             "$GITHUB_WORKSPACE"/packaging/aur/fan.astral.next.game.desktop .
+
+          # 产物已在手，放到 makepkg 认得的同名位置就不会再去下载
+          # （此时 Release 还是 draft，source URL 对外不可访问）；pkgver / sha256sums 按本次产物覆盖。
+          cp "$GITHUB_WORKSPACE"/_dl/linux/astral-game-linux-x64.tar.gz \
+             "astral-game-bin-$VER.tar.gz"
+          SHA=$(sha256sum "astral-game-bin-$VER.tar.gz" | cut -d' ' -f1)
+          sed -i "s|^pkgver=.*|pkgver=$VER|" PKGBUILD
+          sed -i "s|^sha256sums=.*|sha256sums=('$SHA' 'SKIP')|" PKGBUILD
+
+          chown -R builder /tmp/pkg
+          runuser -u builder -- env HOME=/home/builder makepkg -f --nodeps
+          ls -l /tmp/pkg/*.pkg.tar.zst
+
+      - name: 📤 挂到 Release
+        env:
+          GH_TOKEN: ${{ secrets.ASTRAL_SITE_TOKEN || secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release.outputs.tag }}
+        run: gh release upload "$TAG" /tmp/pkg/astral-game-bin-*.pkg.tar.zst --clobber

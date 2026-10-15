@@ -1,0 +1,105 @@
+# 发布到 AUR（astral-game-bin）
+#
+# 触发：GitHub Release 被 Publish 后自动跑；也可手动指定 tag 重推。
+# 前置：
+# - AUR 上已存在 astral-game-bin 仓库，账号里加了对应 SSH 公钥
+# - 仓库 Secret AUR_SSH_PRIVATE_KEY：该账号的 SSH 私钥
+#
+# 为什么不用“发布”工作流里直接推：Release 目前是 draft + prerelease，
+# draft 状态下的附件对外不可下载，AUR 的 source 会 404；等 Publish 后再推才安全。
+
+name: 发布 AUR
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Git 标签（如 v1.5.1；手动重推时用）'
+        required: true
+        type: string
+
+concurrency:
+  group: aur-${{ github.event.release.tag_name || inputs.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  aur:
+    runs-on: ubuntu-latest
+    # makepkg / .SRCINFO 只有 Arch 环境有，直接跑在 Arch 容器里。
+    container: archlinux:latest
+    steps:
+      - name: ⚙️ 安装打包工具
+        run: |
+          pacman -Sy --noconfirm --needed --disable-download-timeout \
+            base-devel git openssh curl
+          # makepkg 拒绝以 root 运行（连 --printsrcinfo 都不行），建个普通用户来跑
+          useradd -m builder
+
+      - name: 📥 检出（取该 tag 下的打包文件）
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag_name }}
+
+      - name: 🔖 解析版本
+        id: ver
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.release.tag_name || inputs.tag_name }}"
+          echo "ver=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: 🔐 下载产物并算 sha256
+        id: sum
+        env:
+          VER: ${{ steps.ver.outputs.ver }}
+        run: |
+          set -euo pipefail
+          URL="https://github.com/AstralNext/AstralGame/releases/download/v${VER}/astral-game-${VER}-linux-x64.tar.gz"
+          curl -fL --retry 3 --retry-delay 5 -o /tmp/pkg.tar.gz "$URL"
+          echo "sha=$(sha256sum /tmp/pkg.tar.gz | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: 🚀 推送到 AUR
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          VER: ${{ steps.ver.outputs.ver }}
+          SHA: ${{ steps.sum.outputs.sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "${AUR_SSH_PRIVATE_KEY:-}" ]; then
+            # 还没 AUR 账号（注册当前关闭）时不算失败：跳过推送，其余发布流程照常。
+            echo "::warning::未配置 secret AUR_SSH_PRIVATE_KEY，跳过 AUR 推送"
+            exit 0
+          fi
+
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur
+          chmod 600 ~/.ssh/aur
+          ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts 2>/dev/null
+          export GIT_SSH_COMMAND='ssh -i ~/.ssh/aur -o IdentitiesOnly=yes'
+
+          git clone ssh://aur@aur.archlinux.org/astral-game-bin.git /tmp/aur
+          cp packaging/aur/PKGBUILD \
+             packaging/aur/astral-game-bin.install \
+             packaging/aur/fan.astral.next.game.desktop \
+             /tmp/aur/
+          cd /tmp/aur
+
+          sed -i "s|^pkgver=.*|pkgver=$VER|" PKGBUILD
+          sed -i "s|^sha256sums=.*|sha256sums=('$SHA' 'SKIP')|" PKGBUILD
+          chown -R builder .
+          runuser -u builder -- env HOME=/home/builder \
+            makepkg --printsrcinfo > .SRCINFO
+
+          # 首次推送时远端是空仓库，明确用 AUR 的默认分支名。
+          git symbolic-ref HEAD refs/heads/master
+          git config user.name 'AstralNext'
+          git config user.email 'astral@astral.fan'
+          git add PKGBUILD .SRCINFO astral-game-bin.install \
+                  fan.astral.next.game.desktop
+          if git diff --cached --quiet; then
+            echo "AUR 无变化，跳过"
+            exit 0
+          fi
+          git commit -m "astral-game-bin $VER"
+          git push origin master
