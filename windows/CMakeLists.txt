@@ -39,7 +39,9 @@ add_definitions(-DUNICODE -D_UNICODE)
 # of modifying this function.
 function(APPLY_STANDARD_SETTINGS TARGET)
   target_compile_features(${TARGET} PUBLIC cxx_std_17)
-  target_compile_options(${TARGET} PRIVATE /W4 /WX /wd"4100")
+  # /utf-8：源码按 UTF-8 解析。插件源码含中文注释，在中文 Windows（代码页 936）
+  # 下会触发 C4819，并被 /WX 升级为错误直接编译失败。
+  target_compile_options(${TARGET} PRIVATE /W4 /WX /wd"4100" /utf-8)
   target_compile_options(${TARGET} PRIVATE /EHsc)
   target_compile_definitions(${TARGET} PRIVATE "_HAS_EXCEPTIONS=0")
   target_compile_definitions(${TARGET} PRIVATE "$<$<CONFIG:Debug>:_DEBUG>")

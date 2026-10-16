@@ -233,7 +233,7 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
             (index, count) => AstralGroupedTile(
               icon: Icons.lan_outlined,
               label: '虚拟IPv4地址',
-              subtitle: virtualIp,
+              subtitle: virtualIp.isEmpty ? '未设置，点击填写' : virtualIp,
               index: index,
               count: count,
               onTap: () => _editVirtualIp(settingsState),
@@ -245,7 +245,7 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
             (index, count) => AstralGroupedTile(
               icon: Icons.public_outlined,
               label: '虚拟IPv6地址',
-              subtitle: virtualIpv6,
+              subtitle: virtualIpv6.isEmpty ? '未设置，点击填写' : virtualIpv6,
               index: index,
               count: count,
               onTap: () => _editVirtualIpv6(settingsState),
@@ -366,12 +366,12 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
             autofocus: true,
             decoration: const InputDecoration(
               labelText: 'IPv4',
-              hintText: '10.147.xxx.xxx',
+              hintText: '例如：$kVirtualIpV4Example',
               prefixIcon: Icon(Icons.lan_outlined),
               border: OutlineInputBorder(),
             ),
             validator: InputValidator.validateIPv4,
-            keyboardType: TextInputType.number,
+            keyboardType: TextInputType.text,
           ),
         ),
         actions: [
@@ -413,7 +413,7 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
             autofocus: true,
             decoration: const InputDecoration(
               labelText: 'IPv6',
-              hintText: kDefaultVirtualIpV6,
+              hintText: '例如：$kVirtualIpV6Example',
               prefixIcon: Icon(Icons.public_outlined),
               border: OutlineInputBorder(),
             ),

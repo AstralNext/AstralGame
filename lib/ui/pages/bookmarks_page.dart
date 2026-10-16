@@ -15,6 +15,7 @@ import 'package:astral_game/di.dart';
 import 'package:astral_game/ui/widgets/app_snack_bar.dart';
 import 'package:astral_game/ui/widgets/bookmark_card.dart';
 import 'package:astral_game/ui/widgets/bookmark_edit_dialog.dart';
+import 'package:astral_game/ui/widgets/confirm_dialog.dart';
 import 'package:astral_game/ui/widgets/empty_state.dart';
 import 'package:astral_game/ui/widgets/page_navigator.dart';
 import 'package:astral_game/ui/widgets/section_header.dart';
@@ -327,11 +328,18 @@ class _BookmarksPageState extends State<BookmarksPage> {
     if (mounted) showAppSnackBar(context, '已更新');
   }
 
-  /// 删除收藏。
+  /// 删除收藏：先二次确认，避免误触直接删掉房间。
   ///
   /// 刻意不弹底部提示：桌面端 SnackBar 在鼠标悬停时会一直挂着（悬停会取消自动关闭），
   /// 挡在页面上很碍事，所以这里删完即止（撤销入口一并去掉）。
   Future<void> _handleDelete(Bookmark b) async {
+    final confirmed = await showConfirmDialog(
+      context,
+      title: '删除房间？',
+      content: '确定要删除「${b.customName}」吗？此操作不可撤销。',
+      confirmLabel: '删除',
+    );
+    if (!confirmed) return;
     await _roomState.removeBookmark(b.id);
   }
 

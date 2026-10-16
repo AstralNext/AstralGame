@@ -1,5 +1,4 @@
 import 'package:astral_game/config/app_theme_id.dart';
-import 'package:astral_game/config/network_constants.dart';
 import 'package:astral_game/data/services/app_settings_service.dart';
 import 'package:astral_game/data/services/home_widget_theme_sync.dart';
 import 'package:astral_game/utils/runtime_platform.dart';
@@ -26,11 +25,11 @@ class SettingsState {
   /// 网络：DHCPv6 自动分配虚拟 IPv6（EasyTier `dhcpv6`；关后不分配虚拟 IPv6）。
   final isDhcpv6 = signal(true);
 
-  /// 网络：手动填写的固定虚拟 IP（仅 isDhcp=false 时生效）。
-  final virtualIp = signal('10.147.0.0');
+  /// 网络：手动填写的固定虚拟 IP（仅 isDhcp=false 时生效）。默认留空，由用户填写后记忆。
+  final virtualIp = signal('');
 
-  /// 网络：手动填写的固定虚拟 IPv6（仅 isDhcp=false 时生效）。
-  final virtualIpv6 = signal(kDefaultVirtualIpV6);
+  /// 网络：手动填写的固定虚拟 IPv6（仅 isDhcpv6=false 时生效）。默认留空，由用户填写后记忆。
+  final virtualIpv6 = signal('');
 
   void loadFromPersistence() {
     closeMinimize.value = _settings.getCloseMinimize();

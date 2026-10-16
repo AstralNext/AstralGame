@@ -55,13 +55,13 @@ const kScfaDefaultBeaconPort = 15000;
 /// IPv4 有限广播地址（255.255.255.255），用于 LAN 游戏发现。
 const kBroadcastIpV4 = '255.255.255.255';
 
-// --- 默认虚拟 IP ---
+// --- 虚拟 IP 输入示例 ---
 
-/// 默认虚拟 IP（ZeroTier 风格），用于本地虚拟网卡未配置时的回退值。
-const kDefaultVirtualIpV4 = '10.147.18.24';
+/// 手动填写虚拟 IPv4 的输入示例（仅作输入提示；默认留空，由用户自行填写并记忆）。
+const kVirtualIpV4Example = '10.1.1.1/24';
 
-/// 默认虚拟 IPv6（取自 DHCPv6 网段 fdae::/120）。
-const kDefaultVirtualIpV6 = 'fdae::2';
+/// 手动填写虚拟 IPv6 的输入示例（仅作输入提示；默认留空，由用户自行填写并记忆）。
+const kVirtualIpV6Example = 'fd00::1/120';
 
 // --- 房间虚拟网段（DHCP 初始网段） ---
 

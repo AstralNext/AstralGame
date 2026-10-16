@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:astral_game/config/network_constants.dart';
 import 'package:astral_game/utils/avatar_hash.dart';
 import 'package:astral_game/utils/logger.dart';
 import 'package:path/path.dart' as p;
@@ -171,15 +170,13 @@ class AppSettingsService {
   Future<void> setIsDhcpv6(bool value) async =>
       await _prefs.setBool(_keyIsDhcpv6, value);
 
-  /// 获取虚拟 IP
-  String getVirtualIp() =>
-      _prefs.getString(_keyVirtualIp) ?? kDefaultVirtualIpV4;
+  /// 获取虚拟 IP（未设置时为空，由用户手动填写并记忆）
+  String getVirtualIp() => _prefs.getString(_keyVirtualIp) ?? '';
   Future<void> setVirtualIp(String value) async =>
       await _prefs.setString(_keyVirtualIp, value);
 
-  /// 获取虚拟 IPv6
-  String getVirtualIpv6() =>
-      _prefs.getString(_keyVirtualIpv6) ?? kDefaultVirtualIpV6;
+  /// 获取虚拟 IPv6（未设置时为空，由用户手动填写并记忆）
+  String getVirtualIpv6() => _prefs.getString(_keyVirtualIpv6) ?? '';
   Future<void> setVirtualIpv6(String value) async =>
       await _prefs.setString(_keyVirtualIpv6, value);
 }

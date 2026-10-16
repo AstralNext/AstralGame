@@ -51,16 +51,26 @@ class InputValidator {
     return null;
   }
 
-  /// 验证 IPv6 地址。
+  /// 验证 IPv6 地址（可带 `/prefix`，如 `fd00::1/120`）。
   static String? validateIPv6(String? value) {
     final v = value?.trim() ?? '';
     if (v.isEmpty) {
       return '请输入 IP 地址';
     }
+    final parts = v.split('/');
+    if (parts.length > 2) {
+      return '无效的 IP 地址格式';
+    }
     try {
-      Uri.parseIPv6Address(v);
+      Uri.parseIPv6Address(parts[0]);
     } catch (e) {
       return '无效的 IPv6 地址';
+    }
+    if (parts.length == 2) {
+      final mask = int.tryParse(parts[1]);
+      if (mask == null || mask < 0 || mask > 128) {
+        return '前缀必须在 0-128 之间';
+      }
     }
     return null;
   }

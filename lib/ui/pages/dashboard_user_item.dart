@@ -195,12 +195,14 @@ class _UserStatusChips extends StatelessWidget {
     required this.colorScheme,
     required this.nodeManagement,
     required this.latencyColor,
+    required this.isLocal,
   });
 
   final EnhancedNodeInfo node;
   final ColorScheme colorScheme;
   final NodeManagementService nodeManagement;
   final Color Function(double) latencyColor;
+  final bool isLocal;
 
   @override
   Widget build(BuildContext context) {
@@ -241,17 +243,19 @@ class _UserStatusChips extends StatelessWidget {
               ? colorScheme.onPrimaryContainer
               : colorScheme.onSurfaceVariant,
         ),
-      Watch((context) {
-        final metrics = nodeManagement.linkMetricsOf(node.peerId).value;
-        return Text(
-          '${metrics.latencyMs.round()}ms',
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w500,
-            color: latencyColor(metrics.latencyMs),
-          ),
-        );
-      }),
+      // 本机不显示延迟（自己 ping 自己无意义）。
+      if (!isLocal)
+        Watch((context) {
+          final metrics = nodeManagement.linkMetricsOf(node.peerId).value;
+          return Text(
+            '${metrics.latencyMs.round()}ms',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              color: latencyColor(metrics.latencyMs),
+            ),
+          );
+        }),
     ];
 
     return Wrap(
@@ -454,6 +458,7 @@ class _UserMainContentRow extends StatelessWidget {
                 colorScheme: colorScheme,
                 nodeManagement: nodeManagement,
                 latencyColor: latencyColor,
+                isLocal: isLocal,
               ),
               const SizedBox(height: 4),
               _UserIpAndMetaRow(
