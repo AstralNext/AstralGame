@@ -16,6 +16,13 @@ class IspInfoService {
   bool _disposed = false;
 
   final label = signal<String>('');
+
+  /// 本机归属省份（如「山东」），用于测速节点默认筛选；查不到为空串。
+  final province = signal<String>('');
+
+  /// 本机运营商（如「电信」），用于测速节点默认筛选；查不到为空串。
+  final isp = signal<String>('');
+
   final loading = signal<bool>(false);
 
   // 单一数据源：ipip.net 免费接口。自动识别客户端真实 IP，
@@ -56,23 +63,40 @@ class IspInfoService {
       if (_disposed) return;
       if (resp.statusCode != 200) {
         appLogger.w('[IspInfo] ipip HTTP ${resp.statusCode}');
-        label.value = _unknown;
+        _applyUnknown();
         return;
       }
       final data = jsonDecode(resp.body) as Map<String, dynamic>;
-      final newLabel = _parseLabel(data) ?? _unknown;
+      final parsed = _parse(data);
+      if (parsed == null) {
+        _applyUnknown();
+        return;
+      }
+      final newLabel = parsed.place.isEmpty
+          ? parsed.isp
+          : '${parsed.place} ${parsed.isp}'.trim();
       if (newLabel != label.value) label.value = newLabel;
+      if (parsed.province != province.value) province.value = parsed.province;
+      if (parsed.isp != isp.value) isp.value = parsed.isp;
       appLogger.i('[IspInfo] 归属: $newLabel');
     } catch (e) {
       appLogger.e('[IspInfo] 异常: $e');
-      label.value = _unknown;
+      _applyUnknown();
     } finally {
       if (!_disposed) loading.value = false;
     }
   }
 
-  /// 从响应中解析「国家+省 运营商」，如 `中国山东 电信`；解析不出有效内容返回 null。
-  static String? _parseLabel(Map<String, dynamic> json) {
+  void _applyUnknown() {
+    label.value = _unknown;
+    province.value = '';
+    isp.value = '';
+  }
+
+  /// 从响应中解析归属地；解析不出有效内容返回 null。
+  static ({String place, String province, String isp})? _parse(
+    Map<String, dynamic> json,
+  ) {
     if (json['ret'] != 'ok') return null;
     final loc =
         ((json['data'] as Map<String, dynamic>?)?['location'] as List?) ??
@@ -83,6 +107,6 @@ class IspInfoService {
     final place = '${part(0)}${part(1)}'; // 国家+省，如「中国山东」
     final isp = part(4);
     if (place.isEmpty && isp.isEmpty) return null;
-    return place.isEmpty ? isp : '$place $isp';
+    return (place: place, province: part(1), isp: isp);
   }
 }

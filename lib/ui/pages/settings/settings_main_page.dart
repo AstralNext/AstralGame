@@ -22,6 +22,7 @@ import 'package:flutter/material.dart';
 import 'package:signals/signals_flutter.dart';
 
 import 'about_page.dart';
+import 'speed_test_page.dart';
 import 'vpn_routes_page.dart';
 
 /// 设置主页面。所有持久化字段统一通过 [SettingsState] signals 管理。
@@ -255,6 +256,16 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
               ),
             ),
           ],
+          (index, count) => AstralGroupedTile(
+            icon: Icons.speed_outlined,
+            label: '网络测速',
+            subtitle: '全球网测节点：延迟 / 下行 / 上行',
+            index: index,
+            count: count,
+            onTap: () => Navigator.of(
+              context,
+            ).push<void>(astralPageRoute(const SpeedTestPage())),
+          ),
           _switchRow(
             icon: Icons.hub_outlined,
             title: '禁用 P2P',

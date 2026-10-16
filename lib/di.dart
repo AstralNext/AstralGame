@@ -33,10 +33,12 @@ import 'package:astral_game/data/services/smart_dns_config_updater.dart';
 import 'package:astral_game/data/services/server_persistence_service.dart';
 import 'package:astral_game/data/services/shortcut_service.dart';
 import 'package:astral_game/data/services/share_code_service.dart';
+import 'package:astral_game/data/services/speed_test_service.dart';
 import 'package:astral_game/data/state/bookmark_search_state.dart';
 import 'package:astral_game/data/state/room_state.dart';
 import 'package:astral_game/data/state/server_state.dart';
 import 'package:astral_game/data/state/settings_state.dart';
+import 'package:astral_game/data/state/speed_test_state.dart';
 import 'package:astral_game/data/state/theme_reveal_state.dart';
 import 'package:astral_game/data/state/update_state.dart';
 import 'package:astral_game/data/services/update_service.dart';
@@ -289,6 +291,11 @@ Future<void> setupDI() async {
   getIt.registerSingleton<UpdateState>(UpdateState());
   getIt.registerLazySingleton<UpdateService>(
     () => UpdateService(getIt<UpdateState>()),
+  );
+
+  getIt.registerLazySingleton<SpeedTestService>(() => SpeedTestService());
+  getIt.registerLazySingleton<SpeedTestState>(
+    () => SpeedTestState(getIt<SpeedTestService>()),
   );
 
   await _initPeerRpcRouter();

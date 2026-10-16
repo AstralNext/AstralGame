@@ -74,6 +74,37 @@ const kRoomDhcpIpv4Cidr = '100.100.100.0/24';
 /// 建房时 EasyTier DHCPv6 的初始 IPv6 网段（ULA，须落在 `fc00::/7` 内且前缀 ≤126）。
 const kRoomDhcpIpv6Cidr = 'fdae::/120';
 
+const kSpeedTestConfigHost = 'https://dlcv2.cnspeedtest.cn:8443';
+
+const kSpeedTestConfigPhp =
+    '$kSpeedTestConfigHost/TaierAndroid/Config/ConfigMD5.php';
+
+const kSpeedTestApp = 'globalspeed';
+
+const kSpeedTestPkg = 'com.cnspeedtest.globalspeed';
+
+const kSpeedTestRandToken = '12345555';
+
+const kSpeedTestDefaultPort = 65499;
+
+const kSpeedTestReportBandwidth = 200;
+
+const kSpeedTestDesKey = r'dw!@#$%^';
+
+const kSpeedTestFetchTimeout = Duration(seconds: 25);
+
+const kSpeedTestDovalidTimeout = Duration(seconds: 4);
+
+const kSpeedTestProbeTimeout = Duration(seconds: 2);
+
+const kSpeedTestProbeSamples = 3;
+
+const kSpeedTestLatencyProbeInterval = Duration(milliseconds: 800);
+
+const kSpeedTestWindow = Duration(seconds: 4);
+
+const kSpeedTestThreads = 4;
+
 // --- 远程服务 ---
 
 /// astral-share 短码服务地址。
