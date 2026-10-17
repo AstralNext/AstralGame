@@ -9,8 +9,29 @@ import 'package:signals/signals_core.dart';
 /// 负责管理 Windows 防火墙状态
 /// 仅在 Windows 平台有效
 class FirewallService {
+  /// 域配置文件。
+  static const int domainProfile = 1;
+
+  /// 专用配置文件。
+  static const int privateProfile = 2;
+
+  /// 公用配置文件。
+  static const int publicProfile = 3;
+
+  static const List<int> _allProfiles = [
+    domainProfile,
+    privateProfile,
+    publicProfile,
+  ];
+
   /// 专用配置文件是否启用；非 Windows 恒为 `null`。
   final privateProfileEnabled = signal<bool?>(null);
+
+  /// 三个配置文件是否全部关闭；非 Windows 或读取失败为 `null`。
+  final allProfilesDisabled = signal<bool?>(null);
+
+  /// 一键操作进行中。
+  final busy = signal<bool>(false);
 
   /// 获取指定配置文件的防火墙状态
   ///
@@ -64,8 +85,48 @@ class FirewallService {
 
   /// 设置专用网络防火墙状态（最常用）
   Future<void> setPrivateFirewallStatus(bool enable) async {
-    await setFirewallStatus(2, enable);
+    await setFirewallStatus(privateProfile, enable);
     privateProfileEnabled.value = enable;
     await refreshPrivateProfile();
+  }
+
+  /// 从系统读取三个配置文件状态：全部关闭才为 `true`。
+  Future<void> refreshAllProfiles() async {
+    if (!RuntimePlatform.isWindows) {
+      allProfilesDisabled.value = null;
+      return;
+    }
+    try {
+      var anyEnabled = false;
+      for (final index in _allProfiles) {
+        if (await ffi.getFirewallStatus(profileIndex: index)) {
+          anyEnabled = true;
+          break;
+        }
+      }
+      allProfilesDisabled.value = !anyEnabled;
+    } catch (e) {
+      appLogger.w('[FirewallService] 读取防火墙配置失败', error: e);
+      allProfilesDisabled.value = null;
+    }
+  }
+
+  /// 一键设置三个配置文件；任一步失败返回 `false`。
+  Future<bool> setAllProfilesFirewallStatus(bool enable) async {
+    if (!RuntimePlatform.isWindows || busy.value) return false;
+    busy.value = true;
+    var ok = true;
+    try {
+      for (final index in _allProfiles) {
+        await ffi.setFirewallStatus(profileIndex: index, enable: enable);
+      }
+    } catch (e) {
+      ok = false;
+      appLogger.w('[FirewallService] 设置防火墙失败', error: e);
+    }
+    await refreshAllProfiles();
+    await refreshPrivateProfile();
+    busy.value = false;
+    return ok;
   }
 }

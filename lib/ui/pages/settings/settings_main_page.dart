@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/config/network_constants.dart';
 import 'package:astral_game/config/theme.dart';
@@ -13,6 +15,7 @@ import 'package:astral_game/ui/widgets/fade_in_section.dart';
 import 'package:astral_game/ui/widgets/linux_capability_prompt.dart';
 import 'package:astral_game/ui/navigation/astral_page_route.dart';
 import 'package:astral_game/ui/widgets/theme_picker_sheet.dart';
+import 'package:astral_game/data/services/firewall_service.dart';
 import 'package:astral_game/data/services/floating_overlay_service.dart';
 import 'package:astral_game/data/services/linux_capability_service.dart';
 import 'package:astral_game/data/services/network_optimize_service.dart';
@@ -43,6 +46,14 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
   }
 
   static bool get _isAndroid => RuntimePlatform.isAndroid;
+
+  @override
+  void initState() {
+    super.initState();
+    if (RuntimePlatform.isWindows) {
+      unawaited(getIt<FirewallService>().refreshAllProfiles());
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -259,7 +270,7 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
           (index, count) => AstralGroupedTile(
             icon: Icons.speed_outlined,
             label: '网络测速',
-            subtitle: '全球网测节点：延迟 / 下行 / 上行',
+            subtitle: '测试延迟与上下行速度',
             index: index,
             count: count,
             onTap: () => Navigator.of(
@@ -311,6 +322,23 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
                 ),
               );
             }),
+            (index, count) => Watch((context) {
+              final firewall = getIt<FirewallService>();
+              final disabled = firewall.allProfilesDisabled.value == true;
+              final busy = firewall.busy.value;
+              final toggle = busy
+                  ? null
+                  : (bool value) => _onToggleAllFirewall(firewall, !value);
+              return AstralGroupedTile(
+                icon: Icons.gpp_maybe_outlined,
+                label: '一键关闭防火墙',
+                subtitle: disabled ? '当前已关闭' : '当前已开启',
+                index: index,
+                count: count,
+                onTap: toggle == null ? null : () => toggle(!disabled),
+                trailing: Switch.adaptive(value: disabled, onChanged: toggle),
+              );
+            }),
           ],
           if (_isAndroid)
             (index, count) => AstralGroupedTile(
@@ -358,6 +386,14 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
       context,
       capability: getIt<LinuxCapabilityService>(),
     );
+  }
+
+  /// Windows：一键关闭 / 恢复域、专用、公用三个防火墙配置文件。
+  Future<void> _onToggleAllFirewall(
+    FirewallService firewall,
+    bool enable,
+  ) async {
+    await firewall.setAllProfilesFirewallStatus(enable);
   }
 
   Future<void> _editVirtualIp(SettingsState settingsState) async {

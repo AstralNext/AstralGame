@@ -21,7 +21,7 @@ fn parse_instance_id(instance_id: &str) -> Result<Uuid, String> {
     Uuid::parse_str(instance_id).map_err(|e| format!("invalid instance_id: {}", e))
 }
 /// wintun 虚拟网卡默认走「自动跃点」：wintun 驱动静态上报 100Gbps 链路速率，
-/// Windows 自动跃点表对 >=100Gbps 接口给出跃点 5。这里显式压到 1（合法最小值；
+/// Windows 自动跃点表对 >=100Gbps 接口给出跃点 5。这里显式压到 0。
 /// 网卡由 easytier 异步创建，run_network_instance 返回时可能尚未出现，
 /// 需轮询等待；设置失败只记日志，不影响启动流程。
 #[cfg(target_os = "windows")]
@@ -55,7 +55,7 @@ fn spawn_set_nic_metric_task(instance_id: &str, dev_name: &str) {
         }
         emit_core_log(
             &instance_id,
-            &format!("nic {} interface metric set to 1 failed: interface not found", dev_name),
+            &format!("nic {} interface metric set to 0 failed: interface not found", dev_name),
         );
     });
 }
@@ -149,7 +149,7 @@ fn set_interface_metric_blocking(dev_name: &str) -> (String, bool) {
                 // name= 会被 netsh 拒绝（"'name' 不是这个指令的有效参数"），
                 // 导致跃点设置静默失败、一直停留在 wintun 自动跃点 5。
                 &format!("interface=\"{}\"", target),
-                "metric=1",
+                "metric=0",
             ])
             .output()
             .map(|o| o.status.success())

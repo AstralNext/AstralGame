@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/config/theme.dart';
+import 'package:astral_game/data/services/firewall_service.dart';
 import 'package:astral_game/data/services/network_optimize_service.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
 import 'package:astral_game/data/services/screen_state_service.dart';
@@ -53,6 +54,9 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
   /// 收藏 Tab 的索引（[IndexedStack] 顺序：联机/服务器/收藏/设置）。
   static const _bookmarksTabIndex = 2;
 
+  /// 设置 Tab 的索引。
+  static const _settingsTabIndex = 3;
+
   @override
   void initState() {
     super.initState();
@@ -62,6 +66,7 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
       final pending = getIt<ShellNavigationService>().pendingTabIndex.value;
       if (pending == null || !mounted) return;
       setState(() => _selectedIndex = pending.clamp(0, 3));
+      if (_selectedIndex == _settingsTabIndex) _refreshFirewallStatus();
       getIt<ShellNavigationService>().clearPending();
     });
 
@@ -262,6 +267,14 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
   void _handleDestinationSelected(int index) {
     if (index == _selectedIndex) return;
     setState(() => _selectedIndex = index);
+    if (index == _settingsTabIndex) _refreshFirewallStatus();
+  }
+
+  /// 进入设置页时同步防火墙真实状态，避免 IndexedStack 缓存导致开关过期。
+  void _refreshFirewallStatus() {
+    if (RuntimePlatform.isWindows) {
+      unawaited(getIt<FirewallService>().refreshAllProfiles());
+    }
   }
 
   Widget _buildTabBody(bool isCompact) {
