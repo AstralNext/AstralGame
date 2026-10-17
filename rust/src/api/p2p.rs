@@ -22,7 +22,6 @@ fn parse_instance_id(instance_id: &str) -> Result<Uuid, String> {
 }
 /// wintun 虚拟网卡默认走「自动跃点」：wintun 驱动静态上报 100Gbps 链路速率，
 /// Windows 自动跃点表对 >=100Gbps 接口给出跃点 5。这里显式压到 1（合法最小值；
-/// 注意 metric=0 会被 netsh 解释为「恢复自动跃点」，等于没改）。
 /// 网卡由 easytier 异步创建，run_network_instance 返回时可能尚未出现，
 /// 需轮询等待；设置失败只记日志，不影响启动流程。
 #[cfg(target_os = "windows")]
@@ -36,14 +35,17 @@ fn spawn_set_nic_metric_task(instance_id: &str, dev_name: &str) {
         let max_attempts = 30u32;
         for attempt in 1..=max_attempts {
             let name = dev_name.clone();
-            let ok = tokio::task::spawn_blocking(move || set_interface_metric_blocking(&name))
-                .await
-                .unwrap_or(false);
+            let fallback = dev_name.clone();
+            let (used, ok) = tokio::task::spawn_blocking(move || {
+                set_interface_metric_blocking(&name)
+            })
+            .await
+            .unwrap_or((fallback, false));
 
             if ok {
                 emit_core_log(
                     &instance_id,
-                    &format!("nic {} interface metric set to 1", dev_name),
+                    &format!("nic {} interface metric set to 0", used),
                 );
                 return;
             }
@@ -59,11 +61,82 @@ fn spawn_set_nic_metric_task(instance_id: &str, dev_name: &str) {
 }
 
 #[cfg(target_os = "windows")]
-fn set_interface_metric_blocking(dev_name: &str) -> bool {
+fn find_wintun_adapters() -> Vec<String> {
+    use windows::Win32::NetworkManagement::IpHelper::{
+        GAA_FLAG_INCLUDE_PREFIX, GetAdaptersAddresses, IP_ADAPTER_ADDRESSES_LH,
+    };
+    use windows::Win32::Networking::WinSock::AF_UNSPEC;
+
+    const ERROR_BUFFER_OVERFLOW: u32 = 111;
+
+    let mut size: u32 = 16 * 1024;
+    let mut buf: Vec<u8> = Vec::new();
+    loop {
+        buf.resize(size as usize, 0);
+        let ret = unsafe {
+            GetAdaptersAddresses(
+                AF_UNSPEC.0 as u32,
+                GAA_FLAG_INCLUDE_PREFIX,
+                None,
+                Some(buf.as_mut_ptr().cast::<IP_ADAPTER_ADDRESSES_LH>()),
+                &mut size,
+            )
+        };
+        if ret == 0 {
+            break;
+        }
+        if ret != ERROR_BUFFER_OVERFLOW {
+            return Vec::new();
+        }
+    }
+
+    let mut names = Vec::new();
+    let mut cur = buf.as_ptr().cast::<IP_ADAPTER_ADDRESSES_LH>();
+    while !cur.is_null() {
+        let adapter = unsafe { &*cur };
+        let desc = unsafe { adapter.Description.to_string() }.unwrap_or_default();
+        if desc.to_ascii_lowercase().contains("wintun") {
+            if let Ok(name) = unsafe { adapter.FriendlyName.to_string() } {
+                if !name.is_empty() {
+                    names.push(name);
+                }
+            }
+        }
+        cur = unsafe { adapter.Next };
+    }
+    names
+}
+
+#[cfg(target_os = "windows")]
+fn resolve_wintun_interface(dev_name: &str) -> Option<String> {
+    let adapters = find_wintun_adapters();
+    if adapters.is_empty() {
+        return None;
+    }
+    let want = dev_name.trim().to_lowercase();
+    if !want.is_empty() {
+        if let Some(name) = adapters.iter().find(|n| n.to_lowercase() == want) {
+            return Some(name.clone());
+        }
+        if let Some(name) = adapters.iter().find(|n| n.to_lowercase().starts_with(&want)) {
+            return Some(name.clone());
+        }
+    }
+    if adapters.len() == 1 {
+        return adapters.first().cloned();
+    }
+    None
+}
+
+#[cfg(target_os = "windows")]
+fn set_interface_metric_blocking(dev_name: &str) -> (String, bool) {
     use std::os::windows::process::CommandExt;
     use std::process::Command;
     // CREATE_NO_WINDOW：GUI 进程派生控制台程序（netsh）默认会弹黑窗，必须显式抑制。
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    // 网卡别名可能被系统改写（如配置的 "ASGame" 实际显示为 "以太网 3"），
+    // 先按驱动描述（Wintun Userspace Tunnel）定位真实别名，取不到再退回配置名。
+    let target = resolve_wintun_interface(dev_name).unwrap_or_else(|| dev_name.to_string());
     let set_metric = |proto: &str| -> bool {
         Command::new("netsh.exe")
             .creation_flags(CREATE_NO_WINDOW)
@@ -75,7 +148,7 @@ fn set_interface_metric_blocking(dev_name: &str) -> bool {
                 // 这里的标签必须是 interface=（不是 name=）；
                 // name= 会被 netsh 拒绝（"'name' 不是这个指令的有效参数"），
                 // 导致跃点设置静默失败、一直停留在 wintun 自动跃点 5。
-                &format!("interface=\"{}\"", dev_name),
+                &format!("interface=\"{}\"", target),
                 "metric=1",
             ])
             .output()
@@ -85,7 +158,7 @@ fn set_interface_metric_blocking(dev_name: &str) -> bool {
     let v4 = set_metric("ipv4");
     let _v6 = set_metric("ipv6");
     // IPv6 尽力而为；IPv4 成功即视为网卡已出现且跃点已生效。
-    v4
+    (target, v4)
 }
 
 async fn get_instance_info(

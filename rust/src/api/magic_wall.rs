@@ -277,37 +277,49 @@ mod wfp_impl {
         ) -> Result<Vec<u64>> {
             let mut ids = Vec::new();
             let mut errors = Vec::new();
+            let mut skipped = 0u32;
 
-            let layer_key_v4 = if is_inbound {
-                &FWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V4
-            } else {
-                &FWPM_LAYER_ALE_AUTH_CONNECT_V4
-            };
+            if filter_has_ip_family(rule, false) {
+                let layer_key_v4 = if is_inbound {
+                    &FWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V4
+                } else {
+                    &FWPM_LAYER_ALE_AUTH_CONNECT_V4
+                };
 
-            match self.add_filter(rule, layer_key_v4, protocol, false) {
-                Ok(id) => ids.push(id),
-                Err(err) => {
-                    println!("!  添加 IPv4 过滤器失败: {err}");
-                    errors.push(format!("IPv4: {}", err));
+                match self.add_filter(rule, layer_key_v4, protocol, false) {
+                    Ok(id) => ids.push(id),
+                    Err(err) => {
+                        println!("!  添加 IPv4 过滤器失败: {err}");
+                        errors.push(format!("IPv4: {}", err));
+                    }
                 }
+            } else {
+                skipped += 1;
             }
 
-            let layer_key_v6 = if is_inbound {
-                &FWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V6
-            } else {
-                &FWPM_LAYER_ALE_AUTH_CONNECT_V6
-            };
+            if filter_has_ip_family(rule, true) {
+                let layer_key_v6 = if is_inbound {
+                    &FWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V6
+                } else {
+                    &FWPM_LAYER_ALE_AUTH_CONNECT_V6
+                };
 
-            match self.add_filter(rule, layer_key_v6, protocol, true) {
-                Ok(id) => ids.push(id),
-                Err(err) => {
-                    println!("!  添加 IPv6 过滤器失败: {err}");
-                    errors.push(format!("IPv6: {}", err));
+                match self.add_filter(rule, layer_key_v6, protocol, true) {
+                    Ok(id) => ids.push(id),
+                    Err(err) => {
+                        println!("!  添加 IPv6 过滤器失败: {err}");
+                        errors.push(format!("IPv6: {}", err));
+                    }
                 }
+            } else {
+                skipped += 1;
             }
 
             // 如果两个都失败，返回错误
             if ids.is_empty() {
+                if skipped == 2 {
+                    bail!("IP 地址族不匹配：local_ip / remote_ip 混用了 IPv4 与 IPv6");
+                }
                 bail!("添加过滤器失败: {}", errors.join(", "));
             }
 
@@ -698,6 +710,23 @@ mod wfp_impl {
         Ok(f_rule)
     }
 
+    /// 规则是否适用于某一地址族的 WFP 层。
+    /// 带 IP 条件时必须只下到对应地址族，否则反向层会缺少地址条件而误匹配全部流量。
+    fn filter_has_ip_family(rule: &FilterRule, is_ipv6: bool) -> bool {
+        let matches = |f: &Option<IpFilter>| match f {
+            None => true,
+            Some(IpFilter::Single(ip)) => match ip {
+                IpAddr::V4(_) => !is_ipv6,
+                IpAddr::V6(_) => is_ipv6,
+            },
+            Some(IpFilter::Network(net)) => match net {
+                IpNetwork::V4(_) => !is_ipv6,
+                IpNetwork::V6(_) => is_ipv6,
+            },
+        };
+        matches(&rule.remote_ip) && matches(&rule.local_ip)
+    }
+
     fn parse_ip_filter(value: &str) -> Result<IpFilter> {
         if value.contains('/') {
             let network = IpNetwork::from_str(value.trim())?;
@@ -715,6 +744,86 @@ mod wfp_impl {
             Ok(PortFilter::range(start, end))
         } else {
             Ok(PortFilter::single(value.trim().parse()?))
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        fn rule_with_remote(ip: &str) -> FilterRule {
+            FilterRule::new("t", RuleAction::Block)
+                .remote_ip(parse_ip_filter(ip).expect("ip"))
+        }
+
+        #[test]
+        fn ip_family_routing() {
+            let no_ip = FilterRule::new("t", RuleAction::Block);
+            assert!(filter_has_ip_family(&no_ip, false));
+            assert!(filter_has_ip_family(&no_ip, true));
+
+            let v4 = rule_with_remote("203.0.113.7");
+            assert!(filter_has_ip_family(&v4, false));
+            assert!(!filter_has_ip_family(&v4, true));
+
+            let v4_cidr = rule_with_remote("100.100.100.0/24");
+            assert!(filter_has_ip_family(&v4_cidr, false));
+            assert!(!filter_has_ip_family(&v4_cidr, true));
+
+            let v6 = rule_with_remote("fd00::1");
+            assert!(!filter_has_ip_family(&v6, false));
+            assert!(filter_has_ip_family(&v6, true));
+        }
+
+        #[test]
+        fn mixed_family_is_rejected() {
+            let mut rule = rule_with_remote("203.0.113.7");
+            rule = rule.local_ip(parse_ip_filter("fd00::1").expect("ip"));
+            assert!(!filter_has_ip_family(&rule, false));
+            assert!(!filter_has_ip_family(&rule, true));
+        }
+
+        #[test]
+        fn rule_without_app_has_no_process_condition() {
+            let rule = MagicWallRule {
+                id: "g1".into(),
+                name: "global".into(),
+                enabled: true,
+                action: "block".into(),
+                protocol: "both".into(),
+                direction: "both".into(),
+                app_path: None,
+                remote_ip: Some("203.0.113.7".into()),
+                local_ip: None,
+                remote_port: Some("443".into()),
+                local_port: None,
+                description: None,
+                created_at: None,
+            };
+            let converted = convert_rule(&rule).expect("convert");
+            assert!(converted.application.is_none());
+            assert!(converted.remote_ip.is_some());
+            assert!(converted.remote_port.is_some());
+
+            let scoped = MagicWallRule {
+                app_path: Some(r"C:\Games\game.exe".into()),
+                ..rule
+            };
+            let converted = convert_rule(&scoped).expect("convert");
+            assert!(converted.application.is_some());
+        }
+
+        #[test]
+        fn port_filter_formats() {
+            assert!(matches!(
+                parse_port_filter("2456").expect("single"),
+                PortFilter::Single(2456)
+            ));
+            assert!(matches!(
+                parse_port_filter("2456-2460").expect("range"),
+                PortFilter::Range(2456, 2460)
+            ));
+            assert!(parse_port_filter("abc").is_err());
         }
     }
 }

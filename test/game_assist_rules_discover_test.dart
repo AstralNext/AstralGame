@@ -165,10 +165,7 @@ void main() {
 
   test('scfa lobby keeps probed port, drops join/peer ports', () {
     expect(
-      selectScfaLobbyPorts(
-        udpPorts: [57431, 50122, 49801],
-        probedOk: {57431},
-      ),
+      selectScfaLobbyPorts(udpPorts: [57431, 50122, 49801], probedOk: {57431}),
       [57431],
     );
     expect(
@@ -179,13 +176,7 @@ void main() {
       ),
       [57431],
     );
-    expect(
-      selectScfaLobbyPorts(
-        udpPorts: [59179],
-        probedOk: {},
-      ),
-      [59179],
-    );
+    expect(selectScfaLobbyPorts(udpPorts: [59179], probedOk: {}), [59179]);
     expect(
       selectScfaLobbyPorts(
         udpPorts: [50122, 49801],
@@ -198,7 +189,108 @@ void main() {
 
   test('missing discover is null', () {
     expect(GameAssistLanGameDiscoverConfig.tryParse(null), isNull);
-    expect(GameAssistLanGameDiscoverConfig.tryParse(<String, dynamic>{}), isNull);
+    expect(
+      GameAssistLanGameDiscoverConfig.tryParse(<String, dynamic>{}),
+      isNull,
+    );
+  });
+
+  test('magic_wall supports rules without process (global)', () {
+    final star = GameAssistMagicWallConfig.parse({
+      'enabled': true,
+      'process': ['*'],
+      'rules': [
+        {
+          'name': 'block telemetry',
+          'action': 'block',
+          'protocol': 'udp',
+          'direction': 'outbound',
+          'remote_ip': '203.0.113.7',
+          'remote_port': '443',
+        },
+      ],
+    });
+    expect(star.isActive, isTrue);
+    expect(star.targets.single.isGlobal, isTrue);
+    expect(star.targets.single.rules.single.action, 'block');
+    expect(star.targets.single.rules.single.remoteIp, '203.0.113.7');
+
+    // 只给 rules 不给 process 也视为不绑定进程
+    final implicit = GameAssistMagicWallConfig.parse({
+      'enabled': true,
+      'rules': [
+        {'action': 'block', 'protocol': 'tcp', 'remote_port': '80'},
+      ],
+    });
+    expect(implicit.isActive, isTrue);
+    expect(implicit.targets.single.isGlobal, isTrue);
+    expect(implicit.targets.single.rules.single.remotePort, '80');
+
+    // 列表形式里 process 写 all 也算全局
+    final listed = GameAssistMagicWallConfig.parse([
+      {
+        'process': 'all',
+        'rules': [
+          {'action': 'block', 'protocol': 'udp', 'remote_port': '27015'},
+        ],
+      },
+      {'process': 'valheim.exe'},
+    ]);
+    expect(listed.targets.where((e) => e.isGlobal), hasLength(1));
+
+    // 数组形式里 process 写 * 也是全局，可与按进程的项混写
+    final starListed = GameAssistMagicWallConfig.parse([
+      {
+        'process': '*',
+        'rules': [
+          {'action': 'block', 'protocol': 'tcp', 'remote_port': '8080'},
+        ],
+      },
+      {
+        'process': 'valheim.exe',
+        'rules': [
+          {'action': 'allow', 'protocol': 'udp', 'local_port': '2456'},
+        ],
+      },
+    ]);
+    expect(starListed.targets, hasLength(2));
+    expect(
+      starListed.targets.singleWhere((e) => e.isGlobal).rules.single.remotePort,
+      '8080',
+    );
+    expect(
+      starListed.targets.singleWhere((e) => !e.isGlobal).process,
+      'valheim.exe',
+    );
+
+    // 键式写法里用 "*" 当键，同样整机生效
+    final keyed = GameAssistMagicWallConfig.parse({
+      '*': [
+        {'action': 'block', 'protocol': 'udp', 'remote_port': '27015'},
+      ],
+      'valheim.exe': [
+        {'action': 'allow', 'protocol': 'udp', 'local_port': '2456'},
+      ],
+    });
+    expect(keyed.targets, hasLength(2));
+    final keyedGlobal = keyed.targets.singleWhere((e) => e.isGlobal);
+    expect(keyedGlobal.process, '*');
+    expect(keyedGlobal.rules.single.remotePort, '27015');
+    expect(
+      keyed.targets.singleWhere((e) => !e.isGlobal).rules.single.localPort,
+      '2456',
+    );
+
+    final platform = GameAssistPlatformRules.fromJson({
+      'magic_wall': {
+        'enabled': true,
+        'process': ['*', 'valheim.exe'],
+        'rules': [
+          {'action': 'block', 'protocol': 'udp', 'remote_port': '1'},
+        ],
+      },
+    });
+    expect(platform.magicWallProcessNames, ['valheim.exe']);
   });
 
   test('magic_wall is per exe with independent rules', () {
@@ -209,7 +301,10 @@ void main() {
     expect(fromTrue.isActive, isFalse);
     expect(fromTrue.targets, isEmpty);
 
-    final fromList = GameAssistMagicWallConfig.parse(['Raft.exe', 'valheim.exe']);
+    final fromList = GameAssistMagicWallConfig.parse([
+      'Raft.exe',
+      'valheim.exe',
+    ]);
     expect(fromList.targets.map((e) => e.process).toList(), [
       'Raft.exe',
       'valheim.exe',
@@ -218,18 +313,10 @@ void main() {
 
     final perExe = GameAssistMagicWallConfig.parse({
       'valheim.exe': [
-        {
-          'action': 'allow',
-          'protocol': 'udp',
-          'local_port': '2456',
-        },
+        {'action': 'allow', 'protocol': 'udp', 'local_port': '2456'},
       ],
       'game.exe': [
-        {
-          'action': 'allow',
-          'protocol': 'udp',
-          'local_port': '15000',
-        },
+        {'action': 'allow', 'protocol': 'udp', 'local_port': '15000'},
       ],
       'Raft.exe': true,
     });
@@ -256,7 +343,11 @@ void main() {
     ]);
     expect(listed.targets, hasLength(3));
     expect(
-      listed.targets.singleWhere((e) => e.process == 'ForgedAlliance.exe').rules.single.localPort,
+      listed.targets
+          .singleWhere((e) => e.process == 'ForgedAlliance.exe')
+          .rules
+          .single
+          .localPort,
       '15000',
     );
 
@@ -286,11 +377,23 @@ void main() {
   });
 
   test('network protocol defaults to udp', () {
-    expect(GameAssistNetworkProtocol.parse(null), GameAssistNetworkProtocol.udp);
+    expect(
+      GameAssistNetworkProtocol.parse(null),
+      GameAssistNetworkProtocol.udp,
+    );
     expect(GameAssistNetworkProtocol.parse(''), GameAssistNetworkProtocol.udp);
-    expect(GameAssistNetworkProtocol.parse('UDP'), GameAssistNetworkProtocol.udp);
-    expect(GameAssistNetworkProtocol.parse('tcp'), GameAssistNetworkProtocol.tcp);
-    expect(GameAssistNetworkProtocol.parse('TCP'), GameAssistNetworkProtocol.tcp);
+    expect(
+      GameAssistNetworkProtocol.parse('UDP'),
+      GameAssistNetworkProtocol.udp,
+    );
+    expect(
+      GameAssistNetworkProtocol.parse('tcp'),
+      GameAssistNetworkProtocol.tcp,
+    );
+    expect(
+      GameAssistNetworkProtocol.parse('TCP'),
+      GameAssistNetworkProtocol.tcp,
+    );
 
     final omitted = GameAssistNetworkConfig.fromJson({});
     expect(omitted.protocol, GameAssistNetworkProtocol.udp);
@@ -320,17 +423,12 @@ void main() {
     });
     expect(parsed.description, '开局域网世界');
 
-    final omitted = GameAssistGameRules.fromJson('other', {
-      'name': '其他',
-    });
+    final omitted = GameAssistGameRules.fromJson('other', {'name': '其他'});
     expect(omitted.description, isEmpty);
 
     final merged = omitted.mergeFromRemote(parsed);
     expect(merged.description, '开局域网世界');
-    expect(
-      parsed.mergeFromRemote(omitted).description,
-      '开局域网世界',
-    );
+    expect(parsed.mergeFromRemote(omitted).description, '开局域网世界');
   });
 
   test('name_zh preferred for displayName', () {
@@ -342,9 +440,7 @@ void main() {
     expect(named.nameZh, '我的世界');
     expect(named.displayName, '我的世界');
 
-    final englishOnly = GameAssistGameRules.fromJson('raft', {
-      'name': 'Raft',
-    });
+    final englishOnly = GameAssistGameRules.fromJson('raft', {'name': 'Raft'});
     expect(englishOnly.displayName, 'Raft');
   });
 }

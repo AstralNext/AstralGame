@@ -46,14 +46,26 @@ class RoomAssistService {
     String gameId,
   ) async {
     await _stopMagicWallWatch();
+    // 先撤销上一次下发的规则，避免连续进房时同一规则重复叠加过滤器
+    await _removeAppliedRules();
     if (!platform.magicWall.isActive) {
       appLogger.d('[RoomAssist] 魔法墙未启用 game=$gameId');
       return;
     }
 
     final targets = platform.magicWallTargets;
-    if (targets.isEmpty) {
-      appLogger.w('[RoomAssist] 魔法墙已开但没有 exe game=$gameId');
+    final processTargets = [
+      for (final t in targets)
+        if (!t.isGlobal) t,
+    ];
+    final globalRules = [
+      for (final t in targets)
+        if (t.isGlobal)
+          for (final r in t.rules)
+            if (r.enabled) r,
+    ];
+    if (processTargets.isEmpty && globalRules.isEmpty) {
+      appLogger.w('[RoomAssist] 魔法墙已开但没有可用规则 game=$gameId');
       return;
     }
 
@@ -73,14 +85,61 @@ class RoomAssistService {
     }
 
     _magicWallGameId = gameId;
-    _magicWallTargets = targets;
+    _magicWallTargets = processTargets;
+
+    if (globalRules.isNotEmpty) {
+      await _applyGlobalMagicWall(globalRules);
+    }
+
+    if (processTargets.isEmpty) {
+      appLogger.i('[RoomAssist] 魔法墙仅全局规则 game=$gameId');
+      return;
+    }
+
     _processes.subscribe(
       key: this,
-      exeNames: [for (final t in targets) t.process],
+      exeNames: [for (final t in processTargets) t.process],
       onTick: _onProcesses,
     );
     appLogger.i(
-      '[RoomAssist] 魔法墙监视 exe=${[for (final t in targets) t.process].join(",")} game=$gameId',
+      '[RoomAssist] 魔法墙监视 exe=${[for (final t in processTargets) t.process].join(",")} game=$gameId',
+    );
+  }
+
+  Future<void> _applyGlobalMagicWall(
+    List<GameAssistMagicWallRule> rules,
+  ) async {
+    var applied = 0;
+    for (var i = 0; i < rules.length; i++) {
+      final spec = rules[i];
+      final specId = spec.id.isEmpty ? 'g$i' : spec.id;
+      final ruleId = '${_magicWallGameId}_global_$specId';
+      try {
+        await addMagicWallRule(
+          rule: MagicWallRule(
+            id: ruleId,
+            name: spec.name,
+            enabled: true,
+            action: spec.action,
+            protocol: spec.protocol,
+            direction: spec.direction,
+            remoteIp: spec.remoteIp,
+            localIp: spec.localIp,
+            remotePort: spec.remotePort,
+            localPort: spec.localPort,
+            description:
+                spec.description ??
+                'Astral magic_wall $_magicWallGameId global',
+          ),
+        );
+        _appliedRuleIds.add(ruleId);
+        applied++;
+      } catch (e) {
+        appLogger.w('[RoomAssist] 全局魔法墙规则失败 ${spec.name}: $e');
+      }
+    }
+    appLogger.i(
+      '[RoomAssist] 全局魔法墙已应用 $applied/${rules.length} 条 game=$_magicWallGameId',
     );
   }
 
@@ -208,6 +267,18 @@ class RoomAssistService {
     }
   }
 
+  Future<void> _removeAppliedRules() async {
+    for (final id in List<String>.from(_appliedRuleIds)) {
+      try {
+        await removeMagicWallRule(ruleId: id);
+      } catch (e) {
+        appLogger.w('[RoomAssist] 操作失败', error: e);
+      }
+    }
+    _appliedRuleIds.clear();
+    _appliedAppPaths.clear();
+  }
+
   Future<void> stopAll() async {
     if (!RuntimePlatform.isWindows) return;
     await _stopMagicWallWatch();
@@ -219,15 +290,7 @@ class RoomAssistService {
       appLogger.w('[RoomAssist] 停止 TCP 转发失败: $e');
     }
 
-    for (final id in List<String>.from(_appliedRuleIds)) {
-      try {
-        await removeMagicWallRule(ruleId: id);
-      } catch (e) {
-        appLogger.w('[RoomAssist] 操作失败', error: e);
-      }
-    }
-    _appliedRuleIds.clear();
-    _appliedAppPaths.clear();
+    await _removeAppliedRules();
 
     if (_magicWallStarted) {
       try {
