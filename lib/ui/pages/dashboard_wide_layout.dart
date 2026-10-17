@@ -5,6 +5,7 @@ import 'package:astral_game/data/services/connection_service.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
 import 'package:astral_game/data/services/screen_state_service.dart';
 import 'package:astral_game/data/state/room_state.dart';
+import 'package:astral_game/data/state/settings_state.dart';
 import 'package:astral_game/di.dart';
 import 'package:astral_game/ui/widgets/dashboard_home_panel.dart';
 import 'package:astral_game/ui/widgets/dashboard_members_skeleton.dart';
@@ -79,6 +80,7 @@ class _MembersPane extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.astralPalette;
     final textTheme = Theme.of(context).textTheme;
+    final settingsState = getIt<SettingsState>();
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -91,30 +93,60 @@ class _MembersPane extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Watch((context) {
-              final session = roomState.session.value;
-              final game = session == null
-                  ? null
-                  : GameCatalog.byId(session.gameId);
-              final title = [
-                if (game != null) game.displayName,
-                '成员',
-              ].join(' · ');
-              return Text(
-                title,
-                style: textTheme.titleSmall?.copyWith(
-                  color: palette.accent,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.2,
+            Row(
+              children: [
+                Expanded(
+                  child: Watch((context) {
+                    final session = roomState.session.value;
+                    final game = session == null
+                        ? null
+                        : GameCatalog.byId(session.gameId);
+                    final title = [
+                      if (game != null) game.displayName,
+                      '成员',
+                    ].join(' · ');
+                    return Text(
+                      title,
+                      style: textTheme.titleSmall?.copyWith(
+                        color: palette.accent,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.2,
+                      ),
+                    );
+                  }),
                 ),
-              );
-            }),
+                Watch((context) {
+                  final compact = settingsState.memberListCompact.value;
+                  return Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        compact ? '简洁' : '详细',
+                        style: textTheme.labelSmall?.copyWith(
+                          color: palette.textTertiary,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Switch.adaptive(
+                        value: compact,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        onChanged: (value) {
+                          settingsState.memberListCompact.value = value;
+                          settingsState.saveToPersistence();
+                        },
+                      ),
+                    ],
+                  );
+                }),
+              ],
+            ),
             const SizedBox(height: 12),
             Expanded(
               child: Watch(
                 (context) {
                   // 无条件读取，确保 computed 始终订阅成员列表。
                   final nodes = nodeManagement.userNodes.value;
+                  final compact = settingsState.memberListCompact.value;
                   if (nodes.isEmpty) {
                     return const DashboardMembersSkeleton();
                   }
@@ -122,6 +154,7 @@ class _MembersPane extends StatelessWidget {
                     users: nodes,
                     nodeManagement: nodeManagement,
                     physics: const AlwaysScrollableScrollPhysics(),
+                    compact: compact,
                     isLocalOf: (node) =>
                         nodeManagement.isLocalPeer(node.peerId),
                   );
@@ -129,6 +162,7 @@ class _MembersPane extends StatelessWidget {
                 dependencies: [
                   nodeManagement.userNodes,
                   nodeManagement.currentInstanceId,
+                  settingsState.memberListCompact,
                 ],
               ),
             ),

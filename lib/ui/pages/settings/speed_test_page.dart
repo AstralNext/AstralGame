@@ -371,6 +371,7 @@ class _MetricsCard extends StatelessWidget {
       final phase = state.phase.value;
       final result = state.result.value;
       final finished = result != null && result.ok;
+      final fromHistory = state.resultFromHistory.value;
 
       final download = finished
           ? result.downloadMbps
@@ -413,6 +414,17 @@ class _MetricsCard extends StatelessWidget {
               onColor: scheme.onTertiary,
               active: running && phase == SpeedTestPhase.upload,
             ),
+            if (finished) ...[
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (fromHistory) const _HistoryChip(),
+                  _LossChip(lossRate: result.lossRate),
+                ],
+              ),
+            ],
             if (result != null && !result.ok) ...[
               const SizedBox(height: 14),
               _FailureBanner(message: result.error ?? '测速失败'),
@@ -654,6 +666,84 @@ class _LatencyChip extends StatelessWidget {
             hasValue ? '延迟 ${latencyMs!.toStringAsFixed(0)} ms' : '延迟 —',
             style: theme.textTheme.labelMedium?.copyWith(
               color: hasValue
+                  ? scheme.onSurface
+                  : scheme.onSurfaceVariant.withValues(alpha: 0.7),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HistoryChip extends StatelessWidget {
+  const _HistoryChip();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 6, 12, 6),
+      decoration: BoxDecoration(
+        color: scheme.tertiaryContainer,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.history_rounded,
+            size: 14,
+            color: scheme.onTertiaryContainer,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            '上次测速结果',
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: scheme.onTertiaryContainer,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LossChip extends StatelessWidget {
+  const _LossChip({required this.lossRate});
+
+  final double? lossRate;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final hasValue = lossRate != null;
+    final hasLoss = hasValue && lossRate! > 0;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 6, 12, 6),
+      decoration: BoxDecoration(
+        color: hasLoss ? scheme.errorContainer : scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.network_check_rounded,
+            size: 14,
+            color: hasLoss ? scheme.onErrorContainer : scheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            hasValue ? '丢包 ${lossRate!.toStringAsFixed(1)}%' : '丢包 —',
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: hasLoss
+                  ? scheme.onErrorContainer
+                  : hasValue
                   ? scheme.onSurface
                   : scheme.onSurfaceVariant.withValues(alpha: 0.7),
               fontWeight: FontWeight.w600,

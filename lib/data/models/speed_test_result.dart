@@ -5,6 +5,7 @@ class SpeedTestResult {
     this.uploadLatencyMs,
     this.downloadMbps,
     this.uploadMbps,
+    this.lossRate,
     this.error,
   });
 
@@ -19,6 +20,9 @@ class SpeedTestResult {
   final double? downloadMbps;
 
   final double? uploadMbps;
+
+  /// 丢包率（百分比 0–100），基于测速期间 TCP 探测失败比例估算。
+  final double? lossRate;
 
   final String? error;
 

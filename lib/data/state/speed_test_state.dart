@@ -1,12 +1,26 @@
 import 'package:astral_game/data/models/speed_test_node.dart';
 import 'package:astral_game/data/models/speed_test_result.dart';
+import 'package:astral_game/data/models/speed_test_snapshot.dart';
+import 'package:astral_game/data/services/app_settings_service.dart';
 import 'package:astral_game/data/services/speed_test_service.dart';
+import 'package:astral_game/utils/logger.dart';
 import 'package:signals/signals.dart';
 
 class SpeedTestState {
-  SpeedTestState(this._service);
+  SpeedTestState(this._service, [this._settings]) {
+    final snapshot = _settings?.getSpeedTestSnapshot();
+    if (snapshot != null) {
+      result.value = SpeedTestResult(
+        downloadMbps: snapshot.downloadMbps,
+        uploadMbps: snapshot.uploadMbps,
+        lossRate: snapshot.lossRate,
+      );
+      resultFromHistory.value = true;
+    }
+  }
 
   final SpeedTestService _service;
+  final AppSettingsService? _settings;
 
   final nodes = signal<List<SpeedTestNode>>(const []);
 
@@ -20,6 +34,7 @@ class SpeedTestState {
   final phase = signal<SpeedTestPhase?>(null);
 
   final result = signal<SpeedTestResult?>(null);
+  final resultFromHistory = signal<bool>(false);
   final samples = signal<List<SpeedTestSample>>(const []);
 
   final liveDownloadLatencyMs = signal<double?>(null);
@@ -63,6 +78,7 @@ class SpeedTestState {
     final node = selected.value;
     if (node == null || running.value) return;
     running.value = true;
+    resultFromHistory.value = false;
     result.value = null;
     samples.value = const [];
     liveDownloadLatencyMs.value = null;
@@ -85,6 +101,14 @@ class SpeedTestState {
         },
       );
       result.value = measured;
+      final snapshot = SpeedTestSnapshot.fromResult(measured);
+      if (snapshot != null) {
+        try {
+          await _settings?.setSpeedTestSnapshot(snapshot);
+        } catch (e) {
+          appLogger.w('[SpeedTest] 保存测速结果失败', error: e);
+        }
+      }
     } on SpeedTestException catch (e) {
       result.value = SpeedTestResult.failure(e.message);
     } catch (e) {

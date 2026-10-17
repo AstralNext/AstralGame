@@ -12,6 +12,7 @@ class UserListWidget extends StatelessWidget {
     this.shrinkWrap = false,
     this.physics,
     this.isLocalOf,
+    this.compact = false,
   });
 
   final List<EnhancedNodeInfo> users;
@@ -19,6 +20,7 @@ class UserListWidget extends StatelessWidget {
   final bool shrinkWrap;
   final ScrollPhysics? physics;
   final bool Function(EnhancedNodeInfo node)? isLocalOf;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -40,6 +42,7 @@ class UserListWidget extends StatelessWidget {
           node: node,
           nodeManagement: nodeManagement,
           isLocal: isLocalOf?.call(node) ?? false,
+          compact: compact,
         );
       },
     );

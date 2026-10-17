@@ -5,6 +5,7 @@ import 'package:astral_game/data/services/connection_service.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
 import 'package:astral_game/data/services/open_games_service.dart';
 import 'package:astral_game/data/state/room_state.dart';
+import 'package:astral_game/data/state/settings_state.dart';
 import 'package:astral_game/di.dart';
 import 'package:astral_game/ui/pages/dashboard_user_item.dart';
 import 'package:astral_game/ui/widgets/dashboard_home_panel.dart';
@@ -189,6 +190,8 @@ class _MembersBlock extends StatelessWidget {
         final nodes = nodeManagement.userNodes.value;
         final theme = Theme.of(context).textTheme;
         final palette = context.astralPalette;
+        final settingsState = getIt<SettingsState>();
+        final compact = settingsState.memberListCompact.value;
 
         // 第 0 项：标题行；1..N：用户项。SliverList.builder 懒构建。
         return SliverList.builder(
@@ -219,6 +222,23 @@ class _MembersBlock extends StatelessWidget {
                             ),
                           ),
                         ],
+                        const Spacer(),
+                        Text(
+                          compact ? '简洁' : '详细',
+                          style: theme.labelSmall?.copyWith(
+                            color: palette.textTertiary,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Switch.adaptive(
+                          value: compact,
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                          onChanged: (value) {
+                            settingsState.memberListCompact.value = value;
+                            settingsState.saveToPersistence();
+                          },
+                        ),
                       ],
                     ),
                   ),
@@ -241,6 +261,7 @@ class _MembersBlock extends StatelessWidget {
                   index: i,
                   count: nodes.length,
                   isLocal: nodeManagement.isLocalPeer(node.peerId),
+                  compact: compact,
                 ),
               ],
             );

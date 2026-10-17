@@ -19,6 +19,9 @@ class SettingsState {
   /// Android：显示在线用户悬浮窗（头像 / IP / 延迟）。
   final floatingOverlayEnabled = signal(false);
 
+  /// 房间成员列表：简洁模式（仅显示 IP / 延迟）。
+  final memberListCompact = signal(false);
+
   /// 网络：DHCP 自动分配虚拟 IP（关后可手动设置）。
   final isDhcp = signal(true);
 
@@ -37,6 +40,7 @@ class SettingsState {
     disableP2p.value = _settings.isDisableP2p();
     enableUdpBroadcastRelay.value = _settings.isEnableUdpBroadcastRelay();
     floatingOverlayEnabled.value = _settings.isFloatingOverlayEnabled();
+    memberListCompact.value = _settings.isMemberListCompact();
     isDhcp.value = _settings.getIsDhcp();
     isDhcpv6.value = _settings.getIsDhcpv6();
     virtualIp.value = _settings.getVirtualIp();
@@ -53,6 +57,7 @@ class SettingsState {
       _settings.setDisableP2p(disableP2p.value),
       _settings.setEnableUdpBroadcastRelay(enableUdpBroadcastRelay.value),
       _settings.setFloatingOverlayEnabled(floatingOverlayEnabled.value),
+      _settings.setMemberListCompact(memberListCompact.value),
       _settings.setIsDhcp(isDhcp.value),
       _settings.setIsDhcpv6(isDhcpv6.value),
       _settings.setVirtualIp(virtualIp.value),

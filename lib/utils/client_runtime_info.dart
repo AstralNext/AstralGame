@@ -1,3 +1,4 @@
+import 'package:astral_game/data/models/speed_test_snapshot.dart';
 import 'package:astral_game/utils/logger.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -16,6 +17,9 @@ const Map<String, String> kPeerEnvRpcToMetaKey = {
   'network': 'peerNetwork',
   'firewall': 'peerFirewall',
   'isp': 'peerIsp',
+  'speedDownload': 'peerSpeedDownload',
+  'speedUpload': 'peerSpeedUpload',
+  'speedLoss': 'peerSpeedLoss',
 };
 
 /// 本机客户端环境：操作系统、`package_info` 应用版本等。
@@ -97,6 +101,7 @@ class ClientRuntimeInfo {
     String? networkWire,
     required String firewallWire,
     String? isp,
+    SpeedTestSnapshot? speedTest,
   }) => {
     'os': operatingSystem,
     'osVersion': operatingSystemVersion,
@@ -105,5 +110,8 @@ class ClientRuntimeInfo {
     'network': networkWire,
     'firewall': firewallWire,
     'isp': isp,
+    'speedDownload': speedTest?.downloadMbps,
+    'speedUpload': speedTest?.uploadMbps,
+    'speedLoss': speedTest?.lossRate,
   };
 }

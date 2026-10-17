@@ -16,9 +16,9 @@ class UserMethods {
     ConnectivityStatusService? connectivity,
     FirewallService? firewall,
     IspInfoService? ispInfo,
-  })  : _connectivity = connectivity,
-        _firewall = firewall,
-        _ispInfo = ispInfo;
+  }) : _connectivity = connectivity,
+       _firewall = firewall,
+       _ispInfo = ispInfo;
 
   final AppSettingsService _settings;
   final ConnectivityStatusService? _connectivity;
@@ -52,6 +52,7 @@ class UserMethods {
         networkWire: connectivity.wireValue,
         firewallWire: firewall,
         isp: _ispInfo?.label.value ?? '',
+        speedTest: _settings.getSpeedTestSnapshot(),
       ),
     };
   }
@@ -76,7 +77,7 @@ class UserMethods {
 
   /// 获取所有方法
   Map<String, MethodHandler> get methods => {
-        'user.getInfo': getInfo,
-        'user.update': update,
-      };
+    'user.getInfo': getInfo,
+    'user.update': update,
+  };
 }

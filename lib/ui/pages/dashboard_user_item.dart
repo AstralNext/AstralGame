@@ -70,6 +70,7 @@ class _DashboardUserItemState extends State<DashboardUserItem> {
             isLocal: widget.isLocal,
             nodeManagement: widget.nodeManagement,
             latencyColor: _latencyColor,
+            compact: widget.compact,
             avatarWidget: _UserAvatar(
               avatar: widget.node.avatar,
               colorScheme: colorScheme,
@@ -101,6 +102,13 @@ class _DashboardUserItemState extends State<DashboardUserItem> {
     if (!context.mounted) return;
     showAppSnackBar(context, '已复制 IP：$ipv4');
   }
+}
+
+String _formatMbps(double? value) {
+  if (value == null) return '—';
+  if (value >= 100) return value.toStringAsFixed(0);
+  if (value >= 10) return value.toStringAsFixed(1);
+  return value.toStringAsFixed(2);
 }
 
 /// 单行摘要（列表内展示）：仅「系统版本 · 应用版本」，例如 `10.0.26200 · 1.0.41`。
@@ -243,6 +251,33 @@ class _UserStatusChips extends StatelessWidget {
               ? colorScheme.onPrimaryContainer
               : colorScheme.onSurfaceVariant,
         ),
+      if (node.hasSpeedTest) ...[
+        _MiniChip(
+          icon: Icons.speed_rounded,
+          label:
+              '测速 ↓${_formatMbps(node.peerDownloadMbps)} / '
+              '↑${_formatMbps(node.peerUploadMbps)} Mbps',
+          background: colorScheme.secondaryContainer,
+          foreground: colorScheme.onSecondaryContainer,
+        ),
+        if (node.peerLossRate case final loss?)
+          _MiniChip(
+            icon: Icons.network_check_rounded,
+            label: '测速丢包 ${loss.toStringAsFixed(1)}%',
+            background: loss > 0
+                ? colorScheme.errorContainer
+                : colorScheme.surfaceContainerHighest,
+            foreground: loss > 0
+                ? colorScheme.onErrorContainer
+                : colorScheme.onSurfaceVariant,
+          ),
+      ] else
+        _MiniChip(
+          icon: Icons.speed_outlined,
+          label: '未测速',
+          background: colorScheme.surfaceContainerHighest,
+          foreground: colorScheme.onSurfaceVariant,
+        ),
       // 本机不显示延迟（自己 ping 自己无意义）。
       if (!isLocal)
         Watch((context) {
@@ -381,6 +416,58 @@ class _UserIpAndMetaRow extends StatelessWidget {
   }
 }
 
+class _UserCompactMetaRow extends StatelessWidget {
+  const _UserCompactMetaRow({
+    required this.node,
+    required this.colorScheme,
+    required this.isLocal,
+    required this.nodeManagement,
+    required this.latencyColor,
+  });
+
+  final EnhancedNodeInfo node;
+  final ColorScheme colorScheme;
+  final bool isLocal;
+  final NodeManagementService nodeManagement;
+  final Color Function(double) latencyColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasIpv4 = node.hasValidIpv4;
+    return Row(
+      children: [
+        Flexible(
+          child: Text(
+            hasIpv4 ? node.ipv4 : '未分配 IP',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12,
+              color: hasIpv4
+                  ? colorScheme.onSurfaceVariant
+                  : colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+            ),
+          ),
+        ),
+        if (!isLocal) ...[
+          const SizedBox(width: 10),
+          Watch((context) {
+            final metrics = nodeManagement.linkMetricsOf(node.peerId).value;
+            return Text(
+              '${metrics.latencyMs.round()}ms',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: latencyColor(metrics.latencyMs),
+              ),
+            );
+          }),
+        ],
+      ],
+    );
+  }
+}
+
 /// 主内容行（头像 + 信息列 + 状态指示点）。
 class _UserMainContentRow extends StatelessWidget {
   const _UserMainContentRow({
@@ -391,6 +478,7 @@ class _UserMainContentRow extends StatelessWidget {
     required this.nodeManagement,
     required this.latencyColor,
     required this.avatarWidget,
+    required this.compact,
   });
 
   final EnhancedNodeInfo node;
@@ -400,6 +488,7 @@ class _UserMainContentRow extends StatelessWidget {
   final NodeManagementService nodeManagement;
   final Color Function(double) latencyColor;
   final Widget avatarWidget;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -453,20 +542,30 @@ class _UserMainContentRow extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 4),
-              _UserStatusChips(
-                node: node,
-                colorScheme: colorScheme,
-                nodeManagement: nodeManagement,
-                latencyColor: latencyColor,
-                isLocal: isLocal,
-              ),
-              const SizedBox(height: 4),
-              _UserIpAndMetaRow(
-                node: node,
-                colorScheme: colorScheme,
-                isLocal: isLocal,
-                nodeManagement: nodeManagement,
-              ),
+              if (compact)
+                _UserCompactMetaRow(
+                  node: node,
+                  colorScheme: colorScheme,
+                  isLocal: isLocal,
+                  nodeManagement: nodeManagement,
+                  latencyColor: latencyColor,
+                )
+              else ...[
+                _UserStatusChips(
+                  node: node,
+                  colorScheme: colorScheme,
+                  nodeManagement: nodeManagement,
+                  latencyColor: latencyColor,
+                  isLocal: isLocal,
+                ),
+                const SizedBox(height: 4),
+                _UserIpAndMetaRow(
+                  node: node,
+                  colorScheme: colorScheme,
+                  isLocal: isLocal,
+                  nodeManagement: nodeManagement,
+                ),
+              ],
             ],
           ),
         ),

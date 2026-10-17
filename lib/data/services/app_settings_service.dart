@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:astral_game/data/models/speed_test_snapshot.dart';
 import 'package:astral_game/utils/avatar_hash.dart';
 import 'package:astral_game/utils/logger.dart';
 import 'package:path/path.dart' as p;
@@ -78,6 +80,7 @@ class AppSettingsService {
   static const String _keyEnableUdpBroadcastRelay =
       'enable_udp_broadcast_relay';
   static const String _keyFloatingOverlayEnabled = 'floating_overlay_enabled';
+  static const String _keyMemberListCompact = 'member_list_compact';
 
   bool isDisableP2p() => _prefs.getBool(_keyDisableP2p) ?? false;
   Future<void> setDisableP2p(bool value) async =>
@@ -95,6 +98,12 @@ class AppSettingsService {
 
   Future<void> setFloatingOverlayEnabled(bool value) async =>
       await _prefs.setBool(_keyFloatingOverlayEnabled, value);
+
+  /// 房间成员列表：简洁模式（仅显示 IP / 延迟）。
+  bool isMemberListCompact() => _prefs.getBool(_keyMemberListCompact) ?? false;
+
+  Future<void> setMemberListCompact(bool value) async =>
+      await _prefs.setBool(_keyMemberListCompact, value);
 
   static const String _keyCustomVpnRoutes = 'custom_vpn_routes';
 
@@ -179,4 +188,17 @@ class AppSettingsService {
   String getVirtualIpv6() => _prefs.getString(_keyVirtualIpv6) ?? '';
   Future<void> setVirtualIpv6(String value) async =>
       await _prefs.setString(_keyVirtualIpv6, value);
+
+  // ---- 测速 ----
+
+  static const String _keySpeedTestSnapshot = 'speed_test_snapshot';
+
+  SpeedTestSnapshot? getSpeedTestSnapshot() =>
+      SpeedTestSnapshot.tryParse(_prefs.getString(_keySpeedTestSnapshot));
+
+  Future<void> setSpeedTestSnapshot(SpeedTestSnapshot snapshot) async =>
+      await _prefs.setString(
+        _keySpeedTestSnapshot,
+        jsonEncode(snapshot.toJson()),
+      );
 }

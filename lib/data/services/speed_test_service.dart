@@ -85,6 +85,7 @@ class SpeedTestService {
     SpeedTestNode node, {
     int samples = kSpeedTestProbeSamples,
     void Function(double latencyMs)? onSample,
+    void Function(bool success)? onProbe,
   }) async {
     final port = int.tryParse(node.port);
     if (port == null) return null;
@@ -102,7 +103,9 @@ class SpeedTestService {
         final ms = watch.elapsedMicroseconds / 1000;
         if (best == null || ms < best) best = ms;
         onSample?.call(best);
+        onProbe?.call(true);
       } catch (_) {
+        onProbe?.call(false);
       } finally {
         socket?.destroy();
       }
@@ -130,10 +133,18 @@ class SpeedTestService {
       onLatency?.call(phase, latencyMs);
     }
 
+    var probeSent = 0;
+    var probeFailed = 0;
+    void countProbe(bool success) {
+      probeSent++;
+      if (!success) probeFailed++;
+    }
+
     onPhase?.call(SpeedTestPhase.latency);
     final latency = await probeLatency(
       node,
       onSample: (ms) => record(SpeedTestPhase.latency, ms),
+      onProbe: countProbe,
     );
     if (latency == null) {
       return const SpeedTestResult.failure('节点不可达');
@@ -151,6 +162,7 @@ class SpeedTestService {
     final latencyProbe = _startLatencyProbe(
       node,
       (ms) => record(probingPhase, ms),
+      onProbe: countProbe,
     );
     try {
       onPhase?.call(SpeedTestPhase.download);
@@ -181,6 +193,7 @@ class SpeedTestService {
         uploadLatencyMs: _medianOf(latencySamples[SpeedTestPhase.upload]!),
         downloadMbps: download,
         uploadMbps: upload,
+        lossRate: probeSent == 0 ? null : probeFailed * 100 / probeSent,
       );
     } finally {
       latencyProbe?.cancel();
@@ -190,14 +203,15 @@ class SpeedTestService {
 
   Timer? _startLatencyProbe(
     SpeedTestNode node,
-    void Function(double latencyMs) onRecord,
-  ) {
+    void Function(double latencyMs) onRecord, {
+    void Function(bool success)? onProbe,
+  }) {
     var busy = false;
     return Timer.periodic(kSpeedTestLatencyProbeInterval, (_) async {
       if (busy) return;
       busy = true;
       try {
-        final ms = await probeLatency(node, samples: 1);
+        final ms = await probeLatency(node, samples: 1, onProbe: onProbe);
         if (ms != null) onRecord(ms);
       } finally {
         busy = false;

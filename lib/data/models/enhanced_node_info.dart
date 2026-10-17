@@ -69,6 +69,24 @@ class EnhancedNodeInfo {
   /// 对端 Windows 专用防火墙：`enabled` / `disabled` / `unsupported`。
   String? get peerFirewall => metadata['peerFirewall'] as String?;
 
+  /// 对端最近一次测速的下行速率（Mbps）。
+  double? get peerDownloadMbps => _asDouble(metadata['peerSpeedDownload']);
+
+  /// 对端最近一次测速的上行速率（Mbps）。
+  double? get peerUploadMbps => _asDouble(metadata['peerSpeedUpload']);
+
+  /// 对端最近一次测速的丢包率（百分比）。
+  double? get peerLossRate => _asDouble(metadata['peerSpeedLoss']);
+
+  /// 对端是否分享过测速结果。
+  bool get hasSpeedTest => peerDownloadMbps != null || peerUploadMbps != null;
+
+  static double? _asDouble(Object? value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
+  }
+
   /// 对端头像内容 hash；无头像或尚未拉取时为空。
   String? get peerAvatarHash {
     final raw = metadata['avatarHash']?.toString().trim();

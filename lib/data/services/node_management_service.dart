@@ -533,6 +533,7 @@ class NodeManagementService {
       networkWire: _connectivity?.current.value.wireValue,
       firewallWire: _firewall?.firewallWireValue() ?? 'unsupported',
       isp: _ispInfo?.label.value,
+      speedTest: _appSettings.getSpeedTestSnapshot(),
     );
     final meta = <String, dynamic>{
       ...node.metadata,

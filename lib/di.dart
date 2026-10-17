@@ -295,7 +295,10 @@ Future<void> setupDI() async {
 
   getIt.registerLazySingleton<SpeedTestService>(() => SpeedTestService());
   getIt.registerLazySingleton<SpeedTestState>(
-    () => SpeedTestState(getIt<SpeedTestService>()),
+    () => SpeedTestState(
+      getIt<SpeedTestService>(),
+      getIt<AppSettingsService>(),
+    ),
   );
 
   await _initPeerRpcRouter();
