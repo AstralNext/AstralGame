@@ -1,0 +1,40 @@
+name: 🧹 Cleanup Old Releases
+
+on:
+  schedule:
+    # 每天 04:00（Asia/Shanghai）
+    - cron: '0 20 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Keep latest 5 releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          KEEP=5
+          REPO="${GITHUB_REPOSITORY}"
+
+          tags=$(gh release list --repo "$REPO" --limit 100 \
+            --json tagName,createdAt \
+            --jq 'sort_by(.createdAt) | reverse | .[].tagName')
+
+          count=$(printf '%s\n' "$tags" | grep -c . || true)
+          if [ "$count" -le "$KEEP" ]; then
+            echo "当前只有 $count 个 Release，无需清理"
+            exit 0
+          fi
+
+          printf '%s\n' "$tags" | tail -n +$((KEEP + 1)) | while read -r tag; do
+            [ -z "$tag" ] && continue
+            echo "删除旧 Release: $tag"
+            gh release delete "$tag" --repo "$REPO" --yes
+          done
+
+          echo "清理完成，保留最近 $KEEP 个 Release"
