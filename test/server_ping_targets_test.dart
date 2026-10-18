@@ -3,7 +3,7 @@ import 'package:astral_game/data/state/server_state.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('only enabled idle servers are ping targets', () {
+  test('all idle servers are ping targets regardless of enabled state', () {
     final servers = [
       ServerMod(id: 1, name: 'a', url: 'tcp://1.1.1.1:1', enable: true),
       ServerMod(id: 2, name: 'b', url: 'tcp://2.2.2.2:1'),
@@ -11,11 +11,11 @@ void main() {
     ];
     expect(
       serversEligibleForPing(servers).map((s) => s.id),
-      [1, 3],
+      [1, 2, 3],
     );
     expect(
       serversEligibleForPing(servers, activeIds: {1}).map((s) => s.id),
-      [3],
+      [2, 3],
     );
   });
 }

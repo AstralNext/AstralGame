@@ -89,14 +89,16 @@ class ServerState {
   }
 }
 
-/// 未占用且已启用的探测目标（禁用节点不发 ICMP）。
+/// 未被连接占用的探测目标。
+///
+/// 刷新时列表里每一台都要检测，所以不区分启用状态；只排除正在使用的服务器。
 List<ServerMod> serversEligibleForPing(
   List<ServerMod> servers, {
   Set<int> activeIds = const {},
 }) {
   return [
     for (final s in servers)
-      if (s.enable && !activeIds.contains(s.id)) s,
+      if (!activeIds.contains(s.id)) s,
   ];
 }
 
@@ -138,7 +140,7 @@ class ServerStatusState {
       for (final s in servers)
         if (!activeIds.contains(s.id)) s,
     ];
-    // 延迟与在线状态仍只测启用的服务器。
+    // 延迟与在线状态同样覆盖所有未占用的服务器，不区分启用状态。
     final pingTargets = serversEligibleForPing(servers, activeIds: activeIds);
     if (probeTargets.isEmpty) return;
     final pendingIds = {for (final s in probeTargets) s.id};
@@ -156,7 +158,7 @@ class ServerStatusState {
       final nextProbes = Map<int, ServerProbeResult>.from(serverProbes.value);
       final nextLatencies = Map<int, int?>.from(serverLatencies.value);
       final nextStatuses = Map<int, ServerStatus>.from(serverStatuses.value);
-      // 未参与延迟测试的服务器（禁用/使用中），清掉上一次的延迟与在线状态。
+      // 使用中的服务器不参与延迟测试，清掉上一次的延迟与在线状态。
       for (final server in servers) {
         if (pingIds.contains(server.id)) continue;
         nextLatencies.remove(server.id);
@@ -187,18 +189,16 @@ class ServerStatusState {
     }
   }
 
-  /// 地址被修改、服务器被删除或被禁用时，丢弃对应的旧延迟/状态。
+  /// 地址被修改或服务器被删除时，丢弃对应的旧探测结果。
+  ///
+  /// 启用/停用不影响检测结果：停用的服务器同样保留延迟与在线状态。
   void invalidateStaleProbes(List<ServerMod> servers) {
     final currentUrls = {for (final s in servers) s.id: s.url};
     final staleIds = <int>[];
     for (final entry in _probedUrls.entries) {
       if (currentUrls[entry.key] != entry.value) staleIds.add(entry.key);
     }
-    final disabledIds = {
-      for (final s in servers)
-        if (!s.enable) s.id,
-    };
-    if (staleIds.isEmpty && disabledIds.isEmpty) return;
+    if (staleIds.isEmpty) return;
     for (final id in staleIds) {
       _probedUrls.remove(id);
     }
@@ -206,14 +206,13 @@ class ServerStatusState {
       for (final entry in serverProbes.value.entries)
         if (!staleIds.contains(entry.key)) entry.key: entry.value,
     };
-    final dropRuntimeIds = {...staleIds, ...disabledIds};
     serverLatencies.value = {
       for (final entry in serverLatencies.value.entries)
-        if (!dropRuntimeIds.contains(entry.key)) entry.key: entry.value,
+        if (!staleIds.contains(entry.key)) entry.key: entry.value,
     };
     serverStatuses.value = {
       for (final entry in serverStatuses.value.entries)
-        if (!dropRuntimeIds.contains(entry.key)) entry.key: entry.value,
+        if (!staleIds.contains(entry.key)) entry.key: entry.value,
     };
   }
 

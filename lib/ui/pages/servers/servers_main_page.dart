@@ -193,10 +193,8 @@ class _ServersMainPageState extends State<ServersMainPage> {
       final probes = _serverStatusState.serverProbes.value;
       final probingIds = _serverStatusState.probingServerIds.value;
 
-      // 仅在本地丢弃过期结果，不做任何自动探测。
-      final fingerprint = servers
-          .map((s) => '${s.id}:${s.url}:${s.enable}')
-          .join('|');
+      // 仅在本地丢弃过期结果，不做任何自动探测；启用状态不影响检测结果。
+      final fingerprint = servers.map((s) => '${s.id}:${s.url}').join('|');
       if (_lastServersFingerprint != fingerprint) {
         _lastServersFingerprint = fingerprint;
         WidgetsBinding.instance.addPostFrameCallback((_) {
