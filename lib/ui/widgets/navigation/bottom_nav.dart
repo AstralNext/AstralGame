@@ -54,21 +54,21 @@ class BottomNavAction {
 }
 
 class _BottomNavState extends State<BottomNav> with TickerProviderStateMixin {
-  /// 带一点回弹的弹簧：刚够「灵动」，不拖泥带水。
+  /// 带回弹的弹簧：按下/切换时略冲一点再弹回来，Q 但不晃。
   static const _spring = SpringDescription(
     mass: 1,
-    stiffness: 360,
-    damping: 22,
+    stiffness: 460,
+    damping: 19,
   );
 
   /// 拖动结束时的最大初速度（Tab/s），避免快速甩动时弹簧冲得太远。
   static const _maxDragVelocity = 6.0;
 
   /// 指示器被拉长的最大比例（位于两个 Tab 正中间时）。
-  static const _maxStretch = 0.26;
+  static const _maxStretch = 0.30;
 
   /// 拉长时竖向被压扁的最大比例，体积守恒，像一滴液体。
-  static const _maxSquash = 0.12;
+  static const _maxSquash = 0.14;
 
   late final AnimationController _position;
 
@@ -168,6 +168,29 @@ class _BottomNavState extends State<BottomNav> with TickerProviderStateMixin {
     final next = pressed ? index : null;
     if (_pressedIndex == next) return;
     setState(() => _pressedIndex = next);
+    if (pressed) {
+      // 按下就先把指示器弹向该 Tab，不等手指抬起才动。
+      _springTo(index);
+      return;
+    }
+    // 松手后如果并没有切换选中（手势取消），再弹回当前 Tab。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _dragging || _pressedIndex != null) return;
+      if (widget.selectedIndex != index) _springTo(_currentIndex);
+    });
+  }
+
+  /// 用同一套弹簧把指示器送到 [target]。
+  void _springTo(int target) {
+    if (_dragging) return;
+    _position.animateWith(
+      SpringSimulation(
+        _spring,
+        _position.value,
+        target.toDouble(),
+        _position.velocity,
+      ),
+    );
   }
 
   @override
@@ -242,7 +265,7 @@ class _BottomNavState extends State<BottomNav> with TickerProviderStateMixin {
                             final gap = (position - position.round()).abs();
                             final liquid = (gap / 0.5).clamp(0.0, 1.0);
                             final active = _dragging || _pressedIndex != null;
-                            final press = active ? 1.06 : 1.0;
+                            final press = active ? 1.08 : 1.0;
 
                             final baseWidth = itemWidth - 12;
                             final blobWidth =
@@ -262,7 +285,7 @@ class _BottomNavState extends State<BottomNav> with TickerProviderStateMixin {
                                   height: blobHeight,
                                   child: AnimatedScale(
                                     scale: press,
-                                    duration: const Duration(milliseconds: 160),
+                                    duration: const Duration(milliseconds: 240),
                                     curve: Curves.easeOutBack,
                                     child: DecoratedBox(
                                       decoration: BoxDecoration(
@@ -535,11 +558,12 @@ class _NavItem extends StatelessWidget {
         // 避免默认焦点色在玻璃里留下灰色方块。
         focusColor: palette.accent.withValues(alpha: 0.06),
         hoverColor: palette.accent.withValues(alpha: 0.04),
-        splashColor: palette.accent.withValues(alpha: 0.05),
+        // 不要 Material 自带的按压水波纹：按压反馈只保留图标放大 + 指示器跟手。
+        splashColor: Colors.transparent,
         highlightColor: Colors.transparent,
         child: AnimatedScale(
-          scale: pressed ? 1.08 : 1.0,
-          duration: const Duration(milliseconds: 160),
+          scale: pressed ? 1.10 : 1.0,
+          duration: const Duration(milliseconds: 240),
           curve: Curves.easeOutBack,
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
