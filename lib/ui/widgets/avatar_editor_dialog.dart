@@ -157,7 +157,13 @@ class _AvatarEditorDialogState extends State<_AvatarEditorDialog> {
                   ),
                 ),
                 const SizedBox(height: 18),
-                AspectRatio(aspectRatio: 1, child: _buildViewport()),
+                // 宽而矮的窗口里，正方形裁剪区会把内容撑出屏幕：
+                // 用 Flexible 让它在剩余高度内等比缩小，而不是溢出。
+                Flexible(
+                  child: Center(
+                    child: AspectRatio(aspectRatio: 1, child: _buildViewport()),
+                  ),
+                ),
                 const SizedBox(height: 8),
                 Row(
                   children: [
