@@ -10,10 +10,13 @@ import 'package:astral_game/data/state/settings_state.dart';
 import 'package:astral_game/data/state/update_state.dart';
 import 'package:astral_game/data/state/theme_reveal_state.dart';
 import 'package:astral_game/ui/widgets/app_toast.dart';
+import 'package:astral_game/ui/widgets/astral_card.dart';
 import 'package:astral_game/ui/widgets/astral_grouped_tile.dart';
 import 'package:astral_game/ui/widgets/astral_settings_section.dart';
+import 'package:astral_game/ui/widgets/avatar_widget.dart';
 import 'package:astral_game/ui/widgets/bookmark_card.dart';
 import 'package:astral_game/ui/widgets/confirm_dialog.dart';
+import 'package:astral_game/ui/widgets/edit_profile_dialog.dart';
 import 'package:astral_game/ui/widgets/fade_in_section.dart';
 import 'package:astral_game/ui/widgets/linux_capability_prompt.dart';
 import 'package:astral_game/ui/navigation/astral_page_route.dart';
@@ -22,6 +25,7 @@ import 'package:astral_game/data/services/firewall_service.dart';
 import 'package:astral_game/data/services/floating_overlay_service.dart';
 import 'package:astral_game/data/services/linux_capability_service.dart';
 import 'package:astral_game/data/services/network_optimize_service.dart';
+import 'package:astral_game/data/services/node_management_service.dart';
 import 'package:astral_game/data/services/windows_settings_service.dart';
 import 'package:astral_game/utils/input_validator.dart';
 import 'package:astral_game/utils/room_display.dart';
@@ -98,6 +102,7 @@ class _SettingsMainPageState extends State<SettingsMainPage>
   Widget build(BuildContext context) {
     final settingsState = getIt<SettingsState>();
     final updateState = getIt<UpdateState>();
+    final nodeManagement = getIt<NodeManagementService>();
     final isNarrow = MediaQuery.sizeOf(context).width < AppBreakpoints.narrow;
     final hPad = isNarrow
         ? AppDimensions.pagePaddingHMobile
@@ -112,10 +117,55 @@ class _SettingsMainPageState extends State<SettingsMainPage>
               hPad,
               12,
               hPad,
-              // 底部留出悬浮胶囊的空间，避免最后一项贴住/被“盖住”。
-              AppDimensions.listBottomWithNav,
+              // 悬浮胶囊高度 + 系统底部安全区，避免最后一项被手势条/胶囊压住。
+              AppDimensions.listBottomWithNav(context),
             ),
             children: [
+              FadeInSection(
+                child: Watch((context) {
+                  final username = nodeManagement.currentUsername.value.trim();
+                  final palette = context.astralPalette;
+                  return AstralCard(
+                    onTap: () => showEditProfileDialog(context),
+                    padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+                    child: Row(
+                      children: [
+                        AvatarWidget(
+                          avatar: nodeManagement.currentUserAvatar.value,
+                          size: 56,
+                          showBorder: false,
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                username.isEmpty ? '玩家' : username,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w600),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                '点击修改头像和昵称',
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(color: palette.textSecondary),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(
+                          Icons.chevron_right_rounded,
+                          color: palette.textSecondary,
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+              ),
+              const SizedBox(height: AppDimensions.sectionGap),
               FadeInSection(
                 child: Watch((context) {
                   final id = settingsState.appThemeId.value;

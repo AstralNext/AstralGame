@@ -28,7 +28,6 @@ Future<void> probeAllServers(BuildContext context) async {
   await serverStatusState.probeServers(serverState.servers.value);
   if (!context.mounted) return;
   final nonEtCount = serverState.servers.value
-      .where((s) => s.enable)
       .where(
         (s) => serverStatusState.serverProbes.value[s.id]?.isEasyTier == false,
       )
@@ -262,7 +261,7 @@ class _ServersMainPageState extends State<ServersMainPage> {
                   hPad,
                   // 内容延伸到屏幕底部：为悬浮胶囊留出余量。
                   isNarrow
-                      ? AppDimensions.listBottomWithNav
+                      ? AppDimensions.listBottomWithNav(context)
                       : AppDimensions.listBottomWithFab,
                 ),
                 itemCount: servers.length,

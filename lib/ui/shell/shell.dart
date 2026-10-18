@@ -431,6 +431,12 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
     final showBookmarkSearch =
         isCompact && _selectedIndex == _bookmarksTabIndex;
     final searchOpen = showBookmarkSearch && _bookmarkSearchOpen;
+    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
+    // 没有键盘时搜索胶囊停在底栏上方：底栏贴底留白 + 胶囊自身高度（含内部留白）。
+    final navTopOffset =
+        AppDimensions.navBottomGap(context) +
+        AppDimensions.navBarPadding * 2 +
+        AppDimensions.navBarHeight;
     final nodes = getIt<NodeManagementService>();
 
     // 手机端去掉模拟顶栏，内容通栏铺到状态栏下方（Apple 页面规范）。
@@ -446,99 +452,101 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
         backgroundColor: palette.canvas,
         // 悬浮胶囊：内容一直延伸到底部、从胶囊下方透出，不再有“内容区底边”。
         extendBody: isCompact,
-        body: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        body: Stack(
           children: [
-            if (!isCompact)
-              ColoredBox(
-                color: palette.canvas,
-                child: Watch((context) {
-                  return LeftNav(
-                    items: _navigationItems,
-                    selectedIndex: _selectedIndex,
-                    onSelected: _handleDestinationSelected,
-                    avatar: nodes.currentUserAvatar.value,
-                    username: nodes.currentUsername.value,
-                    onAvatarTap: () => showEditProfileDialog(context),
-                  );
-                }),
-              ),
-            Expanded(
-              child: ColoredBox(
-                color: palette.canvas,
-                child: Column(
-                  children: [
-                    if (_isDesktop)
-                      DesktopTitleBar(
-                        onClose: () => unawaited(_handleCloseRequested()),
-                        isMaximized: _isMaximized,
-                        onToggleMaximize: _toggleMaximize,
-                        // 收藏 Tab：顶栏中央放搜索胶囊
-                        center: _selectedIndex == _bookmarksTabIndex
-                            ? const BookmarkSearchField()
-                            : null,
-                      )
-                    // 平板保留模拟顶栏；手机按 Apple 页面规范不显示，标题与操作交给页内。
-                    else if (!isCompact)
-                      Watch((context) {
-                        return MobileChromeBar(
-                          avatar: nodes.currentUserAvatar.value,
-                          username: nodes.currentUsername.value,
-                          onAvatarTap: () => showEditProfileDialog(context),
-                          // 收藏 Tab：顶栏中央放搜索胶囊
-                          center: _selectedIndex == _bookmarksTabIndex
-                              ? const BookmarkSearchField()
-                              : null,
-                        );
-                      }),
-                    Expanded(
-                      child: ClipRRect(
-                        borderRadius: contentRadius,
-                        child: ColoredBox(
-                          color: palette.background,
-                          child: _buildTabBody(isCompact),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (!isCompact)
+                  ColoredBox(
+                    color: palette.canvas,
+                    child: Watch((context) {
+                      return LeftNav(
+                        items: _navigationItems,
+                        selectedIndex: _selectedIndex,
+                        onSelected: _handleDestinationSelected,
+                        avatar: nodes.currentUserAvatar.value,
+                        username: nodes.currentUsername.value,
+                        onAvatarTap: () => showEditProfileDialog(context),
+                      );
+                    }),
+                  ),
+                Expanded(
+                  child: ColoredBox(
+                    color: palette.canvas,
+                    child: Column(
+                      children: [
+                        if (_isDesktop)
+                          DesktopTitleBar(
+                            onClose: () => unawaited(_handleCloseRequested()),
+                            isMaximized: _isMaximized,
+                            onToggleMaximize: _toggleMaximize,
+                            // 收藏 Tab：顶栏中央放搜索胶囊
+                            center: _selectedIndex == _bookmarksTabIndex
+                                ? const BookmarkSearchField()
+                                : null,
+                          )
+                        // 平板保留模拟顶栏；手机按 Apple 页面规范不显示，标题与操作交给页内。
+                        else if (!isCompact)
+                          Watch((context) {
+                            return MobileChromeBar(
+                              avatar: nodes.currentUserAvatar.value,
+                              username: nodes.currentUsername.value,
+                              onAvatarTap: () => showEditProfileDialog(context),
+                              // 收藏 Tab：顶栏中央放搜索胶囊
+                              center: _selectedIndex == _bookmarksTabIndex
+                                  ? const BookmarkSearchField()
+                                  : null,
+                            );
+                          }),
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: contentRadius,
+                            child: ColoredBox(
+                              color: palette.background,
+                              child: _buildTabBody(isCompact),
+                            ),
+                          ),
                         ),
-                      ),
+                      ],
                     ),
-                  ],
+                  ),
+                ),
+              ],
+            ),
+            // 搜索胶囊单独浮在 body 里：键盘弹起时 Scaffold 会把 body 压到键盘顶部，
+            // 贴住 body 底部就等于跟着键盘上移；胶囊底栏留在原位不动（被键盘遮住）。
+            if (searchOpen)
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 160),
+                curve: Curves.easeOutCubic,
+                left: 0,
+                right: 0,
+                bottom: keyboardInset > 0 ? 0 : navTopOffset,
+                child: BookmarkSearchBar(
+                  key: const ValueKey('bookmark_search_bar'),
+                  onClose: _closeBookmarkSearch,
                 ),
               ),
-            ),
           ],
         ),
         // 不加底色，让胶囊外的区域直接透出下面的内容。
         bottomNavigationBar: isCompact
-            ? SafeArea(
-                top: false,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // 搜索胶囊浮在导航上方，导航始终保留在原来的位置。
-                    AnimatedSize(
-                      duration: const Duration(milliseconds: 240),
-                      curve: Curves.easeOutCubic,
-                      alignment: Alignment.bottomCenter,
-                      // 不裁剪，否则搜索胶囊的投影会被裁成一块方形。
-                      clipBehavior: Clip.none,
-                      child: searchOpen
-                          ? BookmarkSearchBar(
-                              key: const ValueKey('bookmark_search_bar'),
-                              onClose: _closeBookmarkSearch,
-                            )
-                          : const SizedBox(width: double.infinity),
-                    ),
-                    // 行动胶囊依赖服务器列表与探测状态，放在 Watch 里响应式更新。
-                    Watch((navContext) {
-                      return BottomNav(
-                        key: const ValueKey('bottom_nav'),
-                        navigationItems: _navigationItems,
-                        selectedIndex: _selectedIndex,
-                        onSelected: _handleDestinationSelected,
-                        trailingActions: _trailingActions(navContext),
-                      );
-                    }),
-                  ],
+            ? Padding(
+                // 只让出少量底部留白，避免胶囊被过高的系统安全区顶得太远。
+                padding: EdgeInsets.only(
+                  bottom: AppDimensions.navBottomGap(context),
                 ),
+                // 行动胶囊依赖服务器列表与探测状态，放在 Watch 里响应式更新。
+                child: Watch((navContext) {
+                  return BottomNav(
+                    key: const ValueKey('bottom_nav'),
+                    navigationItems: _navigationItems,
+                    selectedIndex: _selectedIndex,
+                    onSelected: _handleDestinationSelected,
+                    trailingActions: _trailingActions(navContext),
+                  );
+                }),
               )
             : null,
       ),

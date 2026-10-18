@@ -229,10 +229,14 @@ class MainActivity : FlutterActivity() {
                 .setIntent(pinIntent)
                 .build()
 
+            // 不需要等待桌面回调：桌面会瞬间创建（或弹窗由系统处理），
+            // 返回值即代表桌面是否接受了这次固定请求。
             val pinned = sm.requestPinShortcut(shortcut, null)
             result.success(pinned)
+        } catch (e: SecurityException) {
+            result.error("NO_PERMISSION", e.message ?: "没有创建桌面快捷方式的权限", null)
         } catch (e: Exception) {
-            result.error("NO_PERMISSION", e.message, null)
+            result.error("FAILED", e.message, null)
         }
     }
 

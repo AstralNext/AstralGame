@@ -6,17 +6,13 @@ import 'package:image_picker/image_picker.dart';
 class ImagePickerHelper {
   ImagePickerHelper._();
 
-  /// 从相册选择图片
-  static Future<Uint8List?> pickImageFromGallery({
-    double maxWidth = 256,
-    double maxHeight = 256,
-  }) async {
+  /// 从相册选择图片，返回原始字节。
+  ///
+  /// 不做缩放：一旦带 maxWidth/maxHeight，插件会把图片重新编码成静态图，
+  /// GIF / 动态 WebP 的动画会丢失。缩放交给头像编辑器处理。
+  static Future<Uint8List?> pickImageFromGallery() async {
     final picker = ImagePicker();
-    final image = await picker.pickImage(
-      source: ImageSource.gallery,
-      maxWidth: maxWidth,
-      maxHeight: maxHeight,
-    );
+    final image = await picker.pickImage(source: ImageSource.gallery);
 
     if (image != null) {
       return await image.readAsBytes();

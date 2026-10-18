@@ -132,39 +132,50 @@ class ServerStatusState {
   Future<void> probeServers(List<ServerMod> servers) async {
     if (servers.isEmpty) return;
     final activeIds = activeServerIds.value;
-    final targets = serversEligibleForPing(servers, activeIds: activeIds);
-    if (targets.isEmpty) return;
-    final pendingIds = {for (final s in targets) s.id};
+    // ET 握手探测覆盖整个列表（使用中的服务器除外），不区分启用状态：
+    // 点刷新就是想知道列表里每一台是不是 EasyTier 服务器。
+    final probeTargets = [
+      for (final s in servers)
+        if (!activeIds.contains(s.id)) s,
+    ];
+    // 延迟与在线状态仍只测启用的服务器。
+    final pingTargets = serversEligibleForPing(servers, activeIds: activeIds);
+    if (probeTargets.isEmpty) return;
+    final pendingIds = {for (final s in probeTargets) s.id};
+    final pingIds = {for (final s in pingTargets) s.id};
     probingServerIds.value = {...probingServerIds.value, ...pendingIds};
     try {
       final probesFuture = Future.wait([
-        for (final s in targets) _probeService.probe(s),
+        for (final s in probeTargets) _probeService.probe(s),
       ]);
       final latenciesFuture = PingUtil.tcpPingMany([
-        for (final s in targets) s.url,
+        for (final s in pingTargets) s.url,
       ]);
       final results = await probesFuture;
       final rtts = await latenciesFuture;
       final nextProbes = Map<int, ServerProbeResult>.from(serverProbes.value);
       final nextLatencies = Map<int, int?>.from(serverLatencies.value);
       final nextStatuses = Map<int, ServerStatus>.from(serverStatuses.value);
-      // 禁用/使用中的服务器不发起探测，清掉上一次的延迟与在线状态。
+      // 未参与延迟测试的服务器（禁用/使用中），清掉上一次的延迟与在线状态。
       for (final server in servers) {
-        if (pendingIds.contains(server.id)) continue;
+        if (pingIds.contains(server.id)) continue;
         nextLatencies.remove(server.id);
         nextStatuses[server.id] = activeIds.contains(server.id)
             ? ServerStatus.inUse
             : ServerStatus.unknown;
       }
-      for (var i = 0; i < targets.length; i++) {
-        final server = targets[i];
-        final latency = i < rtts.length ? rtts[i] : null;
+      for (var i = 0; i < probeTargets.length; i++) {
+        final server = probeTargets[i];
         nextProbes[server.id] = results[i];
+        _probedUrls[server.id] = server.url;
+      }
+      for (var i = 0; i < pingTargets.length; i++) {
+        final server = pingTargets[i];
+        final latency = i < rtts.length ? rtts[i] : null;
         nextLatencies[server.id] = latency;
         nextStatuses[server.id] = latency != null
             ? ServerStatus.online
             : ServerStatus.offline;
-        _probedUrls[server.id] = server.url;
       }
       serverProbes.value = nextProbes;
       serverLatencies.value = nextLatencies;

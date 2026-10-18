@@ -5,7 +5,9 @@ import 'package:astral_game/data/services/app_settings_service.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
 import 'package:astral_game/di.dart';
 import 'package:astral_game/ui/widgets/app_toast.dart';
+import 'package:astral_game/ui/widgets/avatar_editor_dialog.dart';
 import 'package:astral_game/ui/widgets/avatar_widget.dart';
+import 'package:astral_game/utils/avatar_image_processor.dart';
 import 'package:astral_game/utils/image_picker_helper.dart';
 import 'package:flutter/material.dart';
 
@@ -60,7 +62,19 @@ class _ProfileDialogState extends State<_ProfileDialog> {
   Future<void> _pickAvatar() async {
     final bytes = await ImagePickerHelper.pickImageFromGallery();
     if (bytes == null || !mounted) return;
-    setState(() => _avatar = bytes);
+    if (bytes.length > AvatarImageProcessor.maxInputBytes) {
+      showAppToast(context, '图片文件太大，请换一张');
+      return;
+    }
+    final info = await AvatarImageProcessor.inspect(bytes);
+    if (!mounted) return;
+    if (info == null) {
+      showAppToast(context, '无法读取这张图片');
+      return;
+    }
+    final edited = await showAvatarEditor(context, bytes: bytes, info: info);
+    if (edited == null || !mounted) return;
+    setState(() => _avatar = edited);
   }
 
   Future<void> _submit() async {
@@ -160,7 +174,7 @@ class _ProfileDialogState extends State<_ProfileDialog> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  onboarding ? '昵称会显示给同一房间的玩家\n点击头像可立即更换' : '昵称会显示给同一房间的玩家',
+                  '昵称会显示给同一房间的玩家\n点击头像可裁剪，支持动图（最大 2MB）',
                   textAlign: TextAlign.center,
                   style: textTheme.bodyMedium?.copyWith(
                     color: palette.textSecondary,

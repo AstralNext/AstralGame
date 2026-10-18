@@ -64,6 +64,9 @@ class ShortcutService {
           code: ShortcutErrorCode.unsupported,
         );
       }
+      if (e.code == 'FAILED') {
+        throw ShortcutException('创建快捷方式失败：${e.message ?? '系统未响应'}');
+      }
       rethrow;
     }
   }

@@ -17,7 +17,6 @@ import 'package:astral_game/ui/widgets/bookmark_edit_dialog.dart';
 import 'package:astral_game/ui/widgets/confirm_dialog.dart';
 import 'package:astral_game/ui/widgets/create_room_dialog.dart';
 import 'package:astral_game/ui/widgets/dashboard_home_panel.dart';
-import 'package:astral_game/ui/widgets/edit_profile_dialog.dart';
 import 'package:astral_game/ui/widgets/share_room_dialog.dart';
 import 'package:astral_game/utils/room_share.dart';
 import 'package:flutter/material.dart';
@@ -301,8 +300,6 @@ class _DashboardPageState extends State<DashboardPage> {
               nodeManagement: _nodeManagement,
               roomState: _roomState,
               callbacks: callbacks,
-              avatar: _nodeManagement.currentUserAvatar.value,
-              onAvatarTap: () => showEditProfileDialog(context),
             )
           : Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),

@@ -58,6 +58,10 @@ android {
 
     buildTypes {
         release {
+            // Flutter 3.47 默认对 release 开启 R8，会重命名 kotlin.coroutines.Continuation 等
+            // JNI 签名中的类型（如 r1.c），导致 shared_preferences 的 JNI 方法查找失败。
+            isMinifyEnabled = false
+            isShrinkResources = false
             val releaseSigning = signingConfigs.getByName("release")
             signingConfig = if (releaseSigning.storeFile != null) {
                 releaseSigning

@@ -227,8 +227,8 @@ class _BookmarksPageState extends State<BookmarksPage> {
             mobileList(unpinned),
           ],
           // 悬浮胶囊底栏浮在内容上方，末尾留出等高余量避免最后一项被挡住。
-          const SliverToBoxAdapter(
-            child: SizedBox(height: AppDimensions.listBottomWithNav),
+          SliverToBoxAdapter(
+            child: SizedBox(height: AppDimensions.listBottomWithNav(context)),
           ),
         ],
       );
@@ -543,7 +543,12 @@ class _BookmarksPageState extends State<BookmarksPage> {
         bookmark: b,
       );
       if (!mounted) return;
-      showAppToast(context, ok ? '已创建「${b.displayName}」快捷方式' : '快捷方式未创建');
+      showAppToast(
+        context,
+        ok
+            ? '已创建「${b.displayName}」快捷方式'
+            : '快捷方式未创建：请检查系统是否允许 Astral Game 创建桌面快捷方式',
+      );
     } on ShortcutException catch (e) {
       if (!mounted) return;
       final msg = switch (e.code) {
