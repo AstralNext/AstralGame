@@ -496,20 +496,23 @@ class _ServersMainPageState extends State<ServersMainPage> {
 
                   // 触屏长按拖拽，避免与列表滚动抢手势；桌面端鼠标可直接拖。
                   final draggable = RuntimePlatform.isDesktop
-                      ? ReorderableDragStartListener(
-                          key: ValueKey(server.id),
-                          index: index,
-                          child: card,
-                        )
+                      ? ReorderableDragStartListener(index: index, child: card)
                       : ReorderableDelayedDragStartListener(
-                          key: ValueKey(server.id),
                           index: index,
                           child: card,
                         );
-                  if (!RuntimePlatform.isMobile) return draggable;
+                  // ReorderableListView 要求每个 item 的最外层 widget 带 key，
+                  // 因此 key 必须放在 Semantics 这一层，而不是内部的拖拽监听器上。
+                  if (!RuntimePlatform.isMobile) {
+                    return KeyedSubtree(
+                      key: ValueKey(server.id),
+                      child: draggable,
+                    );
+                  }
 
                   // 手机：点按打开底部操作面板，长按仍是拖动排序。
                   return Semantics(
+                    key: ValueKey(server.id),
                     container: true,
                     label: '${server.name}，${_statusLabel(status)}',
                     hint: '点按打开操作面板，长按拖动排序',

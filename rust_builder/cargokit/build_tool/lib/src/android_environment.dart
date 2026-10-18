@@ -111,6 +111,19 @@ class AndroidEnvironment {
 
     final targetArg = '--target=${target.rust}$minSdkVersion';
 
+    // bindgen 解析 C 头文件时不会自动带上 Android 的 sysroot，缺失时它会按
+    // 宿主平台查找标准头，Windows 上表现为 "stdlib.h file not found"，
+    // 直接导致 Rust 动态库编译失败、APK 里没有 .so（启动黑屏）。
+    // bindgen 按 shell 规则拆分该变量，路径统一用正斜杠避免反斜杠被转义。
+    final sysrootPath = path.join(
+      ndkPath,
+      'toolchains',
+      'llvm',
+      'prebuilt',
+      hostArch,
+      'sysroot',
+    );
+
     final ccKey = 'CC_${target.rust}';
     final ccValue = path.join(toolchainPath, 'clang$exe');
     final cfFlagsKey = 'CFLAGS_${target.rust}';
@@ -156,6 +169,8 @@ class AndroidEnvironment {
       cfFlagsKey: cFlagsValue,
       cxxKey: cxxValue,
       cxxFlagsKey: cxxFlagsValue,
+      'BINDGEN_EXTRA_CLANG_ARGS':
+          '--sysroot=${sysrootPath.replaceAll('\\', '/')}',
       ranlibKey: ranlibValue,
       rustFlagsKey: rustFlagsValue,
       linkerKey: selfPath,
