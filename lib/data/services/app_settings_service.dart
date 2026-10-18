@@ -2,9 +2,11 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:astral_game/data/models/active_room_session.dart';
 import 'package:astral_game/data/models/speed_test_snapshot.dart';
 import 'package:astral_game/utils/avatar_hash.dart';
 import 'package:astral_game/utils/logger.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -31,6 +33,8 @@ class AppSettingsService {
   Uint8List? _avatarBytes;
   String? _avatarHash;
   bool _avatarLoaded = false;
+
+  String? _systemUsernameCache;
 
   File? get _avatarFile {
     final dir = _supportDir;
@@ -77,20 +81,12 @@ class AppSettingsService {
   // ---- 网络配置 ----
 
   static const String _keyDisableP2p = 'disable_p2p';
-  static const String _keyEnableUdpBroadcastRelay =
-      'enable_udp_broadcast_relay';
   static const String _keyFloatingOverlayEnabled = 'floating_overlay_enabled';
   static const String _keyMemberListCompact = 'member_list_compact';
 
   bool isDisableP2p() => _prefs.getBool(_keyDisableP2p) ?? false;
   Future<void> setDisableP2p(bool value) async =>
       await _prefs.setBool(_keyDisableP2p, value);
-
-  /// Windows：是否启用 EasyTier「UDP 广播转发到虚拟网」。
-  bool isEnableUdpBroadcastRelay() =>
-      _prefs.getBool(_keyEnableUdpBroadcastRelay) ?? false;
-  Future<void> setEnableUdpBroadcastRelay(bool value) async =>
-      await _prefs.setBool(_keyEnableUdpBroadcastRelay, value);
 
   /// Android：房间在线用户悬浮窗。
   bool isFloatingOverlayEnabled() =>
@@ -116,11 +112,61 @@ class AppSettingsService {
 
   // ---- 用户信息 ----
 
-  /// 获取用户名，如果为空则返回系统用户名
+  static const String _keyProfileSetupDone = 'profile_setup_done';
+
+  /// 是否需要首次启动资料引导：从未设置昵称，且未完成/跳过引导。
+  bool needsProfileSetup() {
+    final savedUsername = _prefs.getString(_keyUsername);
+    if (savedUsername != null && savedUsername.isNotEmpty) return false;
+    return !(_prefs.getBool(_keyProfileSetupDone) ?? false);
+  }
+
+  /// 标记首次启动资料引导已完成（保存或跳过）。
+  Future<void> markProfileSetupDone() async =>
+      await _prefs.setBool(_keyProfileSetupDone, true);
+
+  /// 获取用户名，未设置时默认使用系统用户名
   String getUsername() {
     final savedUsername = _prefs.getString(_keyUsername);
     if (savedUsername != null && savedUsername.isNotEmpty) {
       return savedUsername;
+    }
+    return _systemUsernameCache ?? _fallbackUsername();
+  }
+
+  /// 启动时预取系统登录用户名，之后 [getUsername] 同步读取缓存。
+  ///
+  /// Windows 由 device_info_plus 调用原生 `GetUserNameW` 获取；
+  /// macOS / Linux 没有统一的库接口，读取 POSIX 登录名环境变量；
+  /// Android / iOS 没有登录用户概念，回退为「玩家」。
+  Future<void> warmUpSystemUsername() async {
+    if (_systemUsernameCache != null) return;
+    try {
+      if (Platform.isWindows) {
+        final info = await DeviceInfoPlugin().windowsInfo;
+        _systemUsernameCache = _normalizeUsername(info.userName);
+      } else if (Platform.isMacOS || Platform.isLinux) {
+        _systemUsernameCache = _normalizeUsername(
+          Platform.environment['USER'] ?? Platform.environment['LOGNAME'],
+        );
+      }
+    } catch (e) {
+      appLogger.e('[AppSettingsService] 读取系统用户名失败: $e');
+    }
+  }
+
+  String? _normalizeUsername(String? name) {
+    final trimmed = name?.trim();
+    return trimmed != null && trimmed.isNotEmpty ? trimmed : null;
+  }
+
+  /// 预取失败时的兜底，取不到时回退为「玩家」
+  String _fallbackUsername() {
+    if (!Platform.isWindows) {
+      final posixName = _normalizeUsername(
+        Platform.environment['USER'] ?? Platform.environment['LOGNAME'],
+      );
+      if (posixName != null) return posixName;
     }
     return '玩家';
   }
@@ -188,6 +234,55 @@ class AppSettingsService {
   String getVirtualIpv6() => _prefs.getString(_keyVirtualIpv6) ?? '';
   Future<void> setVirtualIpv6(String value) async =>
       await _prefs.setString(_keyVirtualIpv6, value);
+
+  // ---- Windows 启动行为 ----
+
+  static const String _keyStartToTray = 'start_to_tray';
+  static const String _keyAutoEnterRoom = 'auto_enter_room';
+  static const String _keyAutoEnterBookmarkId = 'auto_enter_bookmark_id';
+  static const String _keyLastRoomPayload = 'last_room_payload';
+
+  /// 开机启动后是否直接驻留托盘（仅开机拉起时生效）。
+  bool getStartToTray() => _prefs.getBool(_keyStartToTray) ?? false;
+  Future<void> setStartToTray(bool value) async =>
+      await _prefs.setBool(_keyStartToTray, value);
+
+  /// 启动后是否自动进入指定房间（房间来自收藏）。
+  bool getAutoEnterRoom() => _prefs.getBool(_keyAutoEnterRoom) ?? false;
+  Future<void> setAutoEnterRoom(bool value) async =>
+      await _prefs.setBool(_keyAutoEnterRoom, value);
+
+  /// 启动后自动进入的收藏房间 id（收藏被删除时为空）。
+  int? getAutoEnterBookmarkId() => _prefs.getInt(_keyAutoEnterBookmarkId);
+  Future<void> setAutoEnterBookmarkId(int? id) async {
+    if (id == null) {
+      await _prefs.remove(_keyAutoEnterBookmarkId);
+      return;
+    }
+    await _prefs.setInt(_keyAutoEnterBookmarkId, id);
+  }
+
+  /// 上次成功进入的房间（离开房间时清除）。
+  RoomInvitePayload? getLastRoomPayload() {
+    final raw = _prefs.getString(_keyLastRoomPayload);
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final json = jsonDecode(raw);
+      if (json is! Map<String, dynamic>) return null;
+      return RoomInvitePayload.fromJson(json);
+    } catch (e) {
+      appLogger.w('[AppSettingsService] 解析上次房间失败: $e');
+      return null;
+    }
+  }
+
+  Future<void> setLastRoomPayload(RoomInvitePayload? payload) async {
+    if (payload == null) {
+      await _prefs.remove(_keyLastRoomPayload);
+      return;
+    }
+    await _prefs.setString(_keyLastRoomPayload, jsonEncode(payload.toJson()));
+  }
 
   // ---- 测速 ----
 

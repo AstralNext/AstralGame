@@ -1,3 +1,4 @@
+import 'package:astral_game/config/app_dimensions.dart';
 import 'package:signals/signals.dart';
 
 class ScreenStateService {
@@ -6,10 +7,8 @@ class ScreenStateService {
   bool get isNarrow => _isNarrow.value;
   Signal<bool> get isNarrowSignal => _isNarrow;
 
-  static const double _narrowThreshold = 600;
-
   void updateScreenWidth(double width) {
-    _isNarrow.value = width < _narrowThreshold;
+    _isNarrow.value = width < AppBreakpoints.narrow;
   }
 
   void dispose() {

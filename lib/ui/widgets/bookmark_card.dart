@@ -35,16 +35,23 @@ class BookmarkCardActions {
   final VoidCallback onRemoveCover;
 }
 
-/// 窄屏横版卡片：封面左 + 信息中 + 更多菜单右，点击整卡=加入房间。
+/// 窄屏横版卡片：封面左 + 信息中 + 明确的「加入」按钮右。
+///
+/// 手机上没有 hover，也没有稳定的右键：点整卡（或长按）打开底部操作面板，
+/// 只有右侧的「加入」按钮会直接连接房间，避免误触。
 class BookmarkCard extends StatelessWidget {
   const BookmarkCard({
     super.key,
     required this.bookmark,
     required this.actions,
+    required this.onOpenActions,
   });
 
   final Bookmark bookmark;
   final BookmarkCardActions actions;
+
+  /// 打开底部操作面板（加入 / 置顶 / 分享 / 编辑 / 封面 / 删除）。
+  final VoidCallback onOpenActions;
 
   @override
   Widget build(BuildContext context) {
@@ -52,19 +59,23 @@ class BookmarkCard extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
 
     return AstralCard(
-      onTap: actions.onJoin,
+      onTap: onOpenActions,
+      onLongPress: onOpenActions,
       padding: const EdgeInsets.all(12),
       child: Row(
         children: [
           SizedBox(
             width: 64,
             height: 92,
-            child: Stack(
-              children: [
-                Positioned.fill(child: _Cover(bookmark: bookmark)),
-                if (bookmark.pinned)
-                  const Positioned(top: 4, right: 4, child: _PinBadge()),
-              ],
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Stack(
+                children: [
+                  Positioned.fill(child: BookmarkCover(bookmark: bookmark)),
+                  if (bookmark.pinned)
+                    const Positioned(top: 4, right: 4, child: _PinBadge()),
+                ],
+              ),
             ),
           ),
           const SizedBox(width: 12),
@@ -83,7 +94,7 @@ class BookmarkCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  _gameLabel(bookmark),
+                  bookmarkGameLabel(bookmark),
                   style: textTheme.bodySmall?.copyWith(
                     color: palette.textSecondary,
                   ),
@@ -101,9 +112,54 @@ class BookmarkCard extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(width: 4),
-          BookmarkActionsMenu(bookmark: bookmark, actions: actions),
+          const SizedBox(width: 8),
+          _JoinPillButton(onPressed: actions.onJoin),
         ],
+      ),
+    );
+  }
+}
+
+/// 卡片右侧的主操作：一眼可见、触控区域足够大的「加入」胶囊。
+class _JoinPillButton extends StatelessWidget {
+  const _JoinPillButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.astralPalette;
+    final textTheme = Theme.of(context).textTheme;
+    return Material(
+      color: palette.accent,
+      borderRadius: BorderRadius.circular(999),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onPressed,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 40, minWidth: 64),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.play_arrow_rounded,
+                  size: 18,
+                  color: palette.onAccent,
+                ),
+                const SizedBox(width: 2),
+                Text(
+                  '加入',
+                  style: textTheme.labelMedium?.copyWith(
+                    color: palette.onAccent,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -135,7 +191,7 @@ class BookmarkGridCard extends StatelessWidget {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                _Cover(bookmark: bookmark),
+                BookmarkCover(bookmark: bookmark),
                 if (bookmark.pinned)
                   const Positioned(top: 6, left: 6, child: _PinBadge()),
                 Positioned(
@@ -166,7 +222,7 @@ class BookmarkGridCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  _gameLabel(bookmark),
+                  bookmarkGameLabel(bookmark),
                   style: textTheme.labelSmall?.copyWith(
                     color: palette.textSecondary,
                   ),
@@ -184,8 +240,10 @@ class BookmarkGridCard extends StatelessWidget {
 
 /// 封面：优先用户自定义封面，其次注册过的游戏用媒体图（cover 填充），
 /// 都没有时用游戏名兜底块。
-class _Cover extends StatelessWidget {
-  const _Cover({required this.bookmark});
+///
+/// 公开给手机端操作面板复用，保证卡片和面板里的封面始终一致。
+class BookmarkCover extends StatelessWidget {
+  const BookmarkCover({super.key, required this.bookmark});
   final Bookmark bookmark;
 
   @override
@@ -389,7 +447,8 @@ class _MenuItemRow extends StatelessWidget {
   }
 }
 
-String _gameLabel(Bookmark bookmark) {
+/// 卡片与操作面板共用的游戏名（优先注册表里的显示名）。
+String bookmarkGameLabel(Bookmark bookmark) {
   final game = GameCatalog.byId(bookmark.payload.gameId);
   return game?.displayName ??
       (bookmark.payload.gameName.trim().isEmpty

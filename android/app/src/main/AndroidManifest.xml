@@ -5,6 +5,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.INSTALL_SHORTCUT" />
     <application
         android:label="Astral Game"
@@ -37,6 +38,18 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="astralgame" />
+            </intent-filter>
+            <!-- 分享出去的是 https 邀请链接，声明后可由系统直接交给 App 处理；
+                 需要在 next.astral.fan 部署 /.well-known/assetlinks.json 才能自动校验，
+                 未配置时仍会回落到浏览器。 -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="next.astral.fan"
+                    android:pathPrefix="/j" />
             </intent-filter>
         </activity>
         <!-- VPN service is declared by vpn_service_plugin (AstralVpnService). -->

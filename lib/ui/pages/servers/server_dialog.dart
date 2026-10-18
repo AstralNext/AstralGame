@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/di.dart';
 import 'package:astral_game/data/state/server_state.dart';
 import 'package:astral_game/data/models/server_mod.dart';
@@ -81,7 +82,10 @@ class _ServerDialogState extends State<ServerDialog> {
       final result = await _probeService.probe(server);
       if (!mounted) return;
       setState(() => _probing = false);
-      if (!result.isEasyTier && !await _confirmNonEasyTier(server.url)) return;
+      if (result.isEasyTier == false &&
+          !await _confirmNonEasyTier(server.url)) {
+        return;
+      }
       if (!mounted) return;
       await getIt<ServerState>().addServer(server);
     } else {
@@ -122,7 +126,7 @@ class _ServerDialogState extends State<ServerDialog> {
 
     return AlertDialog(
       // 窄屏收紧默认 insetPadding（左右各 40 太浪费），给输入框留出宽度
-      insetPadding: MediaQuery.sizeOf(context).width < 600
+      insetPadding: MediaQuery.sizeOf(context).width < AppBreakpoints.narrow
           ? const EdgeInsets.symmetric(horizontal: 20, vertical: 24)
           : null,
       title: Text(widget.title),

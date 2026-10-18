@@ -1,17 +1,24 @@
 # 发布 Astral Game
 #
-# 仅手动：Actions → 发布 → Run workflow。须先有对应 tag 的 Build 产物。
-# 推送 v* 标签只会触发编译，不会创建 GitHub Release。
+# 自动：推送 v* 标签 → Build 三端编译成功 → 本工作流自动创建并发布 Release，
+#       同时触发 AUR 推送（Release 附件对外可见后才推 AUR）。
+# 手动：Actions → 发布 → Run workflow（指定 tag，复用该 tag 最近一次 Build 产物，
+#       创建 draft Release，仍需手动 Publish）。
 #
 # Secret：
 # - ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_PASSWORD / ANDROID_KEY_ALIAS
 #   （Build 工作流正式签名 Android APK；PR 无密钥时回退 debug）
-# - ASTRAL_SITE_TOKEN（repo 写权限 PAT：创建 Release）
+# - ASTRAL_SITE_TOKEN（repo 写权限 PAT：创建 Release；GITHUB_TOKEN 创建的 release
+#   事件不会触发 AUR 工作流，因此自动流程会显式 workflow_dispatch 一次）
 # 附件命名：astral-game-<semver>-<platform>-<arch>.<ext>
 
 name: 发布
 
 on:
+  # Build 跑完之后接手；只有 v* 标签推送触发的成功编译才进入自动发布。
+  workflow_run:
+    workflows: ['🚀 Build Astral Game']
+    types: [completed]
   workflow_dispatch:
     inputs:
       tag_name:
@@ -21,46 +28,80 @@ on:
 
 permissions:
   contents: write
-  actions: read
+  actions: write # 显式触发 AUR 工作流
   attestations: write
+
+# 同一个 tag 串行发布；自动触发 + 手动重跑不会并发写同一个 Release。
+concurrency:
+  group: release-${{ github.event.workflow_run.head_branch || inputs.tag_name }}
+  cancel-in-progress: false
 
 jobs:
   release:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       startsWith(github.event.workflow_run.head_branch, 'v'))
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.cfg.outputs.version }}
       tag: ${{ steps.cfg.outputs.tag }}
+      run_id: ${{ steps.cfg.outputs.run_id }}
+      auto: ${{ steps.cfg.outputs.auto }}
     steps:
       - name: 检出
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_branch || inputs.tag_name }}
 
       - name: 解析发布参数
         id: cfg
         env:
-          GH_TOKEN: ${{ secrets.ASTRAL_SITE_TOKEN || secrets.GITHUB_TOKEN }}
+          EVENT: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag_name }}
+          RUN_TAG: ${{ github.event.workflow_run.head_branch }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
         run: |
-          set -euxo pipefail
-          TAG="${{ inputs.tag_name }}"
+          set -euo pipefail
+          if [ "$EVENT" = "workflow_run" ]; then
+            TAG="$RUN_TAG"
+            RUN="$RUN_ID"
+            SEARCH=false
+            MISSING=fail
+            DRAFT=false
+            AUTO=true
+          else
+            TAG="$INPUT_TAG"
+            RUN=""
+            SEARCH=true
+            MISSING=warn
+            DRAFT=true
+            AUTO=false
+          fi
+          if [ -z "$TAG" ]; then
+            echo "::error::未解析到 tag"
+            exit 1
+          fi
           VER="${TAG#v}"
 
-          echo "skip=false" >> "$GITHUB_OUTPUT"
           {
             echo "tag=$TAG"
             echo "version=$VER"
             echo "target=main"
-            echo "draft=true"
+            echo "draft=$DRAFT"
             echo "prerelease=true"
-            echo "run_id="
-            echo "search=true"
+            echo "run_id=$RUN"
+            echo "search=$SEARCH"
+            echo "missing=$MISSING"
+            echo "auto=$AUTO"
           } >> "$GITHUB_OUTPUT"
 
           echo "PKG_VER=$VER" >> "$GITHUB_ENV"
           echo "TAG_NAME=$TAG" >> "$GITHUB_ENV"
 
       - name: 拉取 Windows zip
-        if: steps.cfg.outputs.skip != 'true'
         uses: dawidd6/action-download-artifact@v6
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -69,10 +110,9 @@ jobs:
           name: astral-game-windows-x64
           path: _dl/windows
           search_artifacts: ${{ steps.cfg.outputs.search == 'true' }}
-          if_no_artifact_found: warn
+          if_no_artifact_found: ${{ steps.cfg.outputs.missing }}
 
       - name: 拉取 Linux
-        if: steps.cfg.outputs.skip != 'true'
         uses: dawidd6/action-download-artifact@v6
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -81,10 +121,9 @@ jobs:
           name: astral-game-linux-x64
           path: _dl/linux
           search_artifacts: ${{ steps.cfg.outputs.search == 'true' }}
-          if_no_artifact_found: warn
+          if_no_artifact_found: ${{ steps.cfg.outputs.missing }}
 
       - name: 拉取 Android arm64
-        if: steps.cfg.outputs.skip != 'true'
         uses: dawidd6/action-download-artifact@v6
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -93,10 +132,9 @@ jobs:
           name: astral-game-android-arm64
           path: _dl/android-arm64
           search_artifacts: ${{ steps.cfg.outputs.search == 'true' }}
-          if_no_artifact_found: warn
+          if_no_artifact_found: ${{ steps.cfg.outputs.missing }}
 
       - name: 拉取 Windows 安装包
-        if: steps.cfg.outputs.skip != 'true'
         uses: dawidd6/action-download-artifact@v6
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -105,10 +143,9 @@ jobs:
           name: astral-game-windows-x64-setup
           path: _dl/installer
           search_artifacts: ${{ steps.cfg.outputs.search == 'true' }}
-          if_no_artifact_found: warn
+          if_no_artifact_found: ${{ steps.cfg.outputs.missing }}
 
       - name: 规范命名 release/
-        if: steps.cfg.outputs.skip != 'true'
         env:
           PKG_VER: ${{ steps.cfg.outputs.version }}
         run: |
@@ -122,7 +159,6 @@ jobs:
           ls -la release/ || true
 
       - name: 创建 GitHub Release
-        if: steps.cfg.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.ASTRAL_SITE_TOKEN || secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.cfg.outputs.tag }}
@@ -147,6 +183,17 @@ jobs:
           files=(release/*)
           gh "${args[@]}" "${files[@]}"
 
+      - name: 触发 AUR 发布
+        if: steps.cfg.outputs.auto == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.ASTRAL_SITE_TOKEN || secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.cfg.outputs.tag }}
+        run: |
+          set -euo pipefail
+          # release.published 若由 GITHUB_TOKEN 触发不会再拉起工作流，这里显式派发；
+          # aur.yml 自身有 concurrency + 幂等判断，重复触发时第二次直接跳过。
+          gh workflow run aur.yml --repo "$GITHUB_REPOSITORY" -f tag_name="$TAG"
+
   # 顺带产出 Arch 包（.pkg.tar.zst）并挂到同一个 Release：
   # 玩家不装 AUR 也能一条命令装 —— pacman 原生支持 URL：
   #   sudo pacman -U https://github.com/.../releases/download/<tag>/astral-game-bin-<版本>-1-x86_64.pkg.tar.zst
@@ -164,11 +211,14 @@ jobs:
 
       - name: 📥 检出
         uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.release.outputs.tag }}
 
       - name: 📥 拉取 Linux 产物
         uses: dawidd6/action-download-artifact@v6
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          run_id: ${{ needs.release.outputs.run_id }}
           workflow: build.yml
           name: astral-game-linux-x64
           path: _dl/linux
@@ -186,7 +236,7 @@ jobs:
              "$GITHUB_WORKSPACE"/packaging/aur/fan.astral.next.game.desktop .
 
           # 产物已在手，放到 makepkg 认得的同名位置就不会再去下载
-          # （此时 Release 还是 draft，source URL 对外不可访问）；pkgver / sha256sums 按本次产物覆盖。
+          # （此时 Release 若还是 draft，source URL 对外不可访问）；pkgver / sha256sums 按本次产物覆盖。
           cp "$GITHUB_WORKSPACE"/_dl/linux/astral-game-linux-x64.tar.gz \
              "astral-game-bin-$VER.tar.gz"
           SHA=$(sha256sum "astral-game-bin-$VER.tar.gz" | cut -d' ' -f1)

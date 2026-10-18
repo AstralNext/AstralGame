@@ -108,6 +108,9 @@ const kSpeedTestThreads = 4;
 // --- 远程服务 ---
 
 /// astral-share 短码服务地址。
+///
+/// 本地联调时可临时改为 `http://127.0.0.1:8080/`；
+/// Android 模拟器访问宿主机要用 `http://10.0.2.2:8080/`。
 const kShareCodeServiceBaseUrl = 'http://103.194.107.25:8080/';
 
 /// SmartDNS 配置（`smartdns.conf`）的远端下发地址，与 gamerules.json 同域。
@@ -119,6 +122,11 @@ const kSmartDnsConfUrl = 'https://next.astral.fan/smartdns.conf';
 /// astral-share 短码服务请求超时：短码只是锦上添花（有离线邀请兜底），
 /// 不能让建房/分享等关键路径被无超时请求无限挂起。
 const kShareCodeTimeout = Duration(seconds: 8);
+
+/// 短码心跳间隔：房间存续期间定期续期，避免短码先于房间过期。
+///
+/// 服务端采用滑动续期（默认 7 天），每次 create / GET / 心跳都会把有效期往后推。
+const kShareCodeHeartbeatInterval = Duration(minutes: 5);
 
 // --- 远程服务超时 ---
 // 各远程 HTTP 服务的超时统一收口在此，改一处全局生效。

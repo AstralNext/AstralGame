@@ -1,6 +1,3 @@
-import 'package:astral_game/utils/logger.dart';
-import 'dart:async';
-
 import 'package:signals/signals.dart';
 import 'package:astral_game/data/models/server_mod.dart';
 import 'package:astral_game/data/services/server_probe_service.dart';
@@ -107,104 +104,106 @@ class ServerStatusState {
   final serverStatuses = signal<Map<int, ServerStatus>>({});
   final serverLatencies = signal<Map<int, int?>>({});
 
-  /// 「加入节点」探测结果（是否 ET 服务器 + 版本），仅在手动检测后写入。
+  /// 「加入节点」探测结果（是否 ET 服务器），仅在手动检测后写入。
   final serverProbes = signal<Map<int, ServerProbeResult>>({});
 
   /// 正在探测中的服务器 id，用于 UI 展示「探测中」。
   final probingServerIds = signal<Set<int>>({});
+
+  /// 最近一次手动探测完成的时间，用于页头展示。
+  final lastProbeAt = signal<DateTime?>(null);
+
   final activeServerIds = signal<Set<int>>({});
   final ServerProbeService _probeService = ServerProbeService();
-  Timer? _checkTimer;
-  bool _checking = false;
+
+  /// 记录探测时使用的地址，地址被修改后据此丢弃过期结果。
+  final Map<int, String> _probedUrls = {};
 
   bool isProbing(int serverId) => probingServerIds.value.contains(serverId);
 
   ServerProbeResult? probeResultOf(int serverId) =>
       serverProbes.value[serverId];
 
-  /// 手动触发一次「加入节点」探测（模拟 ET 握手），每个服务器只探测一次。
+  /// 手动触发一次「加入节点」探测（真实 ET 握手），每个服务器只探测一次。
   ///
-  /// 探测期间对应服务器进入「探测中」；完成后写入「是否 ET + 版本」，并以
-  /// TCP ping 刷新 [serverLatencies]（延迟不走模拟探测）。
+  /// 只有用户点击刷新/下拉刷新时才会调用，不做任何自动轮询。
+  /// 探测期间对应服务器进入「探测中」；完成后写入「是否 ET」，
+  /// 并以 TCP ping 刷新 [serverLatencies] 与 [serverStatuses]。
   Future<void> probeServers(List<ServerMod> servers) async {
     if (servers.isEmpty) return;
-    final pendingIds = {for (final s in servers) s.id};
+    final activeIds = activeServerIds.value;
+    final targets = serversEligibleForPing(servers, activeIds: activeIds);
+    if (targets.isEmpty) return;
+    final pendingIds = {for (final s in targets) s.id};
     probingServerIds.value = {...probingServerIds.value, ...pendingIds};
     try {
       final probesFuture = Future.wait([
-        for (final s in servers) _probeService.probe(s),
+        for (final s in targets) _probeService.probe(s),
       ]);
       final latenciesFuture = PingUtil.tcpPingMany([
-        for (final s in servers) s.url,
+        for (final s in targets) s.url,
       ]);
       final results = await probesFuture;
       final rtts = await latenciesFuture;
       final nextProbes = Map<int, ServerProbeResult>.from(serverProbes.value);
       final nextLatencies = Map<int, int?>.from(serverLatencies.value);
-      for (var i = 0; i < servers.length; i++) {
-        nextProbes[servers[i].id] = results[i];
-        nextLatencies[servers[i].id] = i < rtts.length ? rtts[i] : null;
+      final nextStatuses = Map<int, ServerStatus>.from(serverStatuses.value);
+      // 禁用/使用中的服务器不发起探测，清掉上一次的延迟与在线状态。
+      for (final server in servers) {
+        if (pendingIds.contains(server.id)) continue;
+        nextLatencies.remove(server.id);
+        nextStatuses[server.id] = activeIds.contains(server.id)
+            ? ServerStatus.inUse
+            : ServerStatus.unknown;
+      }
+      for (var i = 0; i < targets.length; i++) {
+        final server = targets[i];
+        final latency = i < rtts.length ? rtts[i] : null;
+        nextProbes[server.id] = results[i];
+        nextLatencies[server.id] = latency;
+        nextStatuses[server.id] = latency != null
+            ? ServerStatus.online
+            : ServerStatus.offline;
+        _probedUrls[server.id] = server.url;
       }
       serverProbes.value = nextProbes;
       serverLatencies.value = nextLatencies;
+      serverStatuses.value = nextStatuses;
+      lastProbeAt.value = DateTime.now();
     } finally {
       final remaining = {...probingServerIds.value}..removeAll(pendingIds);
       probingServerIds.value = remaining;
     }
   }
 
-  void startPeriodicCheck(List<ServerMod> servers, Duration interval) {
-    _checkTimer?.cancel();
-    _checkTimer = Timer.periodic(interval, (_) {
-      unawaited(checkServersStatus(servers));
-    });
-    unawaited(checkServersStatus(servers));
-  }
-
-  void stopPeriodicCheck() {
-    _checkTimer?.cancel();
-    _checkTimer = null;
-  }
-
-  Future<void> checkServersStatus(List<ServerMod> servers) async {
-    if (_checking) return;
-    _checking = true;
-    try {
-      final activeIds = activeServerIds.value;
-      final Map<int, ServerStatus> newStatuses = {};
-      final Map<int, int?> newLatencies = {};
-
-      for (final server in servers) {
-        if (activeIds.contains(server.id)) {
-          newStatuses[server.id] = ServerStatus.inUse;
-          newLatencies[server.id] = null;
-        } else if (!server.enable) {
-          newStatuses[server.id] = ServerStatus.unknown;
-          newLatencies[server.id] = null;
-        }
-      }
-
-      final targets = serversEligibleForPing(servers, activeIds: activeIds);
-      List<int?> rtts = const [];
-      try {
-        rtts = await PingUtil.tcpPingMany([for (final s in targets) s.url]);
-      } catch (e) {
-        appLogger.w('[ServerState] 操作失败', error: e);
-        rtts = List<int?>.filled(targets.length, null);
-      }
-      for (var i = 0; i < targets.length; i++) {
-        final latency = i < rtts.length ? rtts[i] : null;
-        newLatencies[targets[i].id] = latency;
-        newStatuses[targets[i].id] = latency != null
-            ? ServerStatus.online
-            : ServerStatus.offline;
-      }
-
-      serverStatuses.value = newStatuses;
-      serverLatencies.value = newLatencies;
-    } finally {
-      _checking = false;
+  /// 地址被修改、服务器被删除或被禁用时，丢弃对应的旧延迟/状态。
+  void invalidateStaleProbes(List<ServerMod> servers) {
+    final currentUrls = {for (final s in servers) s.id: s.url};
+    final staleIds = <int>[];
+    for (final entry in _probedUrls.entries) {
+      if (currentUrls[entry.key] != entry.value) staleIds.add(entry.key);
     }
+    final disabledIds = {
+      for (final s in servers)
+        if (!s.enable) s.id,
+    };
+    if (staleIds.isEmpty && disabledIds.isEmpty) return;
+    for (final id in staleIds) {
+      _probedUrls.remove(id);
+    }
+    serverProbes.value = {
+      for (final entry in serverProbes.value.entries)
+        if (!staleIds.contains(entry.key)) entry.key: entry.value,
+    };
+    final dropRuntimeIds = {...staleIds, ...disabledIds};
+    serverLatencies.value = {
+      for (final entry in serverLatencies.value.entries)
+        if (!dropRuntimeIds.contains(entry.key)) entry.key: entry.value,
+    };
+    serverStatuses.value = {
+      for (final entry in serverStatuses.value.entries)
+        if (!dropRuntimeIds.contains(entry.key)) entry.key: entry.value,
+    };
   }
 
   void setActiveServers(Set<int> serverIds) {
@@ -213,9 +212,5 @@ class ServerStatusState {
 
   ServerStatus getServerStatus(int serverId) {
     return serverStatuses.value[serverId] ?? ServerStatus.unknown;
-  }
-
-  void dispose() {
-    stopPeriodicCheck();
   }
 }

@@ -1,18 +1,16 @@
 import 'dart:typed_data';
 
+import 'package:astral_game/config/theme.dart';
+import 'package:astral_game/ui/widgets/glass_capsule.dart';
 import 'package:flutter/material.dart';
 
 /// 头像形状
-enum AvatarShape {
-  circle,
-  roundedSquare,
-}
+enum AvatarShape { circle, roundedSquare }
 
 /// 头像组件
 ///
 /// 统一的头像显示组件，支持圆形和圆角方形
 class AvatarWidget extends StatelessWidget {
-
   const AvatarWidget({
     super.key,
     this.avatar,
@@ -24,27 +22,28 @@ class AvatarWidget extends StatelessWidget {
     this.borderWidth = 1,
     this.showBorder = true,
   });
+
   /// 头像数据
   final Uint8List? avatar;
-  
+
   /// 头像大小
   final double size;
-  
+
   /// 点击回调
   final VoidCallback? onTap;
-  
+
   /// 头像形状
   final AvatarShape shape;
-  
+
   /// 圆角半径（仅当 shape 为 roundedSquare 时有效）
   final double? borderRadius;
-  
+
   /// 占位图标
   final IconData placeholderIcon;
-  
+
   /// 边框宽度
   final double borderWidth;
-  
+
   /// 是否显示边框
   final bool showBorder;
 
@@ -56,18 +55,20 @@ class AvatarWidget extends StatelessWidget {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        shape: shape == AvatarShape.circle ? BoxShape.circle : BoxShape.rectangle,
-        borderRadius: shape == AvatarShape.roundedSquare 
+        shape: shape == AvatarShape.circle
+            ? BoxShape.circle
+            : BoxShape.rectangle,
+        borderRadius: shape == AvatarShape.roundedSquare
             ? BorderRadius.circular(borderRadius ?? size * 0.25)
             : null,
         color: colorScheme.primaryContainer,
-        border: showBorder 
+        border: showBorder
             ? Border.all(color: colorScheme.outline, width: borderWidth)
             : null,
       ),
       child: avatar != null
           ? ClipRRect(
-              borderRadius: shape == AvatarShape.circle 
+              borderRadius: shape == AvatarShape.circle
                   ? BorderRadius.circular(size / 2)
                   : BorderRadius.circular(borderRadius ?? size * 0.25),
               child: Image.memory(
@@ -75,8 +76,16 @@ class AvatarWidget extends StatelessWidget {
                 fit: BoxFit.cover,
                 width: size,
                 height: size,
-                cacheWidth: (size * (MediaQuery.maybeOf(context)?.devicePixelRatio ?? 2)).round(),
-                cacheHeight: (size * (MediaQuery.maybeOf(context)?.devicePixelRatio ?? 2)).round(),
+                cacheWidth:
+                    (size *
+                            (MediaQuery.maybeOf(context)?.devicePixelRatio ??
+                                2))
+                        .round(),
+                cacheHeight:
+                    (size *
+                            (MediaQuery.maybeOf(context)?.devicePixelRatio ??
+                                2))
+                        .round(),
                 gaplessPlayback: true,
               ),
             )
@@ -88,12 +97,64 @@ class AvatarWidget extends StatelessWidget {
     );
 
     if (onTap != null) {
-      return GestureDetector(
-        onTap: onTap,
-        child: avatarContent,
-      );
+      return GestureDetector(onTap: onTap, child: avatarContent);
     }
 
     return avatarContent;
+  }
+}
+
+/// 头像 + 昵称的玻璃胶囊（Apple 账户按钮风格），用于各一级页面顶部。
+class ProfileCapsule extends StatelessWidget {
+  const ProfileCapsule({
+    super.key,
+    this.avatar,
+    required this.username,
+    this.onTap,
+    this.maxWidth = 180,
+  });
+
+  final Uint8List? avatar;
+  final String username;
+  final VoidCallback? onTap;
+
+  /// 胶囊最大宽度，昵称过长时省略。
+  final double maxWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.astralPalette;
+    final textTheme = Theme.of(context).textTheme;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: GlassCapsule(
+        radius: BorderRadius.circular(999),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(5, 5, 14, 5),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: maxWidth),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AvatarWidget(avatar: avatar, size: 30, showBorder: false),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    username,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: textTheme.labelLarge?.copyWith(
+                      color: palette.textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

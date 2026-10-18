@@ -5,7 +5,7 @@ import 'package:astral_game/data/services/share_code_service.dart';
 import 'package:astral_game/data/services/shell_navigation_service.dart';
 import 'package:astral_game/data/state/room_state.dart';
 import 'package:astral_game/di.dart';
-import 'package:astral_game/ui/widgets/app_snack_bar.dart';
+import 'package:astral_game/ui/widgets/app_toast.dart';
 import 'package:astral_game/ui/widgets/astral_card.dart';
 import 'package:astral_game/ui/widgets/dashboard_connected_room_card.dart';
 import 'package:astral_game/ui/widgets/dashboard_create_join_pill.dart';
@@ -45,7 +45,6 @@ class DashboardHomePanel extends StatelessWidget {
     this.roomGameId,
     this.roomShortCode,
     this.hostOnline = true,
-    this.virtualIp,
     required this.callbacks,
   });
 
@@ -58,7 +57,6 @@ class DashboardHomePanel extends StatelessWidget {
   final String? roomGameId;
   final String? roomShortCode;
   final bool hostOnline;
-  final String? virtualIp;
   final DashboardCallbacks callbacks;
 
   @override
@@ -85,7 +83,6 @@ class DashboardHomePanel extends StatelessWidget {
                 roomShortCode: roomShortCode,
                 hostOnline: hostOnline,
                 isLinking: isLinking,
-                virtualIp: virtualIp,
                 onShare: callbacks.onShareRoom,
                 onDisconnect: callbacks.onDisconnect,
                 onBookmark: callbacks.onBookmarkRoom,
@@ -293,11 +290,11 @@ Future<void> _handlePreviewJoin(BuildContext context, Bookmark b) async {
   final cs = getIt<ConnectionService>();
   final rs = getIt<RoomState>();
   if (cs.isConnecting) {
-    showAppSnackBar(context, '正在连接中，请稍候…');
+    showAppToast(context, '正在连接中，请稍候…');
     return;
   }
   try {
-    // 不传 shortCode，让 _joinWithPayload 每次自动 create 新短码
+    // 不传 shortCode：_joinWithPayload 会优先复用同房间仍在用的短码
     await cs.joinWithPayload(b.payload);
     // ignore: discarded_futures
     rs.touchBookmarkUsed(b.id);
@@ -306,6 +303,6 @@ Future<void> _handlePreviewJoin(BuildContext context, Bookmark b) async {
   } catch (e) {
     if (!context.mounted) return;
     final msg = e is ShareCodeException ? e.message : '加入失败：${e.runtimeType}';
-    showAppSnackBar(context, msg);
+    showAppToast(context, msg);
   }
 }

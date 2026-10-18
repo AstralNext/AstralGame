@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 
+import 'package:astral_game/config/network_constants.dart';
 import 'package:astral_game/data/models/active_room_session.dart';
 import 'package:astral_game/data/models/game_assist_rules.dart';
 import 'package:astral_game/data/models/server_mod.dart';
@@ -115,6 +116,45 @@ class ConnectionService {
     await _roomAssist.startForRoom(isHost: isHost, gameId: gameId);
     await _gameInject.startForRoom(gameId: gameId);
     await _openGames.startForRoom(isHost: isHost, gameId: gameId);
+    _startShareCodeHeartbeat();
+  }
+
+  Timer? _shareCodeHeartbeat;
+
+  /// 短码心跳：房间存续期间每 [kShareCodeHeartbeatInterval] 续期一次，
+  /// 避免"房间还在用，短码却先过期"。
+  ///
+  /// 只有持有管理令牌的会话（房主本人）才需要心跳；404/403 说明短码已被
+  /// 作废或令牌失效，直接停止，下次分享时由 createOrReuse 重新签发。
+  void _startShareCodeHeartbeat() {
+    _stopShareCodeHeartbeat();
+    final session = _roomState.session.value;
+    final code = session?.shortCode;
+    final token = session?.adminToken;
+    if (code == null || code.isEmpty || token == null || token.isEmpty) {
+      return;
+    }
+    _shareCodeHeartbeat = Timer.periodic(kShareCodeHeartbeatInterval, (
+      _,
+    ) async {
+      try {
+        await _shareCodes.heartbeat(code, token);
+      } on ShareCodeException catch (e) {
+        if (e.statusCode == 404 || e.statusCode == 403) {
+          _stopShareCodeHeartbeat();
+          appLogger.i('[ConnectionService] 短码已失效，停止心跳: ${e.message}');
+          return;
+        }
+        appLogger.w('[ConnectionService] 短码心跳失败: ${e.message}');
+      } catch (e) {
+        appLogger.w('[ConnectionService] 短码心跳失败: $e');
+      }
+    });
+  }
+
+  void _stopShareCodeHeartbeat() {
+    _shareCodeHeartbeat?.cancel();
+    _shareCodeHeartbeat = null;
   }
 
   EffectCleanup? _guestPresenceDispose;
@@ -153,7 +193,7 @@ class ConnectionService {
     String? shortCode;
     String? adminToken;
     try {
-      final created = await _shareCodes.create(payload);
+      final created = await _shareCodes.createOrReuse(payload);
       shortCode = created.code;
       adminToken = created.adminToken;
     } catch (e) {
@@ -186,6 +226,7 @@ class ConnectionService {
         epoch: epoch,
       );
       linked = true;
+      await _appSettings.setLastRoomPayload(payload);
       return session;
     } on ConnectionAbortedException {
       rethrow;
@@ -231,18 +272,16 @@ class ConnectionService {
     return url.isEmpty ? null : url;
   }
 
-  /// 为任意 [RoomInvitePayload] 动态创建一条新短码（不需要 adminToken，任何人都能调）。
+  /// 为任意 [RoomInvitePayload] 取一条短码：同房间的有效码优先复用，过期才新建。
   ///
-  /// 收藏页分享、成员侧临时分享都走这个入口。创建成功后**不会**自动写入 session，
+  /// 收藏页分享、成员侧临时分享都走这个入口。拿到码后**不会**自动写入 session，
   /// 调用方决定是否持久化（如 bookmark.lastShareCode）。
-  Future<({String code, String adminToken, String expiresAt})>
-  createShareCodeForPayload(RoomInvitePayload payload) {
-    return _shareCodes.create(payload);
+  Future<ShareCode> createShareCodeForPayload(RoomInvitePayload payload) {
+    return _shareCodes.createOrReuse(payload);
   }
 
-  /// 为当前会话动态创建一条新短码（房主/成员均可调）。
-  Future<({String code, String adminToken, String expiresAt})>
-  createShareCodeForCurrentSession() {
+  /// 为当前会话取一条短码（房主/成员均可调）：有效码优先复用，过期才新建。
+  Future<ShareCode> createShareCodeForCurrentSession() {
     final session = _roomState.session.value;
     if (session == null) {
       throw StateError('未连接房间，无法生成短码');
@@ -251,7 +290,7 @@ class ConnectionService {
     if (payload == null) {
       throw StateError('当前会话缺少配置，无法生成短码');
     }
-    return _shareCodes.create(payload);
+    return _shareCodes.createOrReuse(payload);
   }
 
   /// 加入房间：6 位 32 进制短码。
@@ -287,12 +326,13 @@ class ConnectionService {
   }) async {
     final invitePeers = joinableInvitePeers(payload);
 
-    // 如果没有短码（从收藏/离线加入），自动 create 一条存进 session，方便后续分享
+    // 没有短码（从收藏/离线加入）时补一条：同房间已有有效码会直接复用，
+    // 不会每次加入都生成新码。
     String? resolvedShortCode = shortCode;
     String? adminToken;
     if (resolvedShortCode == null || resolvedShortCode.isEmpty) {
       try {
-        final created = await _shareCodes.create(payload);
+        final created = await _shareCodes.createOrReuse(payload);
         resolvedShortCode = created.code;
         adminToken = created.adminToken;
       } catch (e) {
@@ -329,6 +369,7 @@ class ConnectionService {
         epoch: epoch,
       );
       linked = true;
+      await _appSettings.setLastRoomPayload(payload);
       return session;
     } on ConnectionAbortedException {
       rethrow;
@@ -366,6 +407,8 @@ class ConnectionService {
 
   /// 离开房间：作废短码（若有）并关闭实例。
   Future<void> leaveRoom() async {
+    // 用户主动离开：不再作为下次启动的「上次房间」。
+    await _appSettings.setLastRoomPayload(null);
     await disconnect(revokeShare: true);
   }
 
@@ -400,8 +443,7 @@ class ConnectionService {
           ? await _gameRules.wantsUdpBroadcastRelay(gameId)
           : false;
       if (!_isLinkActive(epoch)) return false;
-      final fromUser = _appSettings.isEnableUdpBroadcastRelay();
-      final udpRelay = fromGame || fromUser;
+      final udpRelay = fromGame;
       final protocol = gameId != null && gameId.isNotEmpty
           ? await _gameRules.networkProtocol(gameId)
           : GameAssistNetworkProtocol.udp;
@@ -513,6 +555,7 @@ class ConnectionService {
     if (abortLink) {
       _link.abort();
     }
+    _stopShareCodeHeartbeat();
     await _roomAssist.stopAll();
     await _gameInject.stop();
     await _openGames.stop();

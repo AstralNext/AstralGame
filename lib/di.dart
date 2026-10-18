@@ -24,6 +24,7 @@ import 'package:astral_game/data/services/game_inject_service.dart';
 import 'package:astral_game/data/services/open_games_service.dart';
 import 'package:astral_game/data/services/room_assist_service.dart';
 import 'package:astral_game/data/services/windows_process_watch.dart';
+import 'package:astral_game/data/services/windows_settings_service.dart';
 import 'package:astral_game/data/services/windows_time_sync_service.dart';
 import 'package:astral_game/data/services/bookmark_store.dart';
 import 'package:astral_game/data/services/bookmark_cover_store.dart';
@@ -81,6 +82,39 @@ void _registerDispose<T extends Object>(
   });
 }
 
+/// 解析应用支持目录。
+///
+/// Windows 的目录名来自 exe 版本信息里的 CompanyName/ProductName。旧版本沿用了
+/// Flutter 模板默认的 com.example，升级后首次启动将旧目录数据复制过来，避免
+/// 昵称、服务器、收藏等记录丢失。
+Future<Directory> _resolveSupportDir() async {
+  final dir = await getApplicationSupportDirectory();
+  if (!Platform.isWindows) return dir;
+
+  final appData = Platform.environment['APPDATA'];
+  if (appData == null) return dir;
+  final legacy = Directory(p.join(appData, 'com.example', 'Astral Game'));
+  if (!legacy.existsSync()) return dir;
+  if (dir.existsSync() && dir.listSync().isNotEmpty) return dir;
+
+  try {
+    await for (final entity in legacy.list(recursive: true)) {
+      final target = p.join(
+        dir.path,
+        p.relative(entity.path, from: legacy.path),
+      );
+      if (entity is Directory) {
+        await Directory(target).create(recursive: true);
+      } else if (entity is File) {
+        await entity.copy(target);
+      }
+    }
+  } on FileSystemException {
+    // 迁移失败不阻塞启动，用户仍可正常使用，只是停在旧数据上。
+  }
+  return dir;
+}
+
 /// 设置依赖注入
 Future<void> setupDI() async {
   // 为了保证 dispose 顺序（先创建的后销毁），每次 setupDI 前清空列表。
@@ -88,8 +122,11 @@ Future<void> setupDI() async {
 
   // 启动期这几项互不依赖（prefs / 支持目录 / Rust 动态库 / 本机环境 / 收藏库），
   // 先一起发起再按需 await，避免串行叠加成"启动要等几秒"。
-  final prefsFuture = SharedPreferences.getInstance();
-  final supportDirFuture = getApplicationSupportDirectory();
+  // 支持目录可能包含旧版本数据迁移，prefs 需等迁移完成后再读，避免读到空配置。
+  final supportDirFuture = _resolveSupportDir();
+  final prefsFuture = supportDirFuture.then(
+    (_) => SharedPreferences.getInstance(),
+  );
   final rustInitFuture = RustLib.init();
   final runtimeInfoFuture = ClientRuntimeInfo.warmUp();
   final bookmarkStoreFuture = supportDirFuture.then(
@@ -111,6 +148,7 @@ Future<void> setupDI() async {
   final supportDir = await supportDirFuture;
   final settings = AppSettingsService(prefs, supportDir: supportDir);
   await settings.warmUpAvatar();
+  await settings.warmUpSystemUsername();
   getIt.registerSingleton<AppSettingsService>(settings);
 
   getIt.registerSingleton<ScreenStateService>(ScreenStateService());
@@ -136,6 +174,9 @@ Future<void> setupDI() async {
 
   getIt.registerLazySingleton<FirewallService>(() => FirewallService());
   unawaited(getIt<FirewallService>().refreshPrivateProfile());
+  getIt.registerLazySingleton<WindowsSettingsService>(
+    () => WindowsSettingsService(),
+  );
   getIt.registerLazySingleton<NetworkOptimizeService>(
     () => NetworkOptimizeService(),
   );
@@ -210,7 +251,6 @@ Future<void> setupDI() async {
 
   getIt.registerLazySingleton<ServerState>(() => ServerState());
   getIt.registerLazySingleton<ServerStatusState>(() => ServerStatusState());
-  _registerDispose<ServerStatusState>((s) => s.dispose());
   getIt.registerLazySingleton<ServerPersistenceService>(
     () => ServerPersistenceService(),
   );
@@ -295,10 +335,8 @@ Future<void> setupDI() async {
 
   getIt.registerLazySingleton<SpeedTestService>(() => SpeedTestService());
   getIt.registerLazySingleton<SpeedTestState>(
-    () => SpeedTestState(
-      getIt<SpeedTestService>(),
-      getIt<AppSettingsService>(),
-    ),
+    () =>
+        SpeedTestState(getIt<SpeedTestService>(), getIt<AppSettingsService>()),
   );
 
   await _initPeerRpcRouter();

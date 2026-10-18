@@ -4,12 +4,15 @@ import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/config/network_constants.dart';
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/di.dart';
+import 'package:astral_game/data/models/bookmark.dart';
+import 'package:astral_game/data/state/room_state.dart';
 import 'package:astral_game/data/state/settings_state.dart';
 import 'package:astral_game/data/state/update_state.dart';
 import 'package:astral_game/data/state/theme_reveal_state.dart';
-import 'package:astral_game/ui/widgets/app_snack_bar.dart';
+import 'package:astral_game/ui/widgets/app_toast.dart';
 import 'package:astral_game/ui/widgets/astral_grouped_tile.dart';
 import 'package:astral_game/ui/widgets/astral_settings_section.dart';
+import 'package:astral_game/ui/widgets/bookmark_card.dart';
 import 'package:astral_game/ui/widgets/confirm_dialog.dart';
 import 'package:astral_game/ui/widgets/fade_in_section.dart';
 import 'package:astral_game/ui/widgets/linux_capability_prompt.dart';
@@ -19,7 +22,9 @@ import 'package:astral_game/data/services/firewall_service.dart';
 import 'package:astral_game/data/services/floating_overlay_service.dart';
 import 'package:astral_game/data/services/linux_capability_service.dart';
 import 'package:astral_game/data/services/network_optimize_service.dart';
+import 'package:astral_game/data/services/windows_settings_service.dart';
 import 'package:astral_game/utils/input_validator.dart';
+import 'package:astral_game/utils/room_display.dart';
 import 'package:astral_game/utils/runtime_platform.dart';
 import 'package:flutter/material.dart';
 import 'package:signals/signals_flutter.dart';
@@ -39,7 +44,8 @@ class SettingsMainPage extends StatefulWidget {
   State<SettingsMainPage> createState() => _SettingsMainPageState();
 }
 
-class _SettingsMainPageState extends State<SettingsMainPage> {
+class _SettingsMainPageState extends State<SettingsMainPage>
+    with WidgetsBindingObserver {
   static bool get _isDesktop {
     final os = RuntimePlatform.operatingSystem;
     return os != 'android' && os != 'ios';
@@ -47,116 +53,188 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
 
   static bool get _isAndroid => RuntimePlatform.isAndroid;
 
+  /// 已跳转系统悬浮窗授权页，等待返回后复查权限。
+  bool _awaitingOverlayPermission = false;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     if (RuntimePlatform.isWindows) {
       unawaited(getIt<FirewallService>().refreshAllProfiles());
+      unawaited(getIt<WindowsSettingsService>().refresh());
     }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || !_awaitingOverlayPermission) {
+      return;
+    }
+    _awaitingOverlayPermission = false;
+    unawaited(_applyOverlayPermissionResult());
+  }
+
+  Future<void> _applyOverlayPermissionResult() async {
+    final overlay = FloatingOverlayService();
+    if (await overlay.canDrawOverlays()) {
+      await overlay.show();
+      return;
+    }
+    final settingsState = getIt<SettingsState>();
+    settingsState.floatingOverlayEnabled.value = false;
+    await settingsState.saveToPersistence();
+    if (!mounted) return;
+    showAppToast(context, '未获得悬浮窗权限，已关闭悬浮窗');
   }
 
   @override
   Widget build(BuildContext context) {
     final settingsState = getIt<SettingsState>();
     final updateState = getIt<UpdateState>();
+    final isNarrow = MediaQuery.sizeOf(context).width < AppBreakpoints.narrow;
+    final hPad = isNarrow
+        ? AppDimensions.pagePaddingHMobile
+        : AppDimensions.pagePaddingH;
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(
-        AppDimensions.pagePaddingH,
-        AppDimensions.pagePaddingV,
-        AppDimensions.pagePaddingH,
-        24,
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        FadeInSection(
-          child: Watch((context) {
-            final id = settingsState.appThemeId.value;
-            return AstralSettingsSection(
-              title: '外观',
-              items: [
-                AstralSettingItem(
-                  icon: Icons.palette_outlined,
-                  label: '主题',
-                  subtitle: id.label,
-                  onTap: () async {
-                    final picked = await showAppThemePickerSheet(
-                      context,
-                      current: id,
-                    );
-                    if (picked == null || picked.themeId == id) return;
+        Expanded(
+          child: ListView(
+            padding: EdgeInsets.fromLTRB(
+              hPad,
+              12,
+              hPad,
+              // 底部留出悬浮胶囊的空间，避免最后一项贴住/被“盖住”。
+              AppDimensions.listBottomWithNav,
+            ),
+            children: [
+              FadeInSection(
+                child: Watch((context) {
+                  final id = settingsState.appThemeId.value;
+                  return AstralSettingsSection(
+                    title: '外观',
+                    items: [
+                      AstralSettingItem(
+                        icon: Icons.palette_outlined,
+                        label: '主题',
+                        subtitle: id.label,
+                        onTap: () async {
+                          final picked = await showAppThemePickerSheet(
+                            context,
+                            current: id,
+                          );
+                          if (picked == null || picked.themeId == id) return;
 
-                    await Future<void>.delayed(
-                      const Duration(milliseconds: 60),
-                    );
-                    if (!context.mounted) return;
+                          await Future<void>.delayed(
+                            const Duration(milliseconds: 60),
+                          );
+                          if (!context.mounted) return;
 
-                    getIt<ThemeRevealController>().beginReveal(
-                      origin: picked.origin,
-                      newTheme: picked.themeId,
-                    );
-                    await settingsState.saveToPersistence();
-                  },
+                          getIt<ThemeRevealController>().beginReveal(
+                            origin: picked.origin,
+                            newTheme: picked.themeId,
+                          );
+                          await settingsState.saveToPersistence();
+                        },
+                      ),
+                    ],
+                  );
+                }),
+              ),
+              const SizedBox(height: AppDimensions.sectionGap),
+              FadeInSection(
+                order: 1,
+                child: Watch((context) {
+                  return AstralSettingsFormCard(
+                    title: '应用',
+                    rows: [
+                      if (_isDesktop)
+                        _switchRow(
+                          icon: Icons.window_outlined,
+                          title: '关闭时最小化到托盘',
+                          subtitle: () => '点击关闭时最小化到托盘区',
+                          value: () => settingsState.closeMinimize.value,
+                          onChanged: (v) {
+                            settingsState.closeMinimize.value = v;
+                            settingsState.saveToPersistence();
+                          },
+                        ),
+                      _switchRow(
+                        icon: Icons.login_rounded,
+                        title: '启动后自动进入房间',
+                        subtitle: () => '从收藏中选择要进入的房间',
+                        value: () => settingsState.autoEnterRoom.value,
+                        onChanged: (v) =>
+                            _onAutoEnterRoomChanged(settingsState, v),
+                      ),
+                      if (settingsState.autoEnterRoom.value)
+                        (index, count) =>
+                            _buildAutoEnterRoomRow(settingsState, index, count),
+                      _switchRow(
+                        icon: Icons.system_update_outlined,
+                        title: '自动检查更新',
+                        value: () => updateState.autoCheckUpdate.value,
+                        onChanged: updateState.setAutoCheckUpdate,
+                      ),
+                      _switchRow(
+                        icon: Icons.science_outlined,
+                        title: '使用测试版本',
+                        subtitle: () => '非专业用户不要开启此选项',
+                        value: () => updateState.beta.value,
+                        onChanged: updateState.setBeta,
+                      ),
+                      if (_isAndroid)
+                        _switchRow(
+                          icon: Icons.picture_in_picture_alt_outlined,
+                          title: '在线用户悬浮窗',
+                          subtitle: () => '透明 HUD，不挡触摸；显示头像、IP、延迟列表',
+                          value: () =>
+                              settingsState.floatingOverlayEnabled.value,
+                          onChanged: (v) => _onFloatingOverlayChanged(
+                            context,
+                            settingsState,
+                            v,
+                          ),
+                        ),
+                    ],
+                  );
+                }),
+              ),
+              if (RuntimePlatform.isWindows) ...[
+                const SizedBox(height: AppDimensions.sectionGap),
+                FadeInSection(
+                  order: 2,
+                  child: _buildWindowsSection(settingsState),
                 ),
               ],
-            );
-          }),
-        ),
-        const SizedBox(height: AppDimensions.sectionGap),
-        FadeInSection(
-          order: 1,
-          child: AstralSettingsFormCard(
-            title: '应用',
-            rows: [
-              if (_isDesktop)
-                _switchRow(
-                  icon: Icons.window_outlined,
-                  title: '关闭时最小化到托盘',
-                  subtitle: () => '点击关闭时最小化到托盘区',
-                  value: () => settingsState.closeMinimize.value,
-                  onChanged: (v) {
-                    settingsState.closeMinimize.value = v;
-                    settingsState.saveToPersistence();
-                  },
-                ),
-              _switchRow(
-                icon: Icons.system_update_outlined,
-                title: '自动检查更新',
-                value: () => updateState.autoCheckUpdate.value,
-                onChanged: updateState.setAutoCheckUpdate,
+              const SizedBox(height: AppDimensions.sectionGap),
+              FadeInSection(
+                order: 3,
+                child: _buildNetworkSection(settingsState),
               ),
-              _switchRow(
-                icon: Icons.science_outlined,
-                title: '使用测试版本',
-                subtitle: () => '非专业用户不要开启此选项',
-                value: () => updateState.beta.value,
-                onChanged: updateState.setBeta,
-              ),
-              if (_isAndroid)
-                _switchRow(
-                  icon: Icons.picture_in_picture_alt_outlined,
-                  title: '在线用户悬浮窗',
-                  subtitle: () => '透明 HUD，不挡触摸；显示头像、IP、延迟列表',
-                  value: () => settingsState.floatingOverlayEnabled.value,
-                  onChanged: (v) =>
-                      _onFloatingOverlayChanged(context, settingsState, v),
+              const SizedBox(height: AppDimensions.sectionGap),
+              FadeInSection(
+                order: 4,
+                child: AstralSettingsSection(
+                  title: '其他',
+                  items: [
+                    AstralSettingItem(
+                      icon: Icons.info_outline_rounded,
+                      label: '关于 Astral Game',
+                      onTap: () => Navigator.of(
+                        context,
+                      ).push<void>(astralPageRoute(const AboutPage())),
+                    ),
+                  ],
                 ),
-            ],
-          ),
-        ),
-        const SizedBox(height: AppDimensions.sectionGap),
-        FadeInSection(order: 2, child: _buildNetworkSection(settingsState)),
-        const SizedBox(height: AppDimensions.sectionGap),
-        FadeInSection(
-          order: 3,
-          child: AstralSettingsSection(
-            title: '其他',
-            items: [
-              AstralSettingItem(
-                icon: Icons.info_outline_rounded,
-                label: '关于 Astral Game',
-                onTap: () => Navigator.of(
-                  context,
-                ).push<void>(astralPageRoute(const AboutPage())),
               ),
             ],
           ),
@@ -173,17 +251,22 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
     String Function()? subtitle,
     required bool Function() value,
     required ValueChanged<bool>? onChanged,
+    bool Function()? enabled,
   }) {
     return (index, count) => Watch((context) {
       final v = value();
+      final editable = enabled?.call() ?? true;
       return AstralGroupedTile(
         icon: icon,
         label: title,
         subtitle: subtitle?.call(),
         index: index,
         count: count,
-        onTap: onChanged == null ? null : () => onChanged(!v),
-        trailing: Switch.adaptive(value: v, onChanged: onChanged),
+        onTap: onChanged == null || !editable ? null : () => onChanged(!v),
+        trailing: Switch.adaptive(
+          value: v,
+          onChanged: editable ? onChanged : null,
+        ),
       );
     });
   }
@@ -209,11 +292,14 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
         title: '需要悬浮窗权限',
         content:
             '请在系统设置中允许 Astral Game「显示在其他应用上层」，'
-            '然后返回应用重新打开此开关。',
+            '返回后会自动开启悬浮窗。',
         confirmLabel: '去设置',
       );
       if (goSettings) {
+        // 保持开关开启，返回应用后复查权限并自动显示，无需再次手动打开。
+        _awaitingOverlayPermission = true;
         await overlay.openOverlayPermissionSettings();
+        return;
       }
       settingsState.floatingOverlayEnabled.value = false;
       await settingsState.saveToPersistence();
@@ -225,16 +311,86 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
 
   Widget _buildNetworkSection(SettingsState settingsState) {
     return Watch((context) {
+      final roomState = getIt<RoomState>();
       final isDhcp = settingsState.isDhcp.value;
       final virtualIp = settingsState.virtualIp.value;
       final virtualIpv6 = settingsState.virtualIpv6.value;
+      final canEditNetwork = !roomState.isConnected.value;
+      String changeableHint(String text) =>
+          canEditNetwork ? '$text，更改后需重启房间生效' : '$text，更改后需重启房间生效；连接中不可修改';
       return AstralSettingsFormCard(
         title: '网络',
         rows: [
+          if (RuntimePlatform.isWindows)
+            (index, count) => Watch((context) {
+              final firewall = getIt<FirewallService>();
+              final disabled = firewall.allProfilesDisabled.value == true;
+              final busy = firewall.busy.value;
+              final toggle = busy
+                  ? null
+                  : (bool value) => _onToggleAllFirewall(firewall, !value);
+              return AstralGroupedTile(
+                icon: Icons.gpp_maybe_outlined,
+                label: '关闭防火墙',
+                subtitle: disabled ? '当前已关闭' : '当前已开启',
+                index: index,
+                count: count,
+                onTap: toggle == null ? null : () => toggle(!disabled),
+                trailing: Switch.adaptive(value: disabled, onChanged: toggle),
+              );
+            }),
+          _switchRow(
+            icon: Icons.hub_outlined,
+            title: '禁用 P2P',
+            subtitle: () => changeableHint('仅通过中继通信'),
+            value: () => settingsState.disableP2p.value,
+            enabled: () => canEditNetwork,
+            onChanged: (v) {
+              settingsState.disableP2p.value = v;
+              settingsState.saveToPersistence();
+            },
+          ),
+          (index, count) => AstralGroupedTile(
+            icon: Icons.speed_outlined,
+            label: '网络测速',
+            subtitle: '测试延迟与上下行速度',
+            index: index,
+            count: count,
+            onTap: () => Navigator.of(
+              context,
+            ).push<void>(astralPageRoute(const SpeedTestPage())),
+          ),
+          if (RuntimePlatform.isWindows)
+            (index, count) => Watch((context) {
+              final optimize = getIt<NetworkOptimizeService>();
+              final busy = optimize.busy.value;
+              return AstralGroupedTile(
+                icon: Icons.speed_outlined,
+                label: '网络加速（仅限中国大陆）',
+                subtitle: busy ? '正在安装或卸载…' : '自动选择最低延迟的IP',
+                index: index,
+                count: count,
+                onTap: busy
+                    ? null
+                    : () => _onNetworkOptimizeChanged(
+                        context,
+                        optimize,
+                        !optimize.installed.value,
+                      ),
+                trailing: Switch.adaptive(
+                  value: optimize.installed.value,
+                  onChanged: busy
+                      ? null
+                      : (v) => _onNetworkOptimizeChanged(context, optimize, v),
+                ),
+              );
+            }),
           _switchRow(
             icon: Icons.settings_ethernet_outlined,
             title: '自动分配虚拟IP',
+            subtitle: () => changeableHint('关闭后可手动设置虚拟 IP'),
             value: () => settingsState.isDhcp.value,
+            enabled: () => canEditNetwork,
             onChanged: (value) {
               settingsState.isDhcp.value = value;
               settingsState.isDhcpv6.value = value;
@@ -266,79 +422,6 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
                 child: const Text('编辑'),
               ),
             ),
-          ],
-          (index, count) => AstralGroupedTile(
-            icon: Icons.speed_outlined,
-            label: '网络测速',
-            subtitle: '测试延迟与上下行速度',
-            index: index,
-            count: count,
-            onTap: () => Navigator.of(
-              context,
-            ).push<void>(astralPageRoute(const SpeedTestPage())),
-          ),
-          _switchRow(
-            icon: Icons.hub_outlined,
-            title: '禁用 P2P',
-            subtitle: () => '仅通过中继通信',
-            value: () => settingsState.disableP2p.value,
-            onChanged: (v) {
-              settingsState.disableP2p.value = v;
-              settingsState.saveToPersistence();
-            },
-          ),
-          if (RuntimePlatform.operatingSystem == 'windows') ...[
-            _switchRow(
-              icon: Icons.settings_input_antenna,
-              title: '强制 UDP 广播转发',
-              subtitle: () => '在其他类游戏中开启，重新连接房间后生效',
-              value: () => settingsState.enableUdpBroadcastRelay.value,
-              onChanged: (v) {
-                settingsState.enableUdpBroadcastRelay.value = v;
-                settingsState.saveToPersistence();
-              },
-            ),
-            (index, count) => Watch((context) {
-              final optimize = getIt<NetworkOptimizeService>();
-              final busy = optimize.busy.value;
-              return AstralGroupedTile(
-                icon: Icons.speed_outlined,
-                label: '网络加速（仅限中国大陆）',
-                subtitle: busy ? '正在安装或卸载…' : '自动选择最低延迟的IP',
-                index: index,
-                count: count,
-                onTap: busy
-                    ? null
-                    : () => _onNetworkOptimizeChanged(
-                        context,
-                        optimize,
-                        !optimize.installed.value,
-                      ),
-                trailing: Switch.adaptive(
-                  value: optimize.installed.value,
-                  onChanged: busy
-                      ? null
-                      : (v) => _onNetworkOptimizeChanged(context, optimize, v),
-                ),
-              );
-            }),
-            (index, count) => Watch((context) {
-              final firewall = getIt<FirewallService>();
-              final disabled = firewall.allProfilesDisabled.value == true;
-              final busy = firewall.busy.value;
-              final toggle = busy
-                  ? null
-                  : (bool value) => _onToggleAllFirewall(firewall, !value);
-              return AstralGroupedTile(
-                icon: Icons.gpp_maybe_outlined,
-                label: '一键关闭防火墙',
-                subtitle: disabled ? '当前已关闭' : '当前已开启',
-                index: index,
-                count: count,
-                onTap: toggle == null ? null : () => toggle(!disabled),
-                trailing: Switch.adaptive(value: disabled, onChanged: toggle),
-              );
-            }),
           ],
           if (_isAndroid)
             (index, count) => AstralGroupedTile(
@@ -378,6 +461,231 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
         ],
       );
     });
+  }
+
+  /// Windows 专属：开机启动与 UAC。注册表为唯一真实状态。
+  Widget _buildWindowsSection(SettingsState settingsState) {
+    return Watch((context) {
+      final win = getIt<WindowsSettingsService>();
+      final autoStart = win.autoStart.value;
+      final autoStartOn = autoStart ?? false;
+      final busy = win.busy.value;
+      final uacEnabled = win.uacEnabled.value;
+      final toggleAutoStart = autoStart == null || busy
+          ? null
+          : (bool value) => _onAutoStartChanged(win, value);
+      final toggleUac = uacEnabled == null || busy
+          ? null
+          : (bool value) => _onUacChanged(win, disable: value);
+
+      return AstralSettingsFormCard(
+        title: 'Windows',
+        rows: [
+          (index, count) => AstralGroupedTile(
+            icon: Icons.power_settings_new_outlined,
+            label: '开机启动',
+            subtitle: busy ? '正在应用…' : '登录 Windows 后自动启动 Astral Game',
+            index: index,
+            count: count,
+            onTap: toggleAutoStart == null
+                ? null
+                : () => toggleAutoStart(!autoStartOn),
+            trailing: Switch.adaptive(
+              value: autoStartOn,
+              onChanged: toggleAutoStart,
+            ),
+          ),
+          if (autoStartOn)
+            _switchRow(
+              icon: Icons.vertical_align_bottom_rounded,
+              title: '启动后到托盘',
+              subtitle: () => '仅开机启动时生效，不显示主窗口',
+              value: () => settingsState.startToTray.value,
+              onChanged: (v) {
+                settingsState.startToTray.value = v;
+                settingsState.saveToPersistence();
+              },
+            ),
+          (index, count) => AstralGroupedTile(
+            icon: Icons.admin_panel_settings_outlined,
+            label: '关闭 UAC',
+            subtitle: uacEnabled == null
+                ? '无法读取当前状态'
+                : uacEnabled
+                ? '更改设置后需重启系统生效'
+                : '更改设置后需重启系统生效',
+            index: index,
+            count: count,
+            onTap: toggleUac == null
+                ? null
+                : () => toggleUac(uacEnabled != true),
+            trailing: Switch.adaptive(
+              value: uacEnabled == false,
+              onChanged: toggleUac,
+            ),
+          ),
+        ],
+      );
+    });
+  }
+
+  /// 「启动后自动进入房间」下方的房间选择行：展示当前选中的收藏。
+  Widget _buildAutoEnterRoomRow(
+    SettingsState settingsState,
+    int index,
+    int count,
+  ) {
+    final bookmarks = getIt<RoomState>().bookmarks;
+    final selectedId = settingsState.autoEnterBookmarkId.value;
+    Bookmark? selected;
+    for (final bookmark in bookmarks) {
+      if (bookmark.id == selectedId) {
+        selected = bookmark;
+        break;
+      }
+    }
+    final subtitle = selected != null
+        ? selected.displayName
+        : selectedId == null
+        ? '未选择，点击从收藏中选择'
+        : '对应收藏已删除，请重新选择';
+    return AstralGroupedTile(
+      icon: Icons.star_outline_rounded,
+      label: '进入的房间',
+      subtitle: subtitle,
+      index: index,
+      count: count,
+      onTap: () => _pickAutoEnterBookmark(settingsState),
+    );
+  }
+
+  Future<void> _onAutoEnterRoomChanged(
+    SettingsState settingsState,
+    bool enabled,
+  ) async {
+    if (!enabled) {
+      settingsState.autoEnterRoom.value = false;
+      await settingsState.saveToPersistence();
+      return;
+    }
+
+    final bookmarks = getIt<RoomState>().bookmarks;
+    if (bookmarks.isEmpty) {
+      showAppToast(context, '暂无收藏房间，请先在收藏页收藏房间');
+      return;
+    }
+
+    // 首次开启或原收藏已删除：先选房间，取消选择则保持关闭。
+    final selectedId = settingsState.autoEnterBookmarkId.value;
+    if (!bookmarks.any((b) => b.id == selectedId)) {
+      final picked = await _showBookmarkPickerDialog(bookmarks, selectedId);
+      if (picked == null || !mounted) return;
+      settingsState.autoEnterBookmarkId.value = picked;
+    }
+
+    settingsState.autoEnterRoom.value = true;
+    await settingsState.saveToPersistence();
+  }
+
+  Future<void> _pickAutoEnterBookmark(SettingsState settingsState) async {
+    final bookmarks = getIt<RoomState>().bookmarks;
+    if (bookmarks.isEmpty) {
+      showAppToast(context, '暂无收藏房间，请先在收藏页收藏房间');
+      return;
+    }
+    final picked = await _showBookmarkPickerDialog(
+      bookmarks,
+      settingsState.autoEnterBookmarkId.value,
+    );
+    if (picked == null || !mounted) return;
+    settingsState.autoEnterBookmarkId.value = picked;
+    await settingsState.saveToPersistence();
+  }
+
+  /// 从收藏中选择启动后要进入的房间，返回收藏 id（只展示封面与名字）。
+  Future<int?> _showBookmarkPickerDialog(
+    List<Bookmark> bookmarks,
+    int? currentId,
+  ) {
+    return showDialog<int>(
+      context: context,
+      builder: (dialogContext) {
+        final scheme = Theme.of(dialogContext).colorScheme;
+        return AlertDialog(
+          title: const Text('选择启动后进入的房间'),
+          content: SizedBox(
+            width: 420,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 420),
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: bookmarks.length,
+                itemBuilder: (context, i) {
+                  final bookmark = bookmarks[i];
+                  final selected = bookmark.id == currentId;
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: SizedBox(
+                      width: 40,
+                      height: 40,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: BookmarkCover(bookmark: bookmark),
+                      ),
+                    ),
+                    title: Text(
+                      bookmarkDisplayLabel(bookmark),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: selected
+                        ? Icon(Icons.check_rounded, color: scheme.primary)
+                        : null,
+                    onTap: () => Navigator.of(dialogContext).pop(bookmark.id),
+                  );
+                },
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('取消'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _onAutoStartChanged(
+    WindowsSettingsService win,
+    bool enabled,
+  ) async {
+    final ok = await win.setAutoStart(enabled);
+    if (!mounted || ok) return;
+    showAppToast(context, enabled ? '开启开机启动失败' : '关闭开机启动失败');
+  }
+
+  /// [disable] 为 true 表示关闭 UAC（EnableLUA = 0）。
+  Future<void> _onUacChanged(
+    WindowsSettingsService win, {
+    required bool disable,
+  }) async {
+    if (disable) {
+      final confirmed = await showConfirmDialog(
+        context,
+        title: '关闭 UAC？',
+        content:
+            '关闭用户账户控制后，应用修改系统设置时不再弹出确认框，'
+            '但系统安全性会降低。更改将在重启后生效。',
+        confirmLabel: '关闭',
+      );
+      if (!confirmed) return;
+    }
+    final ok = await win.setUacEnabled(!disable);
+    if (!mounted) return;
+    showAppToast(context, ok ? '已保存，重启后生效' : '修改 UAC 设置失败');
   }
 
   /// Linux：经 polkit 给可执行文件补 CAP_NET_ADMIN / CAP_NET_RAW。
@@ -498,7 +806,7 @@ class _SettingsMainPageState extends State<SettingsMainPage> {
       await optimize.setEnabled(enable);
     } catch (e) {
       if (!context.mounted) return;
-      showAppSnackBar(context, enable ? '安装失败：$e' : '卸载失败：$e');
+      showAppToast(context, enable ? '安装失败：$e' : '卸载失败：$e');
     }
   }
 }

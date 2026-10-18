@@ -33,7 +33,7 @@ class P2PConfigService {
     String roomName,
     String roomPassword, {
     List<PeerEndpoint>? peersOverride,
-    bool? enableUdpBroadcastRelay,
+    bool enableUdpBroadcastRelay = false,
     GameAssistNetworkProtocol protocol = GameAssistNetworkProtocol.udp,
     bool isDhcp = true,
     bool isDhcpv6 = true,
@@ -55,9 +55,8 @@ class P2PConfigService {
 
     final peerBlock = peers.map(_peerTomlBlock).join('\n\n');
 
-    // 游戏 JSON 规则优先；否则回退用户设置强制开关。
-    final udpRelay =
-        enableUdpBroadcastRelay ?? _appSettings.isEnableUdpBroadcastRelay();
+    // 游戏 JSON 规则驱动；未命中规则时不转发。
+    final udpRelay = enableUdpBroadcastRelay;
     final udpBroadcastFlag =
         RuntimePlatform.operatingSystem == 'windows' && udpRelay
         ? 'enable_udp_broadcast_relay = true\n'

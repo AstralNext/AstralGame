@@ -11,4 +11,4 @@ PRODUCT_NAME = Astral Game
 PRODUCT_BUNDLE_IDENTIFIER = fan.astral.next.game
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2026 com.example. All rights reserved.
+PRODUCT_COPYRIGHT = Copyright © 2026 Astral Next. All rights reserved.

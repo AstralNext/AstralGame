@@ -4,7 +4,7 @@ import 'package:astral_game/data/models/lan_relay_status.dart';
 import 'package:astral_game/data/models/open_game_listing.dart';
 import 'package:astral_game/data/services/open_games_service.dart';
 import 'package:astral_game/di.dart';
-import 'package:astral_game/ui/widgets/app_snack_bar.dart';
+import 'package:astral_game/ui/widgets/app_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:signals/signals_flutter.dart';
@@ -124,7 +124,7 @@ class RoomOpenGamesPanel extends StatelessWidget {
   Future<void> _copy(BuildContext context, OpenGameListing listing) async {
     await Clipboard.setData(ClipboardData(text: listing.endpoint));
     if (!context.mounted) return;
-    showAppSnackBar(context, '已复制${listing.label}：${listing.endpoint}');
+    showAppToast(context, '已复制${listing.label}：${listing.endpoint}');
   }
 }
 

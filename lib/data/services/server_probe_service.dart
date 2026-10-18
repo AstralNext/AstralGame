@@ -1,92 +1,234 @@
-import 'package:astral_game/data/models/server_mod.dart';
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+import 'dart:math';
+import 'dart:typed_data';
 
-/// 一次「模拟加入节点」探测的结果。
-///
-/// 字段含义对齐 EasyTier 握手/路由信息：
-/// - [isEasyTier] 等价于握手包里 `magic == 0xd1e1a5e1` 是否校验通过；
-/// - [version] 等价于 OSPF 路由里 `RoutePeerInfo.easytier_version`（软件版本）；
-/// - [protocolVersion] 等价于握手包里的 `HandshakeRequest.version`（协议版本）。
+import 'package:astral_game/config/constants.dart';
+import 'package:astral_game/data/models/server_mod.dart';
+import 'package:astral_game/utils/ping_util.dart';
+
+/// 一次 EasyTier 握手探测的结果。
 class ServerProbeResult {
-  const ServerProbeResult({
-    required this.isEasyTier,
-    this.version,
-    this.protocolVersion,
-  });
+  const ServerProbeResult({required this.isEasyTier});
 
   /// 对端是否为 EasyTier 服务器。
-  final bool isEasyTier;
-
-  /// EasyTier 软件版本；非 ET 服务器为 null。
-  final String? version;
-
-  /// EasyTier 协议版本；非 ET 服务器为 null。
-  final int? protocolVersion;
+  ///
+  /// `null` 表示无法判断：地址不是 TCP 接入（udp/ws/wss/quic/wg），或连接失败。
+  final bool? isEasyTier;
 }
 
-/// 服务器「加入节点」探测（模拟实现）。
+/// 通过 EasyTier 握手判断服务器是否为 ET 端点。
 ///
-/// 真机流程应是：向对端发起一次 EasyTier TCP 握手（`tcp://` 帧内 4 字节小端
-/// 长度 + 16 字节 [PeerManagerHeader]，`packet_type = HandShake(2)`），校验
-/// 回包里的魔数是否为 `0xd1e1a5e1`，据此判断是否 ET 服务器；版本则需进入同一
-/// 网络后从路由信息中读取。此处不真正建连，仅按服务器地址确定性生成结果，
-/// 保证同一服务器每次探测结果一致、可复现。
+/// TCP 帧格式（`easytier-core`）：
+/// ```
+/// [4B 小端 bodyLen][16B PeerManagerHeader][protobuf HandshakeRequest]
+/// ```
+/// 发送一帧 `packet_type = HandShake(2)`、`magic = 0xd1e1a5e1` 的握手，
+/// 若对端回包同样是 `HandShake` 且魔数匹配，即为 ET 服务器。
+///
+/// 软件版本、在线人数、中转能力都不在握手中，因此不读取也不展示。
 class ServerProbeService {
-  /// ET 握手魔数（easytier-core `peer_conn.rs`：`const MAGIC = 0xd1e1a5e1`）。
+  /// ET 握手魔数（`peer_conn.rs`：`const MAGIC: u32 = 0xd1e1a5e1`）。
   static const int easytierHandshakeMagic = 0xd1e1a5e1;
 
-  /// ET 握手协议版本常量（`peer_conn.rs`：`const VERSION = 1`）。
+  /// ET 握手协议版本（`peer_conn.rs`：`const VERSION: u32 = 1`）。
   static const int easytierProtocolVersion = 1;
 
-  /// 仓库内 ET 基线版本（`rust/Cargo.lock`：easytier 2.7.0）。
-  static const String easytierBaseVersion = '2.7.0';
+  static const int _packetTypeHandshake = 2;
+  static const int _peerManagerHeaderSize = 16;
+  static const int _maxBodyLength = 1 << 16;
 
-  /// EasyTier 支持的接入协议（其余 scheme 视为非 ET 端点）。
-  static const Set<String> _easyTierSchemes = {
-    'tcp',
-    'udp',
-    'ws',
-    'wss',
-    'quic',
-    'wg',
-  };
+  /// 探测用网络名。服务端对外来网络名会分配临时 peer id，可以随便填。
+  static const String _probeNetworkName = 'astral-probe';
 
-  /// 模拟一次「加入节点」探测，只判断是否 ET 服务器并读取版本（不含延迟）。
-  ///
-  /// 延迟由 TCP ping 单独测得，这里不产出 RTT。
+  static final Random _random = Random();
+
+  /// 探测一次端点：能完成 ET 握手返回 `true`，明确不是返回 `false`，
+  /// 无法判断（非 TCP 接入或连不上）返回 `null`。
   Future<ServerProbeResult> probe(ServerMod server) async {
-    final seed = _fnv1a(server.url);
-    // 模拟握手 + 拉取首个路由信息的耗时，确定性 320~1120ms。
-    await Future<void>.delayed(Duration(milliseconds: 320 + seed % 800));
+    final scheme = Uri.tryParse(server.url.trim())?.scheme.toLowerCase();
+    // ws/wss/quic/udp/wg 不是裸 TCP 帧，无法用这套握手判断。
+    if (scheme != null && scheme.isNotEmpty && scheme != 'tcp') {
+      return const ServerProbeResult(isEasyTier: null);
+    }
+    final target = tcpPingTargetOf(server.url);
+    if (target == null) return const ServerProbeResult(isEasyTier: null);
 
-    if (!_looksLikeEasyTier(server.url, seed)) {
-      // 可达但不是 ET 端点：握手魔数不匹配。
+    Socket socket;
+    try {
+      socket = await Socket.connect(
+        target.host,
+        target.port,
+        timeout: AppConstants.pingTimeout,
+      );
+    } on SocketException {
+      return const ServerProbeResult(isEasyTier: null);
+    } on TimeoutException {
+      return const ServerProbeResult(isEasyTier: null);
+    }
+
+    final reader = _SocketReader(socket);
+    try {
+      socket.add(_encodeHandshakeFrame(_randomPeerId()));
+      await socket.flush();
+      final lengthBytes = await reader
+          .readExact(4)
+          .timeout(AppConstants.pingTimeout);
+      final bodyLength = ByteData.sublistView(
+        lengthBytes,
+      ).getUint32(0, Endian.little);
+      if (bodyLength < _peerManagerHeaderSize ||
+          bodyLength > _maxBodyLength) {
+        return const ServerProbeResult(isEasyTier: false);
+      }
+      final body = await reader
+          .readExact(bodyLength)
+          .timeout(AppConstants.pingTimeout);
+      return ServerProbeResult(isEasyTier: _isHandshakeResponse(body));
+    } on TimeoutException {
+      // 端口能连上但没有回 ET 握手：不是 ET 端点。
       return const ServerProbeResult(isEasyTier: false);
+    } on SocketException {
+      return const ServerProbeResult(isEasyTier: false);
+    } finally {
+      await reader.cancel();
+      socket.destroy();
     }
-    return ServerProbeResult(
-      isEasyTier: true,
-      version: '$easytierBaseVersion-${_shortCommit(seed)}',
-      protocolVersion: easytierProtocolVersion,
-    );
   }
 
-  /// 是否为 ET 端点：scheme 需在 ET 支持范围内，另按哈希少量命中非 ET。
-  bool _looksLikeEasyTier(String url, int seed) {
-    final scheme = Uri.tryParse(url)?.scheme.toLowerCase();
-    if (scheme == null || !_easyTierSchemes.contains(scheme)) return false;
-    return seed % 8 != 0;
+  static int _randomPeerId() => 1 + _random.nextInt(0xfffffffe);
+
+  /// 组装一帧完整的 TCP 握手包。
+  static Uint8List _encodeHandshakeFrame(int peerId) {
+    final payload = BytesBuilder(copy: false);
+    // HandshakeRequest: magic / my_peer_id / version / network_name / digest
+    _writeUint32Field(payload, 1, easytierHandshakeMagic);
+    _writeUint32Field(payload, 2, peerId);
+    _writeUint32Field(payload, 3, easytierProtocolVersion);
+    _writeBytesField(payload, 5, utf8.encode(_probeNetworkName));
+    // 服务端会校验摘要长度为 32 字节，内容无所谓。
+    _writeBytesField(payload, 6, Uint8List(32));
+    final payloadBytes = payload.takeBytes();
+
+    final bodyLength = _peerManagerHeaderSize + payloadBytes.length;
+    final frame = ByteData(4 + bodyLength);
+    frame.setUint32(0, bodyLength, Endian.little);
+    // PeerManagerHeader（packed，16 字节）
+    frame.setUint32(4, peerId, Endian.little); // from_peer_id
+    frame.setUint32(8, 0, Endian.little); // to_peer_id
+    frame.setUint8(12, _packetTypeHandshake);
+    frame.setUint8(13, 0); // flags
+    frame.setUint8(14, 1); // forward_counter
+    frame.setUint8(15, 0); // reserved
+    frame.setUint32(16, payloadBytes.length, Endian.little); // len
+
+    final bytes = frame.buffer.asUint8List();
+    bytes.setRange(20, 20 + payloadBytes.length, payloadBytes);
+    return bytes;
   }
 
-  /// FNV-1a 32 位哈希，保证跨进程稳定（`String.hashCode` 不保证稳定）。
-  static int _fnv1a(String value) {
-    var hash = 0x811c9dc5;
-    for (final unit in value.codeUnits) {
-      hash ^= unit;
-      hash = (hash * 0x01000193) & 0xffffffff;
+  /// 回包是否为 ET 握手：`packet_type == HandShake` 且 protobuf 魔数匹配。
+  static bool _isHandshakeResponse(Uint8List body) {
+    if (body.length < _peerManagerHeaderSize) return false;
+    if (body[8] != _packetTypeHandshake) return false;
+    return _readMagic(body, _peerManagerHeaderSize) == easytierHandshakeMagic;
+  }
+
+  /// 在 protobuf payload 中查找 field 1（magic）的值，跳过其他字段。
+  static int? _readMagic(List<int> payload, int start) {
+    var offset = start;
+    while (offset < payload.length) {
+      final key = _readVarint(payload, offset);
+      if (key == null) return null;
+      offset = key.next;
+      final field = key.value >> 3;
+      final wireType = key.value & 0x07;
+
+      if (wireType == 0) {
+        final value = _readVarint(payload, offset);
+        if (value == null) return null;
+        if (field == 1) return value.value;
+        offset = value.next;
+      } else if (wireType == 1) {
+        offset += 8;
+      } else if (wireType == 2) {
+        final length = _readVarint(payload, offset);
+        if (length == null) return null;
+        offset = length.next + length.value;
+      } else if (wireType == 5) {
+        offset += 4;
+      } else {
+        return null;
+      }
+      if (offset > payload.length) return null;
     }
-    return hash;
+    return null;
   }
 
-  /// 由哈希生成 8 位十六进制短提交号，形如真实 ET 版本的 `2.7.0-1a2b3c4d`。
-  static String _shortCommit(int seed) =>
-      seed.toRadixString(16).padLeft(8, '0');
+  static ({int value, int next})? _readVarint(List<int> data, int start) {
+    var result = 0;
+    var shift = 0;
+    var offset = start;
+    while (offset < data.length) {
+      final byte = data[offset];
+      result |= (byte & 0x7f) << shift;
+      offset++;
+      if ((byte & 0x80) == 0) return (value: result, next: offset);
+      shift += 7;
+      if (shift > 63) return null;
+    }
+    return null;
+  }
+
+  static void _writeUint32Field(BytesBuilder out, int field, int value) {
+    _writeVarint(out, field << 3);
+    _writeVarint(out, value);
+  }
+
+  static void _writeBytesField(BytesBuilder out, int field, List<int> value) {
+    _writeVarint(out, (field << 3) | 2);
+    _writeVarint(out, value.length);
+    out.add(value);
+  }
+
+  static void _writeVarint(BytesBuilder out, int value) {
+    var remaining = value;
+    while (remaining >= 0x80) {
+      out.addByte((remaining & 0x7f) | 0x80);
+      remaining >>= 7;
+    }
+    out.addByte(remaining);
+  }
+}
+
+/// 把 socket 字节流按需切片，供按帧长度读取使用。
+class _SocketReader {
+  _SocketReader(Socket socket) : _iterator = StreamIterator<Uint8List>(socket);
+
+  final StreamIterator<Uint8List> _iterator;
+  Uint8List _chunk = Uint8List(0);
+  int _offset = 0;
+
+  Future<Uint8List> readExact(int count) async {
+    final out = Uint8List(count);
+    var written = 0;
+    while (written < count) {
+      if (_offset >= _chunk.length) {
+        if (!await _iterator.moveNext()) {
+          throw const SocketException('连接在探测过程中关闭');
+        }
+        _chunk = _iterator.current;
+        _offset = 0;
+        continue;
+      }
+      final take = min(_chunk.length - _offset, count - written);
+      out.setRange(written, written + take, _chunk, _offset);
+      written += take;
+      _offset += take;
+    }
+    return out;
+  }
+
+  Future<void> cancel() => _iterator.cancel();
 }

@@ -19,9 +19,26 @@ static void first_frame_cb(MyApplication* self, FlView* view) {
   gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
 }
 
+// 处理第二次启动转发过来的命令行（例如 astralgame:// 邀请链接）。
+// 只负责把已有窗口带到前台，具体链接由 app_links_linux 的 emission hook 读取。
+static gboolean my_application_command_line(GApplication* application,
+                                            GApplicationCommandLine* command_line,
+                                            gpointer user_data) {
+  g_application_activate(application);
+  return TRUE;
+}
+
 // Implements GApplication::activate.
 static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
+
+  // 已有窗口时直接激活，避免再次启动时重复开窗。
+  GList* windows = gtk_application_get_windows(GTK_APPLICATION(application));
+  if (windows != nullptr) {
+    gtk_window_present(GTK_WINDOW(windows->data));
+    return;
+  }
+
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
 
@@ -84,19 +101,13 @@ static gboolean my_application_local_command_line(GApplication* application,
                                                   int* exit_status) {
   MyApplication* self = MY_APPLICATION(application);
   // Strip out the first argument as it is the binary name.
+  g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
   self->dart_entrypoint_arguments = g_strdupv(*arguments + 1);
 
-  g_autoptr(GError) error = nullptr;
-  if (!g_application_register(application, nullptr, &error)) {
-    g_warning("Failed to register: %s", error->message);
-    *exit_status = 1;
-    return TRUE;
-  }
-
-  g_application_activate(application);
-  *exit_status = 0;
-
-  return TRUE;
+  // 交还给 GApplication 处理：注册主实例，并把第二次启动的命令行转发给
+  // 主实例（emit command-line），这样运行中的窗口才能收到邀请链接。
+  return G_APPLICATION_CLASS(my_application_parent_class)
+      ->local_command_line(application, arguments, exit_status);
 }
 
 // Implements GApplication::startup.
@@ -143,7 +154,13 @@ MyApplication* my_application_new() {
   g_set_prgname(APPLICATION_ID);
 
   // 默认唯一实例：再次启动会激活已有窗口，防止多开。
-  return MY_APPLICATION(g_object_new(my_application_get_type(),
-                                     "application-id", APPLICATION_ID,
-                                     nullptr));
+  // HANDLES_COMMAND_LINE 让第二次启动能把命令行（邀请链接）转发给主实例。
+  MyApplication* self =
+      MY_APPLICATION(g_object_new(my_application_get_type(),
+                                  "application-id", APPLICATION_ID,
+                                  "flags", G_APPLICATION_HANDLES_COMMAND_LINE,
+                                  nullptr));
+  g_signal_connect(self, "command-line",
+                   G_CALLBACK(my_application_command_line), nullptr);
+  return self;
 }

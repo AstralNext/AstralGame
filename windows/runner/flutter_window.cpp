@@ -1,8 +1,11 @@
 #include "flutter_window.h"
 
+#include <algorithm>
 #include <optional>
+#include <vector>
 
 #include "flutter/generated_plugin_registrant.h"
+#include "utils.h"
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -27,9 +30,17 @@ bool FlutterWindow::OnCreate() {
   RegisterPlugins(flutter_controller_->engine());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
-  flutter_controller_->engine()->SetNextFrameCallback([&]() {
-    this->Show();
-  });
+  // 开机启动（--autostart）时不自动显示窗口：是否显示由 Dart 侧根据
+  // 「启动后到托盘」设置决定，否则窗口总会在首帧后弹出，设置形同虚设。
+  const std::vector<std::string> arguments = GetCommandLineArguments();
+  const bool launched_at_boot =
+      std::find(arguments.begin(), arguments.end(), "--autostart") !=
+      arguments.end();
+  if (!launched_at_boot) {
+    flutter_controller_->engine()->SetNextFrameCallback([&]() {
+      this->Show();
+    });
+  }
 
   // Flutter can complete the first frame before the "show window" callback is
   // registered. The following call ensures a frame is pending to ensure the

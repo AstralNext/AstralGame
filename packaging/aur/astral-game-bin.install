@@ -14,10 +14,17 @@ _post_setcap() {
 }
 
 post_install() {
+  # 注册 astralgame:// 邀请链接（.desktop 已声明 x-scheme-handler）。
+  if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database -q /usr/share/applications || true
+  fi
   _post_setcap
 }
 
 post_upgrade() {
+  if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database -q /usr/share/applications || true
+  fi
   _post_setcap
 }
 

@@ -2,7 +2,7 @@ import 'package:astral_game/config/constants.dart';
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/models/enhanced_node_info.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
-import 'package:astral_game/ui/widgets/app_snack_bar.dart';
+import 'package:astral_game/ui/widgets/app_toast.dart';
 import 'package:astral_game/ui/widgets/grouped_tile_shape.dart';
 import 'package:astral_game/utils/firewall_presentation.dart';
 import 'package:astral_game/utils/network_presentation.dart';
@@ -44,8 +44,6 @@ class _DashboardUserItemState extends State<DashboardUserItem> {
   @override
   Widget build(BuildContext context) {
     final node = widget.node;
-    final colorScheme = Theme.of(context).colorScheme;
-    final palette = context.astralPalette;
     final borderRadius = widget.grouped
         ? groupedTileBorderRadius(index: widget.index, count: widget.count)
         : AppRadius.brMedium;
@@ -60,21 +58,15 @@ class _DashboardUserItemState extends State<DashboardUserItem> {
         onHoverChanged: (v) => setState(() => _isHovered = v),
         onTap: () =>
             _copyIp(context, hasIpv4: node.hasValidIpv4, ipv4: node.ipv4),
-        colorScheme: colorScheme,
         child: Padding(
           padding: EdgeInsets.fromLTRB(widget.grouped ? 16 : 12, 12, 12, 12),
           child: _UserMainContentRow(
             node: node,
-            colorScheme: colorScheme,
-            accentColor: palette.accent,
             isLocal: widget.isLocal,
             nodeManagement: widget.nodeManagement,
             latencyColor: _latencyColor,
             compact: widget.compact,
-            avatarWidget: _UserAvatar(
-              avatar: widget.node.avatar,
-              colorScheme: colorScheme,
-            ),
+            avatarWidget: _UserAvatar(avatar: widget.node.avatar),
           ),
         ),
       ),
@@ -94,13 +86,13 @@ class _DashboardUserItemState extends State<DashboardUserItem> {
   }) async {
     if (!hasIpv4) {
       if (!context.mounted) return;
-      showAppSnackBar(context, '该成员尚未分配 IP');
+      showAppToast(context, '该成员尚未分配 IP');
       return;
     }
     await Clipboard.setData(ClipboardData(text: ipv4));
     HapticFeedback.selectionClick();
     if (!context.mounted) return;
-    showAppSnackBar(context, '已复制 IP：$ipv4');
+    showAppToast(context, '已复制 IP：$ipv4');
   }
 }
 
@@ -111,18 +103,17 @@ String _formatMbps(double? value) {
   return value.toStringAsFixed(2);
 }
 
-/// 单行摘要（列表内展示）：仅「系统版本 · 应用版本」，例如 `10.0.26200 · 1.0.41`。
-String _peerClientEnvLabel(EnhancedNodeInfo node) {
-  final parts = <String>[];
-  final osVer = node.peerOsVersion;
-  if (osVer != null && osVer.isNotEmpty) {
-    parts.add(osVer);
-  }
-  final ver = node.peerAppVersion;
-  if (ver != null && ver.isNotEmpty) {
-    parts.add(ver);
-  }
-  return parts.join(' · ');
+/// 概要行：运营商 · 系统 · 网络 · 防火墙。
+String _statusSummary(EnhancedNodeInfo node) {
+  final os = OsPresentation.forNode(node);
+  final network = NetworkPresentation.fromWire(node.peerNetwork);
+  final firewall = FirewallPresentation.fromWire(node.peerFirewall);
+  return [
+    ?node.peerIsp,
+    if (os.shortLabel.isNotEmpty) os.shortLabel,
+    if (network.hasLabel) network.shortLabel,
+    if (firewall.hasLabel) firewall.shortLabel,
+  ].join(' · ');
 }
 
 /// Tooltip 完整文案。
@@ -157,23 +148,24 @@ String _peerClientEnvFull(EnhancedNodeInfo node) {
 
 // ─── 拆分后的子 Widget ───────────────────────────────────────────────────────
 
-/// 用户头像组件：圆形头像容器 + 图片或默认图标。
+/// 用户头像：44pt 圆形，无描边，占位符使用中性底色。
 class _UserAvatar extends StatelessWidget {
-  const _UserAvatar({required this.avatar, required this.colorScheme});
+  const _UserAvatar({required this.avatar});
 
   final Uint8List? avatar;
-  final ColorScheme colorScheme;
 
   @override
   Widget build(BuildContext context) {
-    const size = 36.0;
+    const size = 44.0;
+    final palette = context.astralPalette;
+    final dpr = MediaQuery.maybeOf(context)?.devicePixelRatio ?? 2;
+
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: colorScheme.primaryContainer,
-        border: Border.all(color: colorScheme.outline),
+        color: palette.accentMuted,
       ),
       child: avatar != null
           ? ClipOval(
@@ -182,298 +174,157 @@ class _UserAvatar extends StatelessWidget {
                 fit: BoxFit.cover,
                 width: size,
                 height: size,
-                cacheWidth: (size * 2).round(),
-                cacheHeight: (size * 2).round(),
+                cacheWidth: (size * dpr).round(),
+                cacheHeight: (size * dpr).round(),
                 gaplessPlayback: true,
               ),
             )
-          : Icon(
-              Icons.person,
-              size: size * 0.5,
-              color: colorScheme.onPrimaryContainer,
-            ),
+          : Icon(Icons.person_rounded, size: 24, color: palette.textTertiary),
     );
   }
 }
 
-/// 状态标签 chips 区域（运营商 / 平台 / 网络 / 防火墙 / 延迟）。
-class _UserStatusChips extends StatelessWidget {
-  const _UserStatusChips({
-    required this.node,
-    required this.colorScheme,
-    required this.nodeManagement,
-    required this.latencyColor,
-    required this.isLocal,
-  });
+/// 测速行：`测速 ↓916 ↑93.2 Mbps`，仅在丢包大于 0 时追加丢包。
+class _UserSpeedLine extends StatelessWidget {
+  const _UserSpeedLine({required this.node});
 
   final EnhancedNodeInfo node;
-  final ColorScheme colorScheme;
-  final NodeManagementService nodeManagement;
-  final Color Function(double) latencyColor;
-  final bool isLocal;
 
   @override
   Widget build(BuildContext context) {
-    final os = OsPresentation.forNode(node);
-    final network = NetworkPresentation.fromWire(node.peerNetwork);
-    final firewall = FirewallPresentation.fromWire(node.peerFirewall);
-    final chips = <Widget>[
-      // 每个人都显示自己的运营商归属（本机走 Watch 实时刷新；远程 peer 由 peer RPC 更新 metadata）
-      if (node.peerIsp case final isp?)
-        _MiniChip(
-          icon: Icons.router_rounded,
-          label: isp,
-          background: colorScheme.primaryContainer,
-          foreground: colorScheme.onPrimaryContainer,
-        ),
-      if (os.shortLabel.isNotEmpty)
-        _MiniChip(
-          icon: os.icon,
-          label: os.shortLabel,
-          background: colorScheme.secondaryContainer,
-          foreground: colorScheme.onSecondaryContainer,
-        ),
-      if (network.hasLabel)
-        _MiniChip(
-          icon: network.icon,
-          label: network.shortLabel,
-          background: colorScheme.tertiaryContainer,
-          foreground: colorScheme.onTertiaryContainer,
-        ),
-      if (firewall.hasLabel)
-        _MiniChip(
-          icon: firewall.icon,
-          label: firewall.shortLabel,
-          background: firewall.isEnabled == true
-              ? colorScheme.primaryContainer
-              : colorScheme.surfaceContainerHighest,
-          foreground: firewall.isEnabled == true
-              ? colorScheme.onPrimaryContainer
-              : colorScheme.onSurfaceVariant,
-        ),
-      if (node.hasSpeedTest) ...[
-        _MiniChip(
-          icon: Icons.speed_rounded,
-          label:
-              '测速 ↓${_formatMbps(node.peerDownloadMbps)} / '
-              '↑${_formatMbps(node.peerUploadMbps)} Mbps',
-          background: colorScheme.secondaryContainer,
-          foreground: colorScheme.onSecondaryContainer,
-        ),
-        if (node.peerLossRate case final loss?)
-          _MiniChip(
-            icon: Icons.network_check_rounded,
-            label: '测速丢包 ${loss.toStringAsFixed(1)}%',
-            background: loss > 0
-                ? colorScheme.errorContainer
-                : colorScheme.surfaceContainerHighest,
-            foreground: loss > 0
-                ? colorScheme.onErrorContainer
-                : colorScheme.onSurfaceVariant,
+    final palette = context.astralPalette;
+
+    if (!node.hasSpeedTest) {
+      return Text(
+        '未测速',
+        style: TextStyle(fontSize: 12, color: palette.textTertiary),
+      );
+    }
+
+    final loss = node.peerLossRate;
+    return Text.rich(
+      TextSpan(
+        children: [
+          TextSpan(
+            text: '测速 ',
+            style: TextStyle(fontSize: 11.5, color: palette.textTertiary),
           ),
-      ] else
-        _MiniChip(
-          icon: Icons.speed_outlined,
-          label: '未测速',
-          background: colorScheme.surfaceContainerHighest,
-          foreground: colorScheme.onSurfaceVariant,
-        ),
-      // 本机不显示延迟（自己 ping 自己无意义）。
-      if (!isLocal)
-        Watch((context) {
-          final metrics = nodeManagement.linkMetricsOf(node.peerId).value;
-          return Text(
-            '${metrics.latencyMs.round()}ms',
+          TextSpan(
+            text:
+                '↓ ${_formatMbps(node.peerDownloadMbps)}   '
+                '↑ ${_formatMbps(node.peerUploadMbps)} Mbps',
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 12,
               fontWeight: FontWeight.w500,
-              color: latencyColor(metrics.latencyMs),
-            ),
-          );
-        }),
-    ];
-
-    return Wrap(
-      spacing: 6,
-      runSpacing: 4,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: chips,
-    );
-  }
-}
-
-/// IP 信息 + 版本号 + 直连标签 + IPv6 + 环境信息 + 丢包率 行。
-class _UserIpAndMetaRow extends StatelessWidget {
-  const _UserIpAndMetaRow({
-    required this.node,
-    required this.colorScheme,
-    required this.isLocal,
-    required this.nodeManagement,
-  });
-
-  final EnhancedNodeInfo node;
-  final ColorScheme colorScheme;
-  final bool isLocal;
-  final NodeManagementService nodeManagement;
-
-  @override
-  Widget build(BuildContext context) {
-    final hasIpv4 = node.hasValidIpv4;
-    final hasIpv6 = node.hasValidIpv6;
-    final ipDisplayText = hasIpv4 ? node.ipv4 : '未分配 IP';
-    final isDirect = node.baseInfo.cost <= 1;
-    final versionNumber = PlatformVersionParser.getVersionNumber(
-      node.baseInfo.version,
-    );
-    final peerEnvLine = _peerClientEnvLabel(node);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Wrap(
-          spacing: 8,
-          runSpacing: 4,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Text(
-              ipDisplayText,
-              style: TextStyle(
-                fontSize: 12,
-                color: hasIpv4
-                    ? colorScheme.onSurfaceVariant
-                    : colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
-              ),
-            ),
-            if (!isLocal)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: isDirect ? AppColors.online : AppColors.warning,
-                  borderRadius: AppRadius.brSmall,
-                ),
-                child: Text(
-                  isDirect ? '直连' : '中转',
-                  style: const TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-            if (versionNumber.isNotEmpty)
-              Text(
-                versionNumber,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
-                ),
-              ),
-          ],
-        ),
-        if (hasIpv6)
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Text(
-              node.ipv6,
-              style: TextStyle(
-                fontSize: 11,
-                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.9),
-              ),
+              color: palette.textSecondary,
+              fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
-        if (peerEnvLine.isNotEmpty) ...[
-          const SizedBox(height: 4),
-          Tooltip(
-            message: _peerClientEnvFull(node),
-            child: Text(
-              peerEnvLine,
-              style: TextStyle(
-                fontSize: 11,
-                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.75),
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-        Watch((context) {
-          final metrics = nodeManagement.linkMetricsOf(node.peerId).value;
-          if (metrics.lossRate <= 0) return const SizedBox.shrink();
-          return Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text(
-              '丢包: ${metrics.lossRate.toStringAsFixed(1)}%',
+          if (loss != null && loss > 0)
+            TextSpan(
+              text: '   ·   丢包 ${loss.toStringAsFixed(1)}%',
               style: const TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w500,
                 color: AppColors.error,
               ),
             ),
-          );
-        }),
-      ],
+        ],
+      ),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
     );
   }
 }
 
-class _UserCompactMetaRow extends StatelessWidget {
-  const _UserCompactMetaRow({
+/// 元信息行：IP · 直连/中转 · 应用版本，实时丢包仅在异常时出现。
+class _UserMetaLine extends StatelessWidget {
+  const _UserMetaLine({
     required this.node,
-    required this.colorScheme,
     required this.isLocal,
     required this.nodeManagement,
-    required this.latencyColor,
   });
 
   final EnhancedNodeInfo node;
-  final ColorScheme colorScheme;
   final bool isLocal;
   final NodeManagementService nodeManagement;
-  final Color Function(double) latencyColor;
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.astralPalette;
     final hasIpv4 = node.hasValidIpv4;
-    return Row(
-      children: [
-        Flexible(
-          child: Text(
-            hasIpv4 ? node.ipv4 : '未分配 IP',
+    final hasIpv6 = node.hasValidIpv6;
+    final isDirect = node.baseInfo.cost <= 1;
+    final versionNumber = PlatformVersionParser.getVersionNumber(
+      node.baseInfo.version,
+    );
+
+    return Watch((context) {
+      final metrics = nodeManagement.linkMetricsOf(node.peerId).value;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(
+                  text: hasIpv4 ? node.ipv4 : '未分配 IP',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: hasIpv4
+                        ? palette.textSecondary
+                        : palette.textTertiary,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+                if (!isLocal)
+                  TextSpan(
+                    text: '   ${isDirect ? '直连' : '中转'}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: isDirect ? AppColors.online : AppColors.warning,
+                    ),
+                  ),
+                if (versionNumber.isNotEmpty)
+                  TextSpan(
+                    text: '   $versionNumber',
+                    style: TextStyle(fontSize: 11, color: palette.textTertiary),
+                  ),
+                if (metrics.lossRate > 0)
+                  TextSpan(
+                    text: '   丢包 ${metrics.lossRate.toStringAsFixed(1)}%',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.error,
+                    ),
+                  ),
+              ],
+            ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 12,
-              color: hasIpv4
-                  ? colorScheme.onSurfaceVariant
-                  : colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
-            ),
           ),
-        ),
-        if (!isLocal) ...[
-          const SizedBox(width: 10),
-          Watch((context) {
-            final metrics = nodeManagement.linkMetricsOf(node.peerId).value;
-            return Text(
-              '${metrics.latencyMs.round()}ms',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: latencyColor(metrics.latencyMs),
+          if (hasIpv6)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                node.ipv6,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 11, color: palette.textTertiary),
               ),
-            );
-          }),
+            ),
         ],
-      ],
-    );
+      );
+    });
   }
 }
 
-/// 主内容行（头像 + 信息列 + 状态指示点）。
+/// 主内容行（头像 + 信息列）。
 class _UserMainContentRow extends StatelessWidget {
   const _UserMainContentRow({
     required this.node,
-    required this.colorScheme,
-    required this.accentColor,
     required this.isLocal,
     required this.nodeManagement,
     required this.latencyColor,
@@ -482,8 +333,6 @@ class _UserMainContentRow extends StatelessWidget {
   });
 
   final EnhancedNodeInfo node;
-  final ColorScheme colorScheme;
-  final Color accentColor;
   final bool isLocal;
   final NodeManagementService nodeManagement;
   final Color Function(double) latencyColor;
@@ -492,89 +341,124 @@ class _UserMainContentRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.astralPalette;
+    final summary = compact ? '' : _statusSummary(node);
+    final envFull = _peerClientEnvFull(node);
+
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         avatarWidget,
         const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Row(
                 children: [
-                  Flexible(
-                    child: Text(
-                      node.customName ?? '...',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: node.customName != null
-                            ? colorScheme.onSurface
-                            : colorScheme.onSurfaceVariant.withValues(
-                                alpha: 0.5,
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            node.customName ?? '...',
+                            style: TextStyle(
+                              fontSize: 15.5,
+                              height: 1.25,
+                              fontWeight: FontWeight.w600,
+                              color: node.customName != null
+                                  ? palette.textPrimary
+                                  : palette.textTertiary,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (isLocal) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 1.5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: palette.accentMuted,
+                              borderRadius: AppRadius.brSmall,
+                            ),
+                            child: Text(
+                              '本机',
+                              style: TextStyle(
+                                fontSize: 10,
+                                height: 1.3,
+                                fontWeight: FontWeight.w600,
+                                color: palette.accent,
                               ),
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
-                  if (isLocal) ...[
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: accentColor.withValues(alpha: 0.15),
-                        borderRadius: AppRadius.brSmall,
-                      ),
-                      child: Text(
-                        '本机',
+                  if (!isLocal) ...[
+                    const SizedBox(width: 8),
+                    Watch((context) {
+                      final metrics = nodeManagement
+                          .linkMetricsOf(node.peerId)
+                          .value;
+                      return Text(
+                        '${metrics.latencyMs.round()} ms',
                         style: TextStyle(
-                          fontSize: 10,
+                          fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: accentColor,
+                          color: latencyColor(metrics.latencyMs),
+                          fontFeatures: const [FontFeature.tabularFigures()],
                         ),
-                      ),
-                    ),
+                      );
+                    }),
                   ],
                 ],
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 3),
               if (compact)
-                _UserCompactMetaRow(
-                  node: node,
-                  colorScheme: colorScheme,
-                  isLocal: isLocal,
-                  nodeManagement: nodeManagement,
-                  latencyColor: latencyColor,
+                Text(
+                  node.hasValidIpv4 ? node.ipv4 : '未分配 IP',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: node.hasValidIpv4
+                        ? palette.textSecondary
+                        : palette.textTertiary,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
                 )
               else ...[
-                _UserStatusChips(
-                  node: node,
-                  colorScheme: colorScheme,
-                  nodeManagement: nodeManagement,
-                  latencyColor: latencyColor,
-                  isLocal: isLocal,
-                ),
+                if (summary.isNotEmpty) ...[
+                  Tooltip(
+                    message: envFull.isEmpty ? summary : envFull,
+                    child: Text(
+                      summary,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        height: 1.35,
+                        color: palette.textSecondary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                ],
+                _UserSpeedLine(node: node),
                 const SizedBox(height: 4),
-                _UserIpAndMetaRow(
+                _UserMetaLine(
                   node: node,
-                  colorScheme: colorScheme,
                   isLocal: isLocal,
                   nodeManagement: nodeManagement,
                 ),
               ],
             ],
-          ),
-        ),
-        Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(
-            color: accentColor,
-            borderRadius: BorderRadius.circular(4),
           ),
         ),
       ],
@@ -592,7 +476,6 @@ class _UserTileShell extends StatelessWidget {
     required this.isHovered,
     required this.onHoverChanged,
     required this.onTap,
-    required this.colorScheme,
     required this.child,
   });
 
@@ -603,15 +486,17 @@ class _UserTileShell extends StatelessWidget {
   final bool isHovered;
   final ValueChanged<bool> onHoverChanged;
   final VoidCallback onTap;
-  final ColorScheme colorScheme;
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.astralPalette;
     final shape = grouped
         ? groupedTileShape(index: index, count: count)
         : RoundedRectangleBorder(borderRadius: borderRadius);
 
+    // hover 只由外层 AnimatedContainer 绘制，InkWell 关闭所有默认覆盖色，
+    // 否则 Material 默认灰会与自定义底色叠加，出现移入移出颜色突变。
     final ink = Material(
       color: Colors.transparent,
       shape: shape,
@@ -620,69 +505,31 @@ class _UserTileShell extends StatelessWidget {
         onTap: onTap,
         borderRadius: grouped ? null : borderRadius,
         customBorder: grouped ? shape : null,
+        hoverColor: Colors.transparent,
+        focusColor: Colors.transparent,
+        highlightColor: Colors.transparent,
+        splashColor: palette.accent.withValues(alpha: 0.08),
         child: child,
       ),
     );
-
-    if (grouped) return ink;
 
     return MouseRegion(
       onEnter: (_) => onHoverChanged(true),
       onExit: (_) => onHoverChanged(false),
       cursor: SystemMouseCursors.click,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeInOut,
-        margin: const EdgeInsets.symmetric(vertical: 4),
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOut,
+        margin: grouped
+            ? EdgeInsets.zero
+            : const EdgeInsets.symmetric(vertical: 4),
         decoration: BoxDecoration(
           color: isHovered
-              ? colorScheme.surfaceContainerHighest.withValues(alpha: 0.5)
+              ? palette.accent.withValues(alpha: 0.055)
               : Colors.transparent,
           borderRadius: borderRadius,
         ),
         child: ink,
-      ),
-    );
-  }
-}
-
-// ─── 原有子 Widget ──────────────────────────────────────────────────────────
-
-class _MiniChip extends StatelessWidget {
-  const _MiniChip({
-    required this.icon,
-    required this.label,
-    required this.background,
-    required this.foreground,
-  });
-
-  final IconData icon;
-  final String label;
-  final Color background;
-  final Color foreground;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: background,
-        borderRadius: AppRadius.brSmall,
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 12, color: foreground),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w500,
-              color: foreground,
-            ),
-          ),
-        ],
       ),
     );
   }

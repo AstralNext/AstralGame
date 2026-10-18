@@ -11,11 +11,13 @@ class MobileChromeBar extends StatelessWidget {
   const MobileChromeBar({
     super.key,
     required this.avatar,
+    required this.username,
     required this.onAvatarTap,
     this.center,
   });
 
   final Uint8List? avatar;
+  final String username;
   final VoidCallback onAvatarTap;
   final Widget? center;
 
@@ -54,7 +56,11 @@ class MobileChromeBar extends StatelessWidget {
                       ),
                     ),
                   ),
-                AvatarWidget(avatar: avatar, size: 36, onTap: onAvatarTap),
+                ProfileCapsule(
+                  avatar: avatar,
+                  username: username.trim().isEmpty ? '玩家' : username.trim(),
+                  onTap: onAvatarTap,
+                ),
               ],
             ),
           ),

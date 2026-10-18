@@ -12,11 +12,12 @@ import 'package:astral_game/config/constants.dart';
 import 'package:astral_game/di.dart';
 import 'package:astral_game/ui/pages/dashboard_narrow_layout.dart';
 import 'package:astral_game/ui/pages/dashboard_wide_layout.dart';
-import 'package:astral_game/ui/widgets/app_snack_bar.dart';
+import 'package:astral_game/ui/widgets/app_toast.dart';
 import 'package:astral_game/ui/widgets/bookmark_edit_dialog.dart';
 import 'package:astral_game/ui/widgets/confirm_dialog.dart';
 import 'package:astral_game/ui/widgets/create_room_dialog.dart';
 import 'package:astral_game/ui/widgets/dashboard_home_panel.dart';
+import 'package:astral_game/ui/widgets/edit_profile_dialog.dart';
 import 'package:astral_game/ui/widgets/share_room_dialog.dart';
 import 'package:astral_game/utils/room_share.dart';
 import 'package:flutter/material.dart';
@@ -39,7 +40,7 @@ class _DashboardPageState extends State<DashboardPage> {
   Future<void> _handleShareRoom() async {
     final session = _roomState.session.value;
     if (session == null) {
-      if (mounted) showAppSnackBar(context, '未连接房间，无法分享邀请');
+      if (mounted) showAppToast(context, '未连接房间，无法分享邀请');
       return;
     }
 
@@ -52,9 +53,9 @@ class _DashboardPageState extends State<DashboardPage> {
       final updated = session.copyWithNullable(shortCode: result.code);
       _roomState.setSession(updated);
     } on ShareCodeException catch (e) {
-      if (mounted) showAppSnackBar(context, '短码服务暂不可用（${e.message}）');
+      if (mounted) showAppToast(context, '短码服务暂不可用（${e.message}）');
     } catch (e) {
-      if (mounted) showAppSnackBar(context, '无法生成短码：$e');
+      if (mounted) showAppToast(context, '无法生成短码：$e');
     }
 
     if (!mounted) return;
@@ -111,7 +112,7 @@ class _DashboardPageState extends State<DashboardPage> {
       // 已收藏 → 再点 = 取消收藏，带「撤销」
       await _roomState.removeBookmark(existing.id);
       if (!mounted) return;
-      showAppSnackBar(
+      showAppToast(
         context,
         '已从收藏移除：${existing.customName}',
         actionLabel: '撤销',
@@ -121,7 +122,7 @@ class _DashboardPageState extends State<DashboardPage> {
     }
     // 未收藏 → 弹命名框，预填自动名，用户可改
     if (payload == null) {
-      if (mounted) showAppSnackBar(context, '还没有可收藏的房间配置');
+      if (mounted) showAppToast(context, '还没有可收藏的房间配置');
       return;
     }
     final name = await showBookmarkNameDialog(
@@ -134,7 +135,7 @@ class _DashboardPageState extends State<DashboardPage> {
       customName: name,
     );
     if (!mounted) return;
-    showAppSnackBar(context, '已加入收藏：${bookmark.customName}');
+    showAppToast(context, '已加入收藏：${bookmark.customName}');
   }
 
   void _consumeForceEndNotice() {
@@ -177,7 +178,7 @@ class _DashboardPageState extends State<DashboardPage> {
     if (!mounted) return;
     final catalog = GameCatalog.pickerItems;
     if (catalog.isEmpty) {
-      showAppSnackBar(context, '游戏目录未加载');
+      showAppToast(context, '游戏目录未加载');
       return;
     }
     final selected = await showCreateRoomDialog(
@@ -193,11 +194,11 @@ class _DashboardPageState extends State<DashboardPage> {
         gameName: selected.displayName,
       );
       if (!mounted) return;
-      showAppSnackBar(context, '已开房，去分享发给好友');
+      showAppToast(context, '已开房，去分享发给好友');
     } on ConnectionAbortedException {
       return;
     } catch (e) {
-      if (mounted) showAppSnackBar(context, '$e');
+      if (mounted) showAppToast(context, '$e');
     }
   }
 
@@ -253,9 +254,9 @@ class _DashboardPageState extends State<DashboardPage> {
     } on ConnectionAbortedException {
       return;
     } on ShareCodeException catch (e) {
-      if (mounted) showAppSnackBar(context, e.message);
+      if (mounted) showAppToast(context, e.message);
     } catch (e) {
-      if (mounted) showAppSnackBar(context, '$e');
+      if (mounted) showAppToast(context, '$e');
     }
   }
 
@@ -275,11 +276,11 @@ class _DashboardPageState extends State<DashboardPage> {
         customName: name,
       );
       if (!mounted) return;
-      showAppSnackBar(context, '已加入收藏：${bookmark.customName}');
+      showAppToast(context, '已加入收藏：${bookmark.customName}');
     } on ShareCodeException catch (e) {
-      if (mounted) showAppSnackBar(context, e.message);
+      if (mounted) showAppToast(context, e.message);
     } catch (e) {
-      if (mounted) showAppSnackBar(context, '$e');
+      if (mounted) showAppToast(context, '$e');
     }
   }
 
@@ -300,9 +301,11 @@ class _DashboardPageState extends State<DashboardPage> {
               nodeManagement: _nodeManagement,
               roomState: _roomState,
               callbacks: callbacks,
+              avatar: _nodeManagement.currentUserAvatar.value,
+              onAvatarTap: () => showEditProfileDialog(context),
             )
           : Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
               child: DashboardWideLayout(
                 nodeManagement: _nodeManagement,
                 screenStateService: _screenStateService,

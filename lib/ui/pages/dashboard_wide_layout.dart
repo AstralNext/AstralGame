@@ -34,8 +34,9 @@ class DashboardWideLayout extends StatelessWidget {
       final session = roomState.session.value;
       final showRoom = session != null;
 
+      final Widget content;
       if (!showRoom) {
-        return Padding(
+        content = Padding(
           padding: const EdgeInsets.fromLTRB(4, 0, 4, 0),
           child: DashboardHomePanel(
             isConnected: false,
@@ -43,29 +44,31 @@ class DashboardWideLayout extends StatelessWidget {
             callbacks: callbacks,
           ),
         );
+      } else {
+        content = Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              flex: 6,
+              child: _MembersPane(
+                nodeManagement: nodeManagement,
+                roomState: roomState,
+              ),
+            ),
+            const SizedBox(width: AppDimensions.sectionGap),
+            Expanded(
+              flex: 3,
+              child: _RoomPane(
+                nodeManagement: nodeManagement,
+                roomState: roomState,
+                callbacks: callbacks,
+              ),
+            ),
+          ],
+        );
       }
 
-      return Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            flex: 6,
-            child: _MembersPane(
-              nodeManagement: nodeManagement,
-              roomState: roomState,
-            ),
-          ),
-          const SizedBox(width: AppDimensions.sectionGap),
-          Expanded(
-            flex: 3,
-            child: _RoomPane(
-              nodeManagement: nodeManagement,
-              roomState: roomState,
-              callbacks: callbacks,
-            ),
-          ),
-        ],
-      );
+      return content;
     });
   }
 }
@@ -191,7 +194,6 @@ class _RoomPane extends StatelessWidget {
       final linkingFlag = getIt<ConnectionService>().isLinking.value;
       final isLinking =
           roomState.session.value != null && (linkingFlag || !isRunning);
-      final myIp = nodeManagement.myVirtualIpv4.value;
       final session = roomState.session.value;
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -203,7 +205,6 @@ class _RoomPane extends StatelessWidget {
             roomGameId: session?.gameId,
             roomShortCode: roomState.activeShareCode,
             hostOnline: roomState.hostOnline.value,
-            virtualIp: isRunning ? myIp : null,
             callbacks: callbacks,
           ),
           const SizedBox(height: AppDimensions.sectionGap),

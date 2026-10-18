@@ -1,11 +1,11 @@
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/models/game_catalog.dart';
-import 'package:astral_game/ui/widgets/app_snack_bar.dart';
+import 'package:astral_game/ui/widgets/app_toast.dart';
 import 'package:astral_game/ui/widgets/astral_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// 已连接房间卡：游戏封面、房间名、短码、IP、分享/收藏/离开按钮。
+/// 已连接房间卡：游戏封面、房间名、房间码、分享/收藏/离开按钮。
 class ConnectedRoomCard extends StatelessWidget {
   const ConnectedRoomCard({
     super.key,
@@ -14,7 +14,6 @@ class ConnectedRoomCard extends StatelessWidget {
     this.roomShortCode,
     this.hostOnline = true,
     this.isLinking = false,
-    this.virtualIp,
     required this.onShare,
     required this.onDisconnect,
     required this.onBookmark,
@@ -26,7 +25,6 @@ class ConnectedRoomCard extends StatelessWidget {
   final String? roomShortCode;
   final bool hostOnline;
   final bool isLinking;
-  final String? virtualIp;
   final VoidCallback onShare;
   final VoidCallback onDisconnect;
   final VoidCallback onBookmark;
@@ -38,7 +36,6 @@ class ConnectedRoomCard extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
     final game = GameCatalog.byId(roomGameId);
     final code = roomShortCode?.trim() ?? '';
-    final ip = virtualIp?.trim() ?? '';
 
     return AstralCard(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
@@ -115,30 +112,43 @@ class ConnectedRoomCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    if (ip.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        ip,
-                        style: textTheme.labelSmall?.copyWith(
-                          color: palette.textTertiary,
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
-                      ),
-                    ],
                     if (code.isNotEmpty) ...[
                       const SizedBox(height: 10),
                       Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          Flexible(
-                            child: Text(
-                              code,
-                              style: textTheme.titleLarge?.copyWith(
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 3,
-                                fontFeatures: const [
-                                  FontFeature.tabularFigures(),
-                                ],
-                              ),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '房间码',
+                                  style: textTheme.labelSmall?.copyWith(
+                                    color: palette.textTertiary,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                // 字号随可用宽度自适应：始终按整宽铺满，不折行、不省略。
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: FittedBox(
+                                    fit: BoxFit.fitWidth,
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      code,
+                                      maxLines: 1,
+                                      softWrap: false,
+                                      style: textTheme.titleLarge?.copyWith(
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 3,
+                                        fontFeatures: const [
+                                          FontFeature.tabularFigures(),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                           IconButton(
@@ -149,7 +159,7 @@ class ConnectedRoomCard extends StatelessWidget {
                                 ClipboardData(text: code),
                               );
                               if (context.mounted) {
-                                showAppSnackBar(context, '已复制：$code');
+                                showAppToast(context, '已复制：$code');
                               }
                             },
                             icon: Icon(

@@ -4,14 +4,22 @@ import 'dart:io';
 
 import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/config/theme.dart';
+import 'package:astral_game/data/models/active_room_session.dart';
+import 'package:astral_game/data/services/app_settings_service.dart';
+import 'package:astral_game/data/services/connection_service.dart';
 import 'package:astral_game/data/services/firewall_service.dart';
+import 'package:astral_game/data/services/join_link_service.dart';
 import 'package:astral_game/data/services/network_optimize_service.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
 import 'package:astral_game/data/services/screen_state_service.dart';
 import 'package:astral_game/data/services/shell_navigation_service.dart';
 import 'package:astral_game/data/services/update_service.dart';
+import 'package:astral_game/data/state/bookmark_search_state.dart';
+import 'package:astral_game/data/state/room_state.dart';
+import 'package:astral_game/data/state/server_state.dart';
 import 'package:astral_game/data/state/settings_state.dart';
 import 'package:astral_game/di.dart' show getIt;
+import 'package:astral_game/ui/widgets/app_toast.dart';
 import 'package:astral_game/ui/widgets/bookmark_search_field.dart';
 import 'package:astral_game/ui/widgets/edit_profile_dialog.dart';
 import 'package:astral_game/utils/runtime_platform.dart';
@@ -24,6 +32,7 @@ import 'package:window_manager/window_manager.dart';
 
 import '../pages/dashboard_page.dart';
 import '../pages/bookmarks_page.dart';
+import '../pages/servers/server_dialog.dart';
 import '../pages/servers/servers_main_page.dart';
 import '../pages/settings/settings_main_page.dart';
 import '../widgets/navigation/bottom_nav.dart';
@@ -51,8 +60,14 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
   final bool _isDesktop = RuntimePlatform.isDesktop;
   bool _isMaximized = false;
 
+  /// 手机端收藏搜索是否展开（底部搜索胶囊）。
+  bool _bookmarkSearchOpen = false;
+
   /// 收藏 Tab 的索引（[IndexedStack] 顺序：联机/服务器/收藏/设置）。
   static const _bookmarksTabIndex = 2;
+
+  /// 服务器 Tab 的索引。
+  static const _serversTabIndex = 1;
 
   /// 设置 Tab 的索引。
   static const _settingsTabIndex = 3;
@@ -65,7 +80,11 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
     _shellNavEffect = effect(() {
       final pending = getIt<ShellNavigationService>().pendingTabIndex.value;
       if (pending == null || !mounted) return;
-      setState(() => _selectedIndex = pending.clamp(0, 3));
+      final index = pending.clamp(0, 3);
+      if (index != _bookmarksTabIndex && _bookmarkSearchOpen) {
+        _closeBookmarkSearch();
+      }
+      setState(() => _selectedIndex = index);
       if (_selectedIndex == _settingsTabIndex) _refreshFirewallStatus();
       getIt<ShellNavigationService>().clearPending();
     });
@@ -99,9 +118,16 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
+      // 首次启动且从未设置昵称：先引导设置头像与昵称。
+      if (getIt<AppSettingsService>().needsProfileSetup()) {
+        await showEditProfileDialog(context, onboarding: true);
+        if (!mounted) return;
+      }
       // 静默检查更新（业务时序统一封装在 UpdateService 内）
       await getIt<UpdateService>().startAutoCheckIfEnabled(context: context);
       if (!mounted) return;
+      // 自动进入设定好的收藏房间（不阻塞后续初始化）。
+      unawaited(_autoEnterSelectedRoomIfNeeded());
       // 同步网络加速驱动真实状态，避免设置页首次打开时 installed=false 与实际脱节
       if (RuntimePlatform.isWindows) {
         // ignore: discarded_futures
@@ -110,6 +136,57 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
     });
 
     _setupDesktopCloseBehavior();
+  }
+
+  /// 启动后自动进入设定好的收藏房间（全平台生效）。
+  Future<void> _autoEnterSelectedRoomIfNeeded() async {
+    if (!mounted) return;
+    final settingsState = getIt<SettingsState>();
+    if (!settingsState.autoEnterRoom.value) return;
+
+    // 与 URL 邀请链接进房协作：若是通过链接拉起（全平台），交给 JoinLinkBinder，
+    // 避免两边同时进房。等待首次链接探测完成，避免异步竞态。
+    final joinLinks = getIt<JoinLinkService>();
+    try {
+      await joinLinks.initialLinkReady.timeout(const Duration(seconds: 2));
+    } on TimeoutException {
+      // 探测超时（平台不支持等情况）：按普通启动处理。
+    }
+    if (!mounted) return;
+    if (joinLinks.hadInitialLink || joinLinks.pendingToken.value != null) {
+      return;
+    }
+
+    final roomState = getIt<RoomState>();
+    if (roomState.session.value != null) return;
+
+    final bookmarkId = settingsState.autoEnterBookmarkId.value;
+    RoomInvitePayload? payload;
+    if (bookmarkId != null) {
+      for (final bookmark in roomState.bookmarks) {
+        if (bookmark.id == bookmarkId) {
+          payload = bookmark.payload;
+          break;
+        }
+      }
+      if (payload == null) {
+        showAppToast(context, '启动后进入的房间已不在收藏中');
+        return;
+      }
+    } else {
+      // 旧配置未指定收藏房间：回退到上次所在房间。
+      payload = getIt<AppSettingsService>().getLastRoomPayload();
+    }
+    if (payload == null) return;
+
+    try {
+      await getIt<ConnectionService>().joinWithPayload(payload);
+      if (!mounted) return;
+      showAppToast(context, '已自动进入房间');
+    } catch (e) {
+      if (!mounted) return;
+      showAppToast(context, '自动进入房间失败：$e');
+    }
   }
 
   @override
@@ -266,8 +343,21 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
 
   void _handleDestinationSelected(int index) {
     if (index == _selectedIndex) return;
+    if (_bookmarkSearchOpen) _closeBookmarkSearch();
     setState(() => _selectedIndex = index);
     if (index == _settingsTabIndex) _refreshFirewallStatus();
+  }
+
+  /// 展开手机端底部搜索胶囊；离开收藏页或收起时清空搜索词。
+  void _openBookmarkSearch() {
+    if (_bookmarkSearchOpen) return;
+    setState(() => _bookmarkSearchOpen = true);
+  }
+
+  void _closeBookmarkSearch() {
+    getIt<BookmarkSearchState>().clear();
+    if (!_bookmarkSearchOpen) return;
+    setState(() => _bookmarkSearchOpen = false);
   }
 
   /// 进入设置页时同步防火墙真实状态，避免 IndexedStack 缓存导致开关过期。
@@ -275,6 +365,44 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
     if (RuntimePlatform.isWindows) {
       unawaited(getIt<FirewallService>().refreshAllProfiles());
     }
+  }
+
+  /// 悬浮底栏右侧的行动胶囊：收藏页放搜索，服务器页放刷新与添加。
+  ///
+  /// 读取 signals，必须在 [Watch] 内调用。
+  List<BottomNavAction> _trailingActions(BuildContext context) {
+    if (_selectedIndex == _bookmarksTabIndex) {
+      // 搜索胶囊展开时收起圆钮，让导航恢复完整宽度。
+      if (_bookmarkSearchOpen) return const [];
+      return [
+        BottomNavAction(
+          icon: Icons.search_rounded,
+          tooltip: '搜索收藏',
+          onPressed: _openBookmarkSearch,
+        ),
+      ];
+    }
+    if (_selectedIndex == _serversTabIndex) {
+      final servers = getIt<ServerState>().servers.value;
+      // 空态已有「添加服务器」CTA，不重复提供入口。
+      if (servers.isEmpty) return const [];
+      final probing =
+          getIt<ServerStatusState>().probingServerIds.value.isNotEmpty;
+      return [
+        BottomNavAction(
+          icon: Icons.refresh_rounded,
+          tooltip: probing ? '正在检测' : '重新检测并测速',
+          loading: probing,
+          onPressed: probing ? null : () => unawaited(probeAllServers(context)),
+        ),
+        BottomNavAction(
+          icon: Icons.add_rounded,
+          tooltip: '添加服务器',
+          onPressed: () => showAddServerDialog(context),
+        ),
+      ];
+    }
+    return const [];
   }
 
   Widget _buildTabBody(bool isCompact) {
@@ -289,20 +417,25 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
 
     if (!isCompact) return stack;
 
-    // 顶栏已处理 status bar，内容区不再叠一层顶部 SafeArea。
-    return SafeArea(top: false, bottom: false, child: stack);
+    // 手机没有模拟顶栏，由内容自己避开状态栏；桌面窄窗口仍有标题栏。
+    return SafeArea(top: !_isDesktop, bottom: false, child: stack);
   }
 
   @override
   Widget build(BuildContext context) {
     final palette = context.astralPalette;
     final screenWidth = MediaQuery.sizeOf(context).width;
-    final isCompact = screenWidth < 600;
+    final isCompact = screenWidth < AppBreakpoints.narrow;
     _screenStateService.updateScreenWidth(screenWidth);
+    // 手机端：收藏页才在悬浮底栏右侧留搜索位。
+    final showBookmarkSearch =
+        isCompact && _selectedIndex == _bookmarksTabIndex;
+    final searchOpen = showBookmarkSearch && _bookmarkSearchOpen;
     final nodes = getIt<NodeManagementService>();
 
+    // 手机端去掉模拟顶栏，内容通栏铺到状态栏下方（Apple 页面规范）。
     final contentRadius = isCompact
-        ? BorderRadius.circular(AppDimensions.radiusMd)
+        ? BorderRadius.zero
         : const BorderRadius.only(
             topLeft: Radius.circular(AppDimensions.radiusMd),
           );
@@ -311,6 +444,8 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
       canPop: false,
       child: Scaffold(
         backgroundColor: palette.canvas,
+        // 悬浮胶囊：内容一直延伸到底部、从胶囊下方透出，不再有“内容区底边”。
+        extendBody: isCompact,
         body: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -343,11 +478,12 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
                             ? const BookmarkSearchField()
                             : null,
                       )
-                    // 移动端全宽显示顶栏（平板此前无顶栏，头像/搜索将无处安放）
-                    else
+                    // 平板保留模拟顶栏；手机按 Apple 页面规范不显示，标题与操作交给页内。
+                    else if (!isCompact)
                       Watch((context) {
                         return MobileChromeBar(
                           avatar: nodes.currentUserAvatar.value,
+                          username: nodes.currentUsername.value,
                           onAvatarTap: () => showEditProfileDialog(context),
                           // 收藏 Tab：顶栏中央放搜索胶囊
                           center: _selectedIndex == _bookmarksTabIndex
@@ -370,16 +506,38 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
             ),
           ],
         ),
+        // 不加底色，让胶囊外的区域直接透出下面的内容。
         bottomNavigationBar: isCompact
-            ? ColoredBox(
-                color: palette.canvas,
-                child: SafeArea(
-                  top: false,
-                  child: BottomNav(
-                    navigationItems: _navigationItems,
-                    selectedIndex: _selectedIndex,
-                    onSelected: _handleDestinationSelected,
-                  ),
+            ? SafeArea(
+                top: false,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // 搜索胶囊浮在导航上方，导航始终保留在原来的位置。
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 240),
+                      curve: Curves.easeOutCubic,
+                      alignment: Alignment.bottomCenter,
+                      // 不裁剪，否则搜索胶囊的投影会被裁成一块方形。
+                      clipBehavior: Clip.none,
+                      child: searchOpen
+                          ? BookmarkSearchBar(
+                              key: const ValueKey('bookmark_search_bar'),
+                              onClose: _closeBookmarkSearch,
+                            )
+                          : const SizedBox(width: double.infinity),
+                    ),
+                    // 行动胶囊依赖服务器列表与探测状态，放在 Watch 里响应式更新。
+                    Watch((navContext) {
+                      return BottomNav(
+                        key: const ValueKey('bottom_nav'),
+                        navigationItems: _navigationItems,
+                        selectedIndex: _selectedIndex,
+                        onSelected: _handleDestinationSelected,
+                        trailingActions: _trailingActions(navContext),
+                      );
+                    }),
+                  ],
                 ),
               )
             : null,

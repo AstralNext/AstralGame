@@ -1,12 +1,13 @@
 import 'package:astral_game/utils/logger.dart';
 import 'dart:io';
 
+import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/config/network_constants.dart';
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/services/alcy_wallpaper_service.dart';
 import 'package:astral_game/data/services/hitokoto_service.dart';
 import 'package:astral_game/di.dart';
-import 'package:astral_game/ui/widgets/app_snack_bar.dart';
+import 'package:astral_game/ui/widgets/app_toast.dart';
 import 'package:astral_game/utils/runtime_platform.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -76,7 +77,7 @@ class DailySceneryCardState extends State<DailySceneryCard> {
   }
 
   Future<void> _loadWallpaper() async {
-    final narrow = MediaQuery.sizeOf(context).width < 600;
+    final narrow = MediaQuery.sizeOf(context).width < AppBreakpoints.narrow;
     try {
       final url = await getIt<AlcyWallpaperService>().fetchImageUrl(
         narrow: narrow,
@@ -150,11 +151,11 @@ class DailySceneryCardState extends State<DailySceneryCard> {
         await File(path).writeAsBytes(bytes, flush: true);
       }
       if (!mounted) return;
-      showAppSnackBar(context, RuntimePlatform.isMobile ? '已保存' : '已保存到 $path');
+      showAppToast(context, RuntimePlatform.isMobile ? '已保存' : '已保存到 $path');
     } catch (e) {
       appLogger.w('[SceneryCard] 操作失败', error: e);
       if (!mounted) return;
-      showAppSnackBar(context, '下载失败');
+      showAppToast(context, '下载失败');
     } finally {
       if (mounted) setState(() => _downloading = false);
     }

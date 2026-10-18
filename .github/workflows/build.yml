@@ -13,7 +13,7 @@ on:
           - linux-x64
           - windows-x64
         default: 'all'
-  # 推送 v* 只编译产物；GitHub Release 须在 Actions 里手动跑「发布」。
+  # 推送 v* 标签自动编译三端；成功后「发布」工作流会接手创建 Release。
   push:
     tags:
       - 'v*'

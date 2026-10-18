@@ -39,23 +39,32 @@ class FloatingOverlayService {
   Future<void> updatePayload({
     required bool connected,
     required List<EnhancedNodeInfo> users,
+    Map<int, double> latencyByPeerId = const {},
   }) async {
     if (!isSupported) return;
     final payload = jsonEncode({
       'connected': connected,
-      'users': users.map(_encodeUser).toList(),
+      'users': users
+          .map((node) => _encodeUser(node, latencyByPeerId[node.peerId]))
+          .toList(),
     });
     await _channel.invokeMethod<void>('updateOverlay', {'payload': payload});
   }
 
-  static Map<String, dynamic> _encodeUser(EnhancedNodeInfo node) {
-    final ip = node.hasValidIpv4
-        ? node.ipv4.split('/').first.trim()
-        : '未分配 IP';
+  static Map<String, dynamic> _encodeUser(
+    EnhancedNodeInfo node,
+    double? liveLatencyMs,
+  ) {
+    final ip = node.hasValidIpv4 ? node.ipv4.split('/').first.trim() : '未分配 IP';
+    // userNodes 的快照比较不含延迟，实时值来自独立的 linkMetrics signal。
+    final latencyMs = (liveLatencyMs != null && liveLatencyMs > 0)
+        ? liveLatencyMs
+        : node.baseInfo.latencyMs;
     final map = <String, dynamic>{
+      'peerId': node.peerId,
       'name': node.displayName,
       'ip': ip,
-      'latencyMs': node.baseInfo.latencyMs,
+      'latencyMs': latencyMs,
     };
     final avatar = node.avatar;
     if (avatar != null && avatar.isNotEmpty) {
@@ -84,8 +93,16 @@ class FloatingOverlayService {
     final users = nodes.userNodes.value
         .where((n) => !n.hostname.startsWith(AppConstants.publicServerHostname))
         .toList();
+    final latencies = <int, double>{
+      for (final user in users)
+        user.peerId: nodes.linkMetricsOf(user.peerId).value.latencyMs,
+    };
 
     await show();
-    await updatePayload(connected: connected, users: users);
+    await updatePayload(
+      connected: connected,
+      users: users,
+      latencyByPeerId: latencies,
+    );
   }
 }

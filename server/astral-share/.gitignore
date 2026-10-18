@@ -1,0 +1,11 @@
+# 运行时数据（短码列表含房间密码载荷，绝不入库）
+data/
+*.corrupt-*
+
+# 编译产物
+astral-share
+astral-share.exe
+dist/
+
+# 本地环境
+.env

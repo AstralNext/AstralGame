@@ -1,5 +1,5 @@
 import 'package:astral_game/data/services/linux_capability_service.dart';
-import 'package:astral_game/ui/widgets/app_snack_bar.dart';
+import 'package:astral_game/ui/widgets/app_toast.dart';
 import 'package:flutter/material.dart';
 
 /// 提示缺少 CAP_NET_ADMIN 并引导授权（Linux 桌面）。
@@ -63,13 +63,13 @@ Future<bool> showLinuxCapabilityPrompt(
       );
       return true;
     case LinuxCapabilityGrant.cancelled:
-      showAppSnackBar(context, '已取消授权');
+      showAppToast(context, '已取消授权');
     case LinuxCapabilityGrant.notAuthorized:
-      showAppSnackBar(context, '授权被拒绝：需要管理员账号（polkit）');
+      showAppToast(context, '授权被拒绝：需要管理员账号（polkit）');
     case LinuxCapabilityGrant.setcapMissing:
-      showAppSnackBar(context, '系统缺少 setcap 命令，请先安装 libcap');
+      showAppToast(context, '系统缺少 setcap 命令，请先安装 libcap');
     case LinuxCapabilityGrant.failed:
-      showAppSnackBar(context, '授权失败，详见日志');
+      showAppToast(context, '授权失败，详见日志');
   }
   return false;
 }

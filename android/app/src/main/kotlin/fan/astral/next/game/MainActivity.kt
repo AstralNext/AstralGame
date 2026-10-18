@@ -1,6 +1,13 @@
 package fan.astral.next.game
 
+import android.Manifest
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ShortcutInfo
 import android.content.pm.ShortcutManager
 import android.graphics.Bitmap
@@ -11,11 +18,15 @@ import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Build
 import androidx.annotation.RequiresApi
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
+    private var pendingNotificationPermissionResult: MethodChannel.Result? = null
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
@@ -33,8 +44,7 @@ class MainActivity : FlutterActivity() {
                     result.success(null)
                 }
                 "showOverlay" -> {
-                    FloatingOverlayController.show(this)
-                    result.success(null)
+                    result.success(FloatingOverlayController.show(this))
                 }
                 "hideOverlay" -> {
                     FloatingOverlayController.hide()
@@ -51,6 +61,27 @@ class MainActivity : FlutterActivity() {
             }
         }
 
+        // 通知栏 channel（前台服务通知权限与样式）
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "fan.astral.next.game/notifications",
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "ensureNotificationPermission" -> ensureNotificationPermission(result)
+                "refreshVpnNotification" -> {
+                    postVpnNotification()
+                    result.success(null)
+                }
+                "cancelVpnNotification" -> {
+                    val manager = getSystemService(Context.NOTIFICATION_SERVICE)
+                        as NotificationManager
+                    manager.cancel(VPN_NOTIFICATION_ID)
+                    result.success(null)
+                }
+                else -> result.notImplemented()
+            }
+        }
+
         // 桌面快捷方式 channel
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -61,6 +92,98 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+    }
+
+    private fun ensureNotificationPermission(result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            result.success(true)
+            return
+        }
+        if (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS,
+            ) == PackageManager.PERMISSION_GRANTED
+        ) {
+            result.success(true)
+            return
+        }
+        if (pendingNotificationPermissionResult != null) {
+            result.success(false)
+            return
+        }
+        pendingNotificationPermissionResult = result
+        ActivityCompat.requestPermissions(
+            this,
+            arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+            REQUEST_POST_NOTIFICATIONS,
+        )
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != REQUEST_POST_NOTIFICATIONS) return
+        val granted = grantResults.isNotEmpty() &&
+            grantResults[0] == PackageManager.PERMISSION_GRANTED
+        pendingNotificationPermissionResult?.success(granted)
+        pendingNotificationPermissionResult = null
+    }
+
+    /// 用本地化文案和点击跳转覆盖插件创建的前台服务通知（同一 channel / id）。
+    private fun postVpnNotification() {
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE)
+            as NotificationManager
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                VPN_NOTIFICATION_CHANNEL_ID,
+                "Astral 连接",
+                NotificationManager.IMPORTANCE_LOW,
+            ).apply {
+                description = "虚拟局域网运行状态"
+                setShowBadge(false)
+            }
+            manager.createNotificationChannel(channel)
+        }
+
+        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+        val contentIntent = launchIntent?.let {
+            it.flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                Intent.FLAG_ACTIVITY_SINGLE_TOP
+            val pendingFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            } else {
+                PendingIntent.FLAG_UPDATE_CURRENT
+            }
+            PendingIntent.getActivity(this, 0, it, pendingFlags)
+        }
+
+        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Notification.Builder(this, VPN_NOTIFICATION_CHANNEL_ID)
+        } else {
+            @Suppress("DEPRECATION")
+            Notification.Builder(this)
+        }
+        builder
+            .setContentTitle("Astral 已连接")
+            .setContentText("虚拟局域网正在运行")
+            .setSmallIcon(R.drawable.ic_stat_vpn)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setShowWhen(false)
+            .setCategory(Notification.CATEGORY_SERVICE)
+            .setVisibility(Notification.VISIBILITY_PUBLIC)
+        contentIntent?.let { builder.setContentIntent(it) }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            builder.setForegroundServiceBehavior(
+                Notification.FOREGROUND_SERVICE_IMMEDIATE,
+            )
+        }
+        manager.notify(VPN_NOTIFICATION_ID, builder.build())
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
@@ -140,6 +263,12 @@ class MainActivity : FlutterActivity() {
         }
 
         return Icon.createWithBitmap(bitmap)
+    }
+
+    companion object {
+        private const val REQUEST_POST_NOTIFICATIONS = 4101
+        private const val VPN_NOTIFICATION_CHANNEL_ID = "astral_vpn"
+        private const val VPN_NOTIFICATION_ID = 1
     }
 }
 

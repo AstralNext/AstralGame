@@ -36,7 +36,10 @@ class _FloatingOverlayBinderState extends State<FloatingOverlayBinder>
     _effectCleanup = effect(() {
       settings.floatingOverlayEnabled.value;
       nodes.isRunning;
-      nodes.userNodes.value.length;
+      // 延迟存放在独立的 linkMetrics signal 中，需逐个订阅才能实时刷新。
+      for (final node in nodes.userNodes.value) {
+        nodes.linkMetricsOf(node.peerId).value.latencyMs;
+      }
       _scheduleSync();
     });
     _scheduleSync();

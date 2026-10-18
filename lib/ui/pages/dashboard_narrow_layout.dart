@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/models/game_catalog.dart';
@@ -8,8 +10,10 @@ import 'package:astral_game/data/state/room_state.dart';
 import 'package:astral_game/data/state/settings_state.dart';
 import 'package:astral_game/di.dart';
 import 'package:astral_game/ui/pages/dashboard_user_item.dart';
+import 'package:astral_game/ui/widgets/avatar_widget.dart';
 import 'package:astral_game/ui/widgets/dashboard_home_panel.dart';
 import 'package:astral_game/ui/widgets/dashboard_members_skeleton.dart';
+import 'package:astral_game/ui/widgets/page_header.dart';
 import 'package:astral_game/ui/widgets/room_open_games_panel.dart';
 import 'package:flutter/material.dart';
 import 'package:signals/signals_flutter.dart';
@@ -20,11 +24,15 @@ class DashboardNarrowLayout extends StatelessWidget {
     required this.nodeManagement,
     required this.roomState,
     required this.callbacks,
+    required this.avatar,
+    required this.onAvatarTap,
   });
 
   final NodeManagementService nodeManagement;
   final RoomState roomState;
   final DashboardCallbacks callbacks;
+  final Uint8List? avatar;
+  final VoidCallback onAvatarTap;
 
   @override
   Widget build(BuildContext context) {
@@ -35,70 +43,94 @@ class DashboardNarrowLayout extends StatelessWidget {
       final showRoom = session != null;
       final isLinking = showRoom && (linkingFlag || !isRunning);
 
+      final username = nodeManagement.currentUsername.value.trim();
+      final header = PageHeader(
+        horizontalPadding: AppDimensions.pagePaddingHMobile,
+        actions: [
+          ProfileCapsule(
+            avatar: avatar,
+            username: username.isEmpty ? '玩家' : username,
+            onTap: onAvatarTap,
+          ),
+        ],
+      );
+
       if (!showRoom) {
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppDimensions.pagePaddingH,
-            AppDimensions.pagePaddingV,
-            AppDimensions.pagePaddingH,
-            8,
-          ),
-          child: DashboardHomePanel(
-            isConnected: false,
-            username: nodeManagement.currentUsername.value,
-            callbacks: callbacks,
-          ),
+        return Column(
+          children: [
+            header,
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppDimensions.pagePaddingH,
+                  AppDimensions.sectionGap,
+                  AppDimensions.pagePaddingH,
+                  AppDimensions.listBottomWithNav,
+                ),
+                child: DashboardHomePanel(
+                  isConnected: false,
+                  username: nodeManagement.currentUsername.value,
+                  callbacks: callbacks,
+                ),
+              ),
+            ),
+          ],
         );
       }
 
       final active = session;
-      return CustomScrollView(
-        key: const PageStorageKey<String>('dashboard_narrow_scroll'),
-        physics: const ClampingScrollPhysics(),
-        slivers: [
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(
-              AppDimensions.pagePaddingH,
-              AppDimensions.pagePaddingV,
-              AppDimensions.pagePaddingH,
-              8,
-            ),
-            sliver: SliverToBoxAdapter(
-              child: _NarrowRoomHeader(
-                nodeManagement: nodeManagement,
-                roomState: roomState,
-                isRunning: isRunning,
-                isLinking: isLinking,
-                username: nodeManagement.currentUsername.value,
-                gameId: active.gameId,
-                callbacks: callbacks,
-              ),
-            ),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(
-              AppDimensions.pagePaddingH,
-              8,
-              AppDimensions.pagePaddingH,
-              8,
-            ),
-            sliver: SliverToBoxAdapter(
-              child: _NarrowOpenGamesSlot(
-                gameId: active.gameId,
-                isRunning: isRunning,
-              ),
-            ),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(
-              AppDimensions.pagePaddingH,
-              8,
-              AppDimensions.pagePaddingH,
-              28,
-            ),
-            sliver: _MembersBlock(
-              roomState: roomState,
-              nodeManagement: nodeManagement,
+      return Column(
+        children: [
+          header,
+          Expanded(
+            child: CustomScrollView(
+              key: const PageStorageKey<String>('dashboard_narrow_scroll'),
+              physics: const ClampingScrollPhysics(),
+              slivers: [
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppDimensions.pagePaddingH,
+                    AppDimensions.sectionGap,
+                    AppDimensions.pagePaddingH,
+                    8,
+                  ),
+                  sliver: SliverToBoxAdapter(
+                    child: _NarrowRoomHeader(
+                      roomState: roomState,
+                      isLinking: isLinking,
+                      username: nodeManagement.currentUsername.value,
+                      gameId: active.gameId,
+                      callbacks: callbacks,
+                    ),
+                  ),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppDimensions.pagePaddingH,
+                    8,
+                    AppDimensions.pagePaddingH,
+                    8,
+                  ),
+                  sliver: SliverToBoxAdapter(
+                    child: _NarrowOpenGamesSlot(
+                      gameId: active.gameId,
+                      isRunning: isRunning,
+                    ),
+                  ),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppDimensions.pagePaddingH,
+                    8,
+                    AppDimensions.pagePaddingH,
+                    AppDimensions.listBottomWithNav,
+                  ),
+                  sliver: _MembersBlock(
+                    roomState: roomState,
+                    nodeManagement: nodeManagement,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -109,18 +141,14 @@ class DashboardNarrowLayout extends StatelessWidget {
 
 class _NarrowRoomHeader extends StatelessWidget {
   const _NarrowRoomHeader({
-    required this.nodeManagement,
     required this.roomState,
-    required this.isRunning,
     required this.isLinking,
     required this.username,
     required this.gameId,
     required this.callbacks,
   });
 
-  final NodeManagementService nodeManagement;
   final RoomState roomState;
-  final bool isRunning;
   final bool isLinking;
   final String username;
   final String gameId;
@@ -129,7 +157,6 @@ class _NarrowRoomHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Watch((context) {
-      final myIp = nodeManagement.myVirtualIpv4.value;
       return DashboardHomePanel(
         isConnected: true,
         isLinking: isLinking,
@@ -138,7 +165,6 @@ class _NarrowRoomHeader extends StatelessWidget {
         roomGameId: gameId,
         roomShortCode: roomState.activeShareCode,
         hostOnline: roomState.hostOnline.value,
-        virtualIp: isRunning ? myIp : null,
         callbacks: callbacks,
       );
     });
@@ -252,7 +278,7 @@ class _MembersBlock extends StatelessWidget {
             final node = nodes[i];
             return Column(
               children: [
-                if (i > 0) const Divider(height: 1, indent: 56),
+                if (i > 0) const Divider(height: 1, indent: 72),
                 DashboardUserItem(
                   key: ValueKey<int>(node.peerId),
                   node: node,

@@ -1,4 +1,4 @@
-import 'package:astral_game/ui/widgets/app_snack_bar.dart';
+import 'package:astral_game/ui/widgets/app_toast.dart';
 import 'package:astral_game/utils/logger.dart';
 import 'package:astral_game/utils/room_share.dart';
 import 'package:astral_game/utils/runtime_platform.dart';
@@ -11,7 +11,7 @@ Future<void> copyJoinInvite(BuildContext context, String url) async {
   if (t.isEmpty) return;
   await Clipboard.setData(ClipboardData(text: t));
   if (!context.mounted) return;
-  showAppSnackBar(context, '邀请链接已复制');
+  showAppToast(context, '邀请链接已复制');
 }
 
 /// Android 调系统分享；其余平台直接复制邀请链接（复制失败时仅记日志）。
