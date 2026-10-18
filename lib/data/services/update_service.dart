@@ -158,13 +158,57 @@ class UpdateService {
     required String releaseNotes,
   }) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final body = theme.textTheme.bodyMedium;
+    final markdownStyle = MarkdownStyleSheet.fromTheme(theme).copyWith(
+      p: body,
+      a: body?.copyWith(
+        color: scheme.primary,
+        decoration: TextDecoration.underline,
+        decorationColor: scheme.primary,
+      ),
+      h1: theme.textTheme.titleLarge?.copyWith(color: scheme.onSurface),
+      h2: theme.textTheme.titleMedium?.copyWith(color: scheme.onSurface),
+      h3: theme.textTheme.titleSmall?.copyWith(color: scheme.onSurface),
+      strong: body?.copyWith(
+        color: scheme.onSurface,
+        fontWeight: FontWeight.w600,
+      ),
+      em: body?.copyWith(fontStyle: FontStyle.italic),
+      blockquote: body?.copyWith(color: scheme.onSurfaceVariant),
+      blockquoteDecoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        border: Border(left: BorderSide(color: scheme.primary, width: 3)),
+      ),
+      // 发布说明里常有命令/配置片段：行内 code 与代码块都换成更贴主题的底色。
+      code: theme.textTheme.bodySmall?.copyWith(
+        fontFamily: 'monospace',
+        color: scheme.onSurface,
+        backgroundColor: scheme.surfaceContainerHighest,
+      ),
+      codeblockDecoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      listBullet: body,
+      tableHead: body?.copyWith(
+        color: scheme.onSurface,
+        fontWeight: FontWeight.w600,
+      ),
+      tableBody: body,
+      tableBorder: TableBorder.all(color: theme.dividerColor),
+      horizontalRuleDecoration: BoxDecoration(
+        border: Border(top: BorderSide(color: theme.dividerColor)),
+      ),
+    );
+
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: Text('发现新版本: $latestVersion'),
-        content: SizedBox(
-          width: 420,
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
           child: SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -177,16 +221,7 @@ class UpdateService {
                 MarkdownBody(
                   data: releaseNotes,
                   selectable: true,
-                  styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
-                    p: theme.textTheme.bodyMedium,
-                    h1: theme.textTheme.titleLarge,
-                    h2: theme.textTheme.titleMedium,
-                    h3: theme.textTheme.titleSmall,
-                    listBullet: theme.textTheme.bodyMedium,
-                    code: theme.textTheme.bodySmall?.copyWith(
-                      fontFamily: 'monospace',
-                    ),
-                  ),
+                  styleSheet: markdownStyle,
                   onTapLink: (text, href, title) {
                     if (href == null || href.isEmpty) return;
                     _launchUrl(href);
