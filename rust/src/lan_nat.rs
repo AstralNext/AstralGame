@@ -382,6 +382,9 @@ mod tests {
 }
 
 /// 在玩家物理网段里挑一个假地址（默认 .250），供 VpnService 加 /32 路由。
+///
+/// 只认局域网网卡（Wi‑Fi / 以太网）：手机常同时有蜂窝网卡（rmnet/ccmni），
+/// 选到运营商网段（如 100.64/10）时假地址不在游戏所在局域网里，等于没映射。
 pub fn pick_fake_ip() -> Result<Ipv4Addr, String> {
     let ifas = local_ip_address::list_afinet_netifas()
         .map_err(|e| format!("enumerate interfaces failed: {e}"))?;
@@ -392,14 +395,25 @@ pub fn pick_fake_ip() -> Result<Ipv4Addr, String> {
             continue;
         }
         let o = v4.octets();
-        if o[0] == 100 && o[1] == 100 && o[2] == 100 {
+        // 只要 RFC1918 私网；排除 100.64/10（运营商 CGNAT）与 100.100.100.x 虚拟网。
+        let private = o[0] == 10
+            || (o[0] == 172 && (16..=31).contains(&o[1]))
+            || (o[0] == 192 && o[1] == 168);
+        if !private {
             continue;
         }
         let lower = name.to_lowercase();
-        if lower.starts_with("tun") || lower.contains("vethernet") || lower.contains("docker") {
+        let non_lan = ["tun", "rmnet", "ccmni", "pdp", "clat", "dummy", "ip6tnl", "sit", "p2p"];
+        if non_lan.iter().any(|p| lower.starts_with(p))
+            || lower.contains("vethernet")
+            || lower.contains("docker")
+        {
             continue;
         }
-        candidates.push((lower.starts_with("wlan") || lower.starts_with("wl"), v4));
+        let preferred = lower.starts_with("wlan")
+            || lower.starts_with("wifi")
+            || lower.starts_with("eth");
+        candidates.push((preferred, v4));
     }
     candidates.sort_by_key(|(preferred, _)| !*preferred);
     for (_, v4) in candidates {

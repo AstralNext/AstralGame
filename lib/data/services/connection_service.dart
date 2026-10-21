@@ -703,6 +703,9 @@ class ConnectionService {
   }
 
   /// 在物理局域网网段里挑一个假地址（默认 .250）。
+  ///
+  /// 只认局域网网卡（Wi‑Fi / 以太网）：手机常同时有蜂窝网卡（rmnet/ccmni），
+  /// 选到运营商网段（如 100.64/10）时假地址不在游戏所在局域网里，等于没映射。
   Future<String?> _pickLanNatFakeIp() async {
     try {
       final ifaces = await NetworkInterface.list(
@@ -710,22 +713,28 @@ class ConnectionService {
         includeLoopback: false,
         includeLinkLocal: false,
       );
+      final candidates = <({String name, InternetAddress addr, bool lan})>[];
       for (final iface in ifaces) {
         final name = iface.name.toLowerCase();
-        if (name.startsWith('tun') ||
-            name.contains('vethernet') ||
-            name.contains('docker')) {
-          continue;
-        }
+        if (_isNonLanIface(name)) continue;
         for (final addr in iface.addresses) {
           final raw = addr.rawAddress;
           if (raw.length != 4) continue;
-          if (raw[0] == 100 && raw[1] == 100 && raw[2] == 100) continue;
-          final last = raw[3] == 250 ? 249 : 250;
-          final ip = '${raw[0]}.${raw[1]}.${raw[2]}.$last';
-          _lanNatLog('pick $ip from ${iface.name} ${addr.address}');
-          return ip;
+          if (!_isPrivateLanV4(raw)) continue;
+          candidates.add((
+            name: name,
+            addr: addr,
+            lan: _isWirelessOrEthernet(name),
+          ));
         }
+      }
+      candidates.sort((a, b) => a.lan == b.lan ? 0 : (a.lan ? -1 : 1));
+      for (final c in candidates) {
+        final raw = c.addr.rawAddress;
+        final last = raw[3] == 250 ? 249 : 250;
+        final ip = '${raw[0]}.${raw[1]}.${raw[2]}.$last';
+        _lanNatLog('pick $ip from ${c.name} ${c.addr.address}');
+        return ip;
       }
     } catch (e) {
       _lanNatLog('NetworkInterface.list failed: $e');
@@ -738,6 +747,35 @@ class ConnectionService {
       _lanNatLog('rust pick failed: $e');
       return null;
     }
+  }
+
+  /// 虚拟网卡、蜂窝网卡、隧道等都不属于局域网。
+  static bool _isNonLanIface(String name) =>
+      name.startsWith('tun') ||
+      name.startsWith('rmnet') ||
+      name.startsWith('ccmni') ||
+      name.startsWith('pdp') ||
+      name.startsWith('clat') ||
+      name.startsWith('dummy') ||
+      name.startsWith('ip6tnl') ||
+      name.startsWith('sit') ||
+      name.startsWith('p2p') ||
+      name.startsWith('v4-') ||
+      name.contains('vethernet') ||
+      name.contains('docker');
+
+  static bool _isWirelessOrEthernet(String name) =>
+      name.startsWith('wlan') ||
+      name.startsWith('wifi') ||
+      name.startsWith('eth') ||
+      name.startsWith('ap');
+
+  /// RFC1918 私网地址；排除 100.64/10（运营商 CGNAT）与 100.100.100.x 虚拟网。
+  static bool _isPrivateLanV4(List<int> o) {
+    if (o[0] == 10) return true;
+    if (o[0] == 172 && o[1] >= 16 && o[1] <= 31) return true;
+    if (o[0] == 192 && o[1] == 168) return true;
+    return false;
   }
 
   Future<bool> _startAndroidVpnWhenIpReady(
