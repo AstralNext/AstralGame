@@ -1408,7 +1408,7 @@ checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 [[package]]
 name = "easytier"
 version = "2.7.0"
-source = "git+https://github.com/ldoubil/EasyTier.git?branch=main-astral#c981af4a6d62703db044bbca9e6d081e41165ef3"
+source = "git+https://github.com/ldoubil/EasyTier.git?branch=main-astral#aa7602935d3741c62fb1de6fcbeec766088f0bba"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -1514,7 +1514,7 @@ dependencies = [
 [[package]]
 name = "easytier-core"
 version = "2.7.0"
-source = "git+https://github.com/ldoubil/EasyTier.git?branch=main-astral#c981af4a6d62703db044bbca9e6d081e41165ef3"
+source = "git+https://github.com/ldoubil/EasyTier.git?branch=main-astral#aa7602935d3741c62fb1de6fcbeec766088f0bba"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -1584,7 +1584,7 @@ dependencies = [
 [[package]]
 name = "easytier-proto"
 version = "2.7.0"
-source = "git+https://github.com/ldoubil/EasyTier.git?branch=main-astral#c981af4a6d62703db044bbca9e6d081e41165ef3"
+source = "git+https://github.com/ldoubil/EasyTier.git?branch=main-astral#aa7602935d3741c62fb1de6fcbeec766088f0bba"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3954,7 +3954,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash",
  "rustls",
- "socket2 0.5.10",
+ "socket2 0.6.5",
  "thiserror 2.0.21",
  "tokio",
  "tracing",
@@ -3995,7 +3995,7 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2 0.5.10",
+ "socket2 0.6.5",
  "tracing",
  "windows-sys 0.61.2",
 ]
