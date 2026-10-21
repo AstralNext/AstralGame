@@ -7,6 +7,8 @@ pub use easytier::proto;
 pub use easytier::proto::api::instance::{PeerRoutePair, Route};
 pub use easytier::proto::common::NatType;
 use lazy_static::lazy_static;
+use std::collections::HashMap;
+use std::sync::OnceLock;
 use tokio::runtime::Runtime;
 use uuid::Uuid;
 
@@ -15,6 +17,52 @@ const LOCAL_SYNTHETIC_PEER_ID: u32 = 0;
 lazy_static! {
     static ref RT: Runtime = Runtime::new().expect("failed to create tokio runtime");
     static ref MANAGER: NativeInstanceManager = native_cli_instance_manager();
+}
+
+/// Android VpnService 把 TUN fd detach 后交给 Rust，fd 的所有权随之转移。
+///
+/// EasyTier 创建移动端 TUN 时使用 `close_fd_on_drop(false)`，销毁实例不会关闭 fd；
+/// 若这里不显式关闭，退出房间后系统 VPN 会一直保持连接。
+fn tun_fds() -> &'static Mutex<HashMap<String, i32>> {
+    static TUN_FDS: OnceLock<Mutex<HashMap<String, i32>>> = OnceLock::new();
+    TUN_FDS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+#[cfg(unix)]
+fn close_raw_fd(fd: i32) {
+    use std::os::fd::FromRawFd;
+    if fd < 0 {
+        return;
+    }
+    // SAFETY: fd 由 set_tun_fd 从 Dart 转移而来，只会在这里关闭一次。
+    unsafe {
+        drop(std::os::fd::OwnedFd::from_raw_fd(fd));
+    }
+}
+
+#[cfg(not(unix))]
+fn close_raw_fd(_fd: i32) {}
+
+fn remember_tun_fd(instance_id: &str, fd: i32) {
+    let Ok(mut fds) = tun_fds().lock() else {
+        return;
+    };
+    if let Some(old) = fds.insert(instance_id.to_owned(), fd) {
+        if old != fd {
+            close_raw_fd(old);
+        }
+    }
+}
+
+fn forget_tun_fd(instance_id: &str) {
+    let fd = tun_fds()
+        .lock()
+        .ok()
+        .and_then(|mut fds| fds.remove(instance_id));
+    if let Some(fd) = fd {
+        close_raw_fd(fd);
+        emit_core_log(instance_id, &format!("closed TUN fd {fd}"));
+    }
 }
 
 fn parse_instance_id(instance_id: &str) -> Result<Uuid, String> {
@@ -411,7 +459,52 @@ pub async fn set_tun_fd(instance_id: String, fd: i32) -> Result<(), String> {
     let id = parse_instance_id(&instance_id)?;
     MANAGER
         .attach_tun_fd(id, fd)
-        .map_err(|e| format!("set_tun_fd failed: {}", e))
+        .map_err(|e| format!("set_tun_fd failed: {}", e))?;
+    remember_tun_fd(&instance_id, fd);
+    Ok(())
+}
+
+/// 局域网地址映射：在玩家物理网段里挑一个假地址（默认 .250）。
+pub fn lan_nat_pick_fake_ip() -> Result<String, String> {
+    crate::lan_nat::pick_fake_ip().map(|ip| ip.to_string())
+}
+
+/// 给实例挂上 LAN NAT：房主虚拟 IP ↔ fake_ip（端口用于学习房主并限制改写范围）。
+pub async fn set_lan_nat(
+    instance_id: String,
+    fake_ip: String,
+    ports: Vec<u16>,
+) -> Result<(), String> {
+    let id = parse_instance_id(&instance_id)?;
+    let fake: std::net::Ipv4Addr = fake_ip
+        .trim()
+        .parse()
+        .map_err(|e| format!("invalid fake ip {fake_ip}: {e}"))?;
+    if ports.is_empty() {
+        return Err("lan_nat ports is empty".to_string());
+    }
+    let instance = MANAGER
+        .instance(id)
+        .ok_or_else(|| "instance not found".to_string())?;
+    let (state, first) = crate::lan_nat::register(&instance_id, fake, ports);
+    if first {
+        let peer_manager = instance.peer_manager();
+        peer_manager
+            .add_nic_packet_process_pipeline(Box::new(
+                crate::lan_nat::NicNatFilter::new(state.clone()),
+            ))
+            .await;
+        peer_manager
+            .add_packet_process_pipeline(Box::new(crate::lan_nat::PeerNatFilter::new(state)))
+            .await;
+    }
+    Ok(())
+}
+
+/// 撤掉 LAN NAT。
+pub async fn clear_lan_nat(instance_id: String) -> Result<(), String> {
+    crate::lan_nat::unregister(&instance_id);
+    Ok(())
 }
 
 pub async fn create_instance(config_toml: String, watch_event: bool) -> Result<String, String> {
@@ -506,17 +599,25 @@ pub async fn create_instance(config_toml: String, watch_event: bool) -> Result<S
 }
 
 pub async fn close_instance(instance_id: String) -> Result<(), String> {
+    crate::lan_nat::unregister(&instance_id);
+    let fd_owner = instance_id.clone();
     // delete_network_instances 需要在 tokio runtime 上下文中执行；统一搬到共享 RT。
-    RT.spawn(async move {
-        let id = parse_instance_id(&instance_id)?;
-        MANAGER
-            .delete_network_instances(vec![id])
-            .await
-            .map_err(|e| format!("delete instance failed: {}", e))?;
-        Ok(())
-    })
-    .await
-    .map_err(|e| format!("join handle error: {}", e))?
+    let result = RT
+        .spawn(async move {
+            let id = parse_instance_id(&instance_id)?;
+            MANAGER
+                .delete_network_instances(vec![id])
+                .await
+                .map_err(|e| format!("delete instance failed: {}", e))?;
+            Ok::<(), String>(())
+        })
+        .await
+        .map_err(|e| format!("join handle error: {}", e))?;
+    // 实例真正停止后再关闭 TUN fd，避免提前截断仍在运行的实例。
+    if result.is_ok() {
+        forget_tun_fd(&fd_owner);
+    }
+    result
 }
 
 /// Build peer/route pairs from a running-info snapshot (shared by FRB + astral-core).

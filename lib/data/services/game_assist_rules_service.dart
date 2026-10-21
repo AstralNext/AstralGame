@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -10,6 +11,29 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:signals/signals_core.dart';
+
+/// `platforms.android.lan_nat`：把房主虚拟 IP 映射成玩家物理网段里的假地址。
+///
+/// 适配那些「能看到房间、但加入时不向虚拟网地址发包」的老游戏。
+class GameLanNatRule {
+  const GameLanNatRule({required this.ports});
+
+  final List<int> ports;
+
+  static GameLanNatRule? tryParse(Object? json) {
+    if (json is! Map || json['enabled'] != true) return null;
+    final raw = json['ports'];
+    final ports = <int>[];
+    if (raw is List) {
+      for (final item in raw) {
+        final v = item is int ? item : int.tryParse('$item');
+        if (v != null && v > 0 && v <= 65535) ports.add(v);
+      }
+    }
+    if (ports.isEmpty) return null;
+    return GameLanNatRule(ports: List<int>.unmodifiable(ports));
+  }
+}
 
 /// 从远程加载游戏规则（目录 + 平台辅助）；失败时回退本地 asset。
 /// 仓库根或程序旁的 [testDirName] 里若有 JSON，优先用测试文件，不再拉线上。
@@ -48,6 +72,8 @@ class GameAssistRulesService {
 
   GameAssistRulesCatalog? _catalog;
   Future<GameAssistRulesCatalog>? _loadFuture;
+  final Map<String, GameLanNatRule> _lanNatRules = <String, GameLanNatRule>{};
+  final Completer<void> _assetApplied = Completer<void>();
 
   /// 目录每次成功应用后递增，供 UI `Watch`。
   final catalogRevision = signal(0);
@@ -64,6 +90,7 @@ class GameAssistRulesService {
     if (assetRaw != null) {
       _applyRaw(assetRaw, source: 'asset');
     }
+    if (!_assetApplied.isCompleted) _assetApplied.complete();
 
     // 2) 测试目录有 JSON 则覆盖并跳过远程。
     if (await _applyTestDir()) {
@@ -96,6 +123,7 @@ class GameAssistRulesService {
       if (decoded is! Map) {
         throw const FormatException('gamerules.json root must be object');
       }
+      _applyLanNatRules(decoded);
       final incoming = GameAssistRulesCatalog.fromJson(
         Map<String, dynamic>.from(decoded),
       );
@@ -114,6 +142,35 @@ class GameAssistRulesService {
         stackTrace: st,
       );
     }
+  }
+
+  void _applyLanNatRules(Map decoded) {
+    final games = decoded['games'];
+    if (games is! List) return;
+    for (final game in games) {
+      if (game is! Map) continue;
+      final id = '${game['id'] ?? ''}'.trim();
+      if (id.isEmpty) continue;
+      final platforms = game['platforms'];
+      final android = platforms is Map ? platforms['android'] : null;
+      // 远程目录没带这个字段时保留已有规则（本地 asset 可能先给了）。
+      if (android is! Map || !android.containsKey('lan_nat')) continue;
+      final rule = GameLanNatRule.tryParse(android['lan_nat']);
+      if (rule == null) {
+        _lanNatRules.remove(id);
+      } else {
+        _lanNatRules[id] = rule;
+      }
+    }
+  }
+
+  /// 该游戏是否需要 LAN NAT（仅 Android 生效）。
+  GameLanNatRule? lanNatRule(String gameId) => _lanNatRules[gameId];
+
+  /// 等本地 asset 规则落地；只等 asset，不等远程。
+  Future<void> ensureAssetLoaded() {
+    ensureLoaded();
+    return _assetApplied.future;
   }
 
   /// 远程 / 测试覆盖同 id；本地独有（如尚未上 CDN 的 inject）保留。

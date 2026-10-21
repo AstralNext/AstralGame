@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:astral_game/config/network_constants.dart';
@@ -449,6 +450,30 @@ class ConnectionService {
           : GameAssistNetworkProtocol.udp;
       if (!_isLinkActive(epoch)) return false;
 
+      // LAN NAT：把房主虚拟 IP 映射成玩家物理网段里的假地址（仅 Android）。
+      var natRule =
+          RuntimePlatform.isAndroid && gameId != null && gameId.isNotEmpty
+          ? _gameRules.lanNatRule(gameId)
+          : null;
+      // 启动时自动重连可能早于规则加载，补等一次本地 asset。
+      if (natRule == null &&
+          RuntimePlatform.isAndroid &&
+          gameId != null &&
+          gameId.isNotEmpty) {
+        await _gameRules.ensureAssetLoaded();
+        natRule = _gameRules.lanNatRule(gameId);
+      }
+      String? lanNatFakeIp;
+      _lanNatLog(
+        'connect gameId=$gameId android=${RuntimePlatform.isAndroid} '
+        'rule=${natRule?.ports}',
+      );
+      if (natRule != null) {
+        lanNatFakeIp = await _pickLanNatFakeIp();
+        _lanNatLog('fake=$lanNatFakeIp');
+      }
+      if (!_isLinkActive(epoch)) return false;
+
       final configToml = _p2pConfig.buildTomlConfig(
         networkName,
         secret,
@@ -504,7 +529,10 @@ class ConnectionService {
       _roomState.setConnected(true);
       _armGuestPresenceWatch();
       if (RuntimePlatform.isAndroid) {
-        final vpnOk = await _startAndroidVpnWhenIpReady(createdInstanceId);
+        final vpnOk = await _startAndroidVpnWhenIpReady(
+          createdInstanceId,
+          extraRoutes: lanNatFakeIp == null ? const [] : ['$lanNatFakeIp/32'],
+        );
         if (!_isLinkActive(epoch)) {
           await disconnect(clearSession: false, abortLink: false);
           createdInstanceId = null;
@@ -515,6 +543,18 @@ class ConnectionService {
           await disconnect(forceEndNotice: '虚拟网络（VPN）启动失败，请检查权限后重试');
           createdInstanceId = null;
           return false;
+        }
+        if (lanNatFakeIp != null && natRule != null) {
+          try {
+            await setLanNat(
+              instanceId: createdInstanceId,
+              fakeIp: lanNatFakeIp,
+              ports: natRule.ports,
+            );
+            _lanNatLog('attached to $createdInstanceId');
+          } catch (e) {
+            _lanNatLog('attach failed: $e');
+          }
         }
       }
       return true;
@@ -658,7 +698,52 @@ class ConnectionService {
     }
   }
 
-  Future<bool> _startAndroidVpnWhenIpReady(String instanceId) async {
+  void _lanNatLog(String message) {
+    appLogger.d('[LANNAT] $message');
+  }
+
+  /// 在物理局域网网段里挑一个假地址（默认 .250）。
+  Future<String?> _pickLanNatFakeIp() async {
+    try {
+      final ifaces = await NetworkInterface.list(
+        type: InternetAddressType.IPv4,
+        includeLoopback: false,
+        includeLinkLocal: false,
+      );
+      for (final iface in ifaces) {
+        final name = iface.name.toLowerCase();
+        if (name.startsWith('tun') ||
+            name.contains('vethernet') ||
+            name.contains('docker')) {
+          continue;
+        }
+        for (final addr in iface.addresses) {
+          final raw = addr.rawAddress;
+          if (raw.length != 4) continue;
+          if (raw[0] == 100 && raw[1] == 100 && raw[2] == 100) continue;
+          final last = raw[3] == 250 ? 249 : 250;
+          final ip = '${raw[0]}.${raw[1]}.${raw[2]}.$last';
+          _lanNatLog('pick $ip from ${iface.name} ${addr.address}');
+          return ip;
+        }
+      }
+    } catch (e) {
+      _lanNatLog('NetworkInterface.list failed: $e');
+    }
+    try {
+      final ip = await lanNatPickFakeIp();
+      _lanNatLog('rust pick $ip');
+      return ip;
+    } catch (e) {
+      _lanNatLog('rust pick failed: $e');
+      return null;
+    }
+  }
+
+  Future<bool> _startAndroidVpnWhenIpReady(
+    String instanceId, {
+    List<String> extraRoutes = const [],
+  }) async {
     final completer = Completer<String?>();
     late final EffectCleanup dispose;
     dispose = effect(() {
@@ -684,6 +769,7 @@ class ConnectionService {
       final vpnStarted = await _vpnManager.start(
         instanceId: instanceId,
         ipv4Addr: vpnIp,
+        extraRoutes: extraRoutes,
       );
       if (!vpnStarted) {
         appLogger.w('[ConnectionService] Android VPN 启动失败');

@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `collect_relay_hops`, `emit_core_log`, `ensure_runtime`, `event_to_message`, `get_instance_info`, `lookup_app_rpc_ready`, `lookup_app_rpc`, `lookup_native_instance`, `parse_instance_id`, `peer_conn_info_to_string`, `pubkey_b64_from_credential_secret`, `set_interface_metric_blocking`, `spawn_event_forwarder`, `spawn_instance_event_forwarder`, `spawn_set_nic_metric_task`, `tracing_log_lagged`
+// These functions are ignored because they are not marked as `pub`: `collect_relay_hops`, `emit_core_log`, `ensure_runtime`, `event_to_message`, `find_wintun_adapters`, `get_instance_info`, `lookup_app_rpc_ready`, `lookup_app_rpc`, `lookup_native_instance`, `parse_instance_id`, `peer_conn_info_to_string`, `pubkey_b64_from_credential_secret`, `resolve_wintun_interface`, `set_interface_metric_blocking`, `spawn_event_forwarder`, `spawn_instance_event_forwarder`, `spawn_set_nic_metric_task`, `tracing_log_lagged`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `CORE_LOG_SINK`, `MANAGER`, `RT`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `deref`, `deref`, `deref`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `initialize`, `initialize`, `initialize`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `network_status_from_info`, `peer_route_pairs_from_info`
@@ -23,6 +23,25 @@ Future<bool> isEasytierRunning({required String instanceId}) =>
 
 Future<void> setTunFd({required String instanceId, required int fd}) =>
     RustLib.instance.api.crateApiP2PSetTunFd(instanceId: instanceId, fd: fd);
+
+/// 局域网地址映射：在玩家物理网段里挑一个假地址（默认 .250）。
+Future<String> lanNatPickFakeIp() =>
+    RustLib.instance.api.crateApiP2PLanNatPickFakeIp();
+
+/// 给实例挂上 LAN NAT：房主虚拟 IP ↔ fake_ip（端口用于学习房主并限制改写范围）。
+Future<void> setLanNat({
+  required String instanceId,
+  required String fakeIp,
+  required List<int> ports,
+}) => RustLib.instance.api.crateApiP2PSetLanNat(
+  instanceId: instanceId,
+  fakeIp: fakeIp,
+  ports: ports,
+);
+
+/// 撤掉 LAN NAT。
+Future<void> clearLanNat({required String instanceId}) =>
+    RustLib.instance.api.crateApiP2PClearLanNat(instanceId: instanceId);
 
 Future<String> createInstance({
   required String configToml,

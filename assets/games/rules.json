@@ -41,6 +41,25 @@
       }
     },
     {
+      "id": "sid_meier's_civilization_vi",
+      "name": "Sid Meier's Civilization VI",
+      "name_zh": "文明6",
+      "description": "局域网联机；Android 通过地址映射加入房间",
+      "color": "#A0522D",
+      "icon": "flag",
+      "steam_app_id": 289070,
+      "show_in_picker": true,
+      "sort": 15,
+      "platforms": {
+        "android": {
+          "lan_nat": {
+            "enabled": true,
+            "ports": [62900, 62056]
+          }
+        }
+      }
+    },
+    {
       "id": "raft",
       "name": "Raft",
       "name_zh": "木筏求生",

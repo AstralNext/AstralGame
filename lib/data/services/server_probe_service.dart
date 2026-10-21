@@ -5,17 +5,22 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:astral_game/config/constants.dart';
+import 'package:astral_game/config/network_constants.dart';
 import 'package:astral_game/data/models/server_mod.dart';
 import 'package:astral_game/utils/ping_util.dart';
 
 /// 一次 EasyTier 握手探测的结果。
 class ServerProbeResult {
-  const ServerProbeResult({required this.isEasyTier});
+  const ServerProbeResult({required this.isEasyTier, this.latencyMs});
 
   /// 对端是否为 EasyTier 服务器。
   ///
-  /// `null` 表示无法判断：地址不是 TCP 接入（udp/ws/wss/quic/wg），或连接失败。
+  /// `null` 表示无法判断：地址不是可探测接入（ws/wss/quic/wg）、连接失败，
+  /// 或 UDP 探测没有收到 SACK 回包。
   final bool? isEasyTier;
+
+  /// UDP 探测的往返耗时；TCP 探测由 [PingUtil.tcpPingMany] 另行测量。
+  final int? latencyMs;
 }
 
 /// 通过 EasyTier 握手判断服务器是否为 ET 端点。
@@ -39,16 +44,27 @@ class ServerProbeService {
   static const int _peerManagerHeaderSize = 16;
   static const int _maxBodyLength = 1 << 16;
 
+  /// UDP tunnel 头（`UDPTunnelHeader`，packed，小端，共 8 字节）。
+  static const int _udpTunnelHeaderSize = 8;
+  static const int _udpPacketTypeSyn = 1;
+  static const int _udpPacketTypeSack = 2;
+  static const int _udpMagicSize = 8;
+  static const Duration _udpResendInterval = Duration(milliseconds: 500);
+
   /// 探测用网络名。服务端对外来网络名会分配临时 peer id，可以随便填。
   static const String _probeNetworkName = 'astral-probe';
 
   static final Random _random = Random();
 
-  /// 探测一次端点：能完成 ET 握手返回 `true`，明确不是返回 `false`，
-  /// 无法判断（非 TCP 接入或连不上）返回 `null`。
+  /// 探测一次端点：TCP 走 ET 握手，UDP 走 SYN/SACK；能确认是 ET 返回 `true`，
+  /// 明确不是返回 `false`，无法判断（ws/wss/quic/wg、连不上或 UDP 无回包）返回 `null`。
   Future<ServerProbeResult> probe(ServerMod server) async {
-    final scheme = Uri.tryParse(server.url.trim())?.scheme.toLowerCase();
-    // ws/wss/quic/udp/wg 不是裸 TCP 帧，无法用这套握手判断。
+    final uri = Uri.tryParse(server.url.trim());
+    final scheme = uri?.scheme.toLowerCase();
+    if (scheme == 'udp') {
+      return _probeUdp(uri!);
+    }
+    // ws/wss/quic/wg 不是裸 TCP 帧，无法用这套握手判断。
     if (scheme != null && scheme.isNotEmpty && scheme != 'tcp') {
       return const ServerProbeResult(isEasyTier: null);
     }
@@ -78,8 +94,7 @@ class ServerProbeService {
       final bodyLength = ByteData.sublistView(
         lengthBytes,
       ).getUint32(0, Endian.little);
-      if (bodyLength < _peerManagerHeaderSize ||
-          bodyLength > _maxBodyLength) {
+      if (bodyLength < _peerManagerHeaderSize || bodyLength > _maxBodyLength) {
         return const ServerProbeResult(isEasyTier: false);
       }
       final body = await reader
@@ -95,6 +110,122 @@ class ServerProbeService {
       await reader.cancel();
       socket.destroy();
     }
+  }
+
+  /// UDP 接入：发 EasyTier `Syn`（带 8 字节 magic），等对端回 `Sack`。
+  ///
+  /// 服务端在 `handle_new_easy_tier_mux_connect` 里会对每个新 SYN 建会话并
+  /// 回一个同 conn_id / magic 的 SACK，所以收到回包即可确认是 ET UDP 端点。
+  /// 没收到回包时无法区分「非 ET 服务」和「UDP 被丢包/不可达」，返回
+  /// `isEasyTier = null`，避免误报「非 EasyTier 服务器」。
+  Future<ServerProbeResult> _probeUdp(Uri uri) async {
+    final host = uri.host;
+    final port = uri.hasPort ? uri.port : kEasyTierDefaultPort;
+    if (host.isEmpty || port <= 0 || port > 65535) {
+      return const ServerProbeResult(isEasyTier: null);
+    }
+    final target = await _resolveUdpTarget(host);
+    if (target == null) return const ServerProbeResult(isEasyTier: null);
+
+    final connId = 1 + _random.nextInt(0xfffffffe);
+    final magicBytes = _randomBytes(_udpMagicSize);
+    final magic = ByteData.sublistView(magicBytes).getUint64(0, Endian.little);
+    final frame = _encodeUdpSynFrame(connId, magic);
+
+    RawDatagramSocket? socket;
+    StreamSubscription<RawSocketEvent>? sub;
+    Timer? retryTimer;
+    Timer? timeoutTimer;
+    try {
+      socket = await RawDatagramSocket.bind(
+        target.type == InternetAddressType.IPv6
+            ? InternetAddress.anyIPv6
+            : InternetAddress.anyIPv4,
+        0,
+      );
+      final stopwatch = Stopwatch()..start();
+      final completer = Completer<ServerProbeResult>();
+      var lastSendMs = 0;
+
+      void send() {
+        lastSendMs = stopwatch.elapsedMilliseconds;
+        socket?.send(frame, target, port);
+      }
+
+      sub = socket.listen((event) {
+        if (event != RawSocketEvent.read) return;
+        while (true) {
+          final datagram = socket?.receive();
+          if (datagram == null) break;
+          if (completer.isCompleted) continue;
+          if (!_isUdpSack(datagram.data, connId, magic)) continue;
+          completer.complete(
+            ServerProbeResult(
+              isEasyTier: true,
+              latencyMs: max(0, stopwatch.elapsedMilliseconds - lastSendMs),
+            ),
+          );
+        }
+      });
+
+      send();
+      retryTimer = Timer.periodic(_udpResendInterval, (_) => send());
+      timeoutTimer = Timer(AppConstants.pingTimeout, () {
+        if (!completer.isCompleted) {
+          completer.complete(const ServerProbeResult(isEasyTier: null));
+        }
+      });
+      return await completer.future;
+    } on SocketException {
+      return const ServerProbeResult(isEasyTier: null);
+    } finally {
+      retryTimer?.cancel();
+      timeoutTimer?.cancel();
+      await sub?.cancel();
+      socket?.close();
+    }
+  }
+
+  Future<InternetAddress?> _resolveUdpTarget(String host) async {
+    final parsed = InternetAddress.tryParse(host);
+    if (parsed != null) return parsed;
+    try {
+      final addresses = await InternetAddress.lookup(host);
+      for (final addr in addresses) {
+        if (addr.type == InternetAddressType.IPv4) return addr;
+      }
+      return addresses.isEmpty ? null : addresses.first;
+    } on SocketException {
+      return null;
+    }
+  }
+
+  /// `UDPTunnelHeader`（conn_id / msg_type / padding / len）后接 magic。
+  static Uint8List _encodeUdpSynFrame(int connId, int magic) {
+    final frame = ByteData(_udpTunnelHeaderSize + _udpMagicSize);
+    frame.setUint32(0, connId, Endian.little);
+    frame.setUint8(4, _udpPacketTypeSyn);
+    frame.setUint8(5, 0);
+    frame.setUint16(6, _udpMagicSize, Endian.little);
+    frame.setUint64(_udpTunnelHeaderSize, magic, Endian.little);
+    return frame.buffer.asUint8List();
+  }
+
+  static bool _isUdpSack(Uint8List data, int connId, int magic) {
+    if (data.length < _udpTunnelHeaderSize + _udpMagicSize) return false;
+    final view = ByteData.sublistView(data);
+    if (view.getUint32(0, Endian.little) != connId) return false;
+    if (view.getUint8(4) != _udpPacketTypeSack) return false;
+    if (view.getUint16(6, Endian.little) != _udpMagicSize) return false;
+    return view.getUint64(_udpTunnelHeaderSize, Endian.little) == magic;
+  }
+
+  static Uint8List _randomBytes(int length) {
+    final out = Uint8List(length);
+    for (var i = 0; i < length; i++) {
+      out[i] = _random.nextInt(256);
+    }
+    return out;
   }
 
   static int _randomPeerId() => 1 + _random.nextInt(0xfffffffe);

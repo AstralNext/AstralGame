@@ -21,6 +21,9 @@ easytier = { git = "https://github.com/ldoubil/EasyTier.git", branch = "main-ast
     "magic-dns",
     "zstd",
 ] }
+easytier-core = { git = "https://github.com/ldoubil/EasyTier.git", branch = "main-astral" }
+async-trait = "0.1"
+tracing = "0.1"
 
 anyhow = "1"
 base64 = "0.22"

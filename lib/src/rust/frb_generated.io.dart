@@ -198,6 +198,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<NodeHopStats> dco_decode_list_node_hop_stats(dynamic raw);
 
   @protected
+  List<int> dco_decode_list_prim_u_16_loose(dynamic raw);
+
+  @protected
   Uint16List dco_decode_list_prim_u_16_strict(dynamic raw);
 
   @protected
@@ -418,6 +421,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<NodeHopStats> sse_decode_list_node_hop_stats(
     SseDeserializer deserializer,
   );
+
+  @protected
+  List<int> sse_decode_list_prim_u_16_loose(SseDeserializer deserializer);
 
   @protected
   Uint16List sse_decode_list_prim_u_16_strict(SseDeserializer deserializer);
@@ -696,6 +702,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_node_hop_stats(
     List<NodeHopStats> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_prim_u_16_loose(
+    List<int> self,
     SseSerializer serializer,
   );
 

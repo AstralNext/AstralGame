@@ -95,6 +95,19 @@ class PingUtil {
   static Future<void> close() => _pool.close();
 }
 
+/// 服务器地址的协议名（小写）；没有 scheme 的旧数据返回空串。
+String serverUrlScheme(String url) {
+  return Uri.tryParse(url.trim())?.scheme.toLowerCase() ?? '';
+}
+
+/// 是否能用 TCP 建连计时：裸 TCP 或未写协议。
+///
+/// `udp` 走 ET 的 SYN/SACK 探测；`ws/wss/quic/wg` 暂无法探测。
+bool isTcpPingTarget(String server) {
+  final scheme = serverUrlScheme(server);
+  return scheme.isEmpty || scheme == 'tcp';
+}
+
 /// 从服务器 URL / `host:port` 取出 TCP 探测目标（host + port）。
 ({String host, int port})? tcpPingTargetOf(String server) {
   final host = pingHostOf(server);

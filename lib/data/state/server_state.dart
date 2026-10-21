@@ -142,6 +142,11 @@ class ServerStatusState {
     ];
     // 延迟与在线状态同样覆盖所有未占用的服务器，不区分启用状态。
     final pingTargets = serversEligibleForPing(servers, activeIds: activeIds);
+    // UDP 的延迟由 ET SYN/SACK 探测顺带测出，不再做 TCP 建连。
+    final tcpPingTargets = [
+      for (final s in pingTargets)
+        if (isTcpPingTarget(s.url)) s,
+    ];
     if (probeTargets.isEmpty) return;
     final pendingIds = {for (final s in probeTargets) s.id};
     final pingIds = {for (final s in pingTargets) s.id};
@@ -151,10 +156,14 @@ class ServerStatusState {
         for (final s in probeTargets) _probeService.probe(s),
       ]);
       final latenciesFuture = PingUtil.tcpPingMany([
-        for (final s in pingTargets) s.url,
+        for (final s in tcpPingTargets) s.url,
       ]);
       final results = await probesFuture;
       final rtts = await latenciesFuture;
+      final tcpLatencies = <int, int?>{
+        for (var i = 0; i < tcpPingTargets.length; i++)
+          tcpPingTargets[i].id: i < rtts.length ? rtts[i] : null,
+      };
       final nextProbes = Map<int, ServerProbeResult>.from(serverProbes.value);
       final nextLatencies = Map<int, int?>.from(serverLatencies.value);
       final nextStatuses = Map<int, ServerStatus>.from(serverStatuses.value);
@@ -171,13 +180,27 @@ class ServerStatusState {
         nextProbes[server.id] = results[i];
         _probedUrls[server.id] = server.url;
       }
-      for (var i = 0; i < pingTargets.length; i++) {
-        final server = pingTargets[i];
-        final latency = i < rtts.length ? rtts[i] : null;
-        nextLatencies[server.id] = latency;
-        nextStatuses[server.id] = latency != null
-            ? ServerStatus.online
-            : ServerStatus.offline;
+      for (final server in pingTargets) {
+        final scheme = serverUrlScheme(server.url);
+        if (scheme == 'udp') {
+          // 收到 SACK 才算在线，延迟用 UDP 往返时间；无回包视为离线。
+          final probe = nextProbes[server.id];
+          final latency = probe?.isEasyTier == true ? probe!.latencyMs : null;
+          nextLatencies[server.id] = latency;
+          nextStatuses[server.id] = latency != null
+              ? ServerStatus.online
+              : ServerStatus.offline;
+        } else if (isTcpPingTarget(server.url)) {
+          final latency = tcpLatencies[server.id];
+          nextLatencies[server.id] = latency;
+          nextStatuses[server.id] = latency != null
+              ? ServerStatus.online
+              : ServerStatus.offline;
+        } else {
+          // ws/wss/quic/wg 暂无可用探测方式，保持「未检测」而不是误报离线。
+          nextLatencies.remove(server.id);
+          nextStatuses[server.id] = ServerStatus.unknown;
+        }
       }
       serverProbes.value = nextProbes;
       serverLatencies.value = nextLatencies;

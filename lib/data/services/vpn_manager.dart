@@ -40,6 +40,7 @@ class VpnManager {
     required String instanceId,
     required String ipv4Addr,
     int? mtu,
+    List<String> extraRoutes = const [],
   }) async {
     // Android 13+ 未授予通知权限时前台服务通知不可见，先请求授权。
     await _notifications.ensurePermission();
@@ -49,7 +50,7 @@ class VpnManager {
     vpnState.setIpv4Addr(finalIpv4);
     vpnState.setMtu(finalMtu);
 
-    final routes = vpnState.customRoutes.value
+    final routes = <String>[...vpnState.customRoutes.value, ...extraRoutes]
         .map((r) => r.trim())
         .where((r) => InputValidator.validateCidr(r) == null)
         .toList(growable: false);
