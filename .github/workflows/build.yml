@@ -165,13 +165,34 @@ jobs:
           targets: ${{ matrix.rust_target }}
 
       # Windows 不能靠 Chocolatey；Android 跑在 Ubuntu 上也需要 protoc（cargokit/prost）。
-      - name: 📥 Install protoc
-        uses: arduino/setup-protoc@v3
-        with:
-          # 固定版本：传 23.x 会让 action 调 GitHub API 解析最新版，
-          # 命中限流时报 "unable to get latest version" 导致 Windows 构建失败。
-          version: '23.3'
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      # 不用 arduino/setup-protoc：它的 computeVersion() 无论是否指定版本都会调
+      # GitHub API 拉 release 列表，撞限流就报 "unable to get latest version"，
+      # 固定版本号也躲不掉。这里直接走 release 资产直链。
+      - name: 📥 Install protoc (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          PROTOC_VERSION: '23.3'
+        run: |
+          $url = "https://github.com/protocolbuffers/protobuf/releases/download/v$env:PROTOC_VERSION/protoc-$env:PROTOC_VERSION-win64.zip"
+          Invoke-WebRequest -Uri $url -OutFile "$env:RUNNER_TEMP\protoc.zip"
+          Expand-Archive -Path "$env:RUNNER_TEMP\protoc.zip" -DestinationPath "$env:RUNNER_TEMP\protoc" -Force
+          "$env:RUNNER_TEMP\protoc\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          & "$env:RUNNER_TEMP\protoc\bin\protoc.exe" --version
+
+      - name: 📥 Install protoc (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          PROTOC_VERSION: '23.3'
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 --retry-delay 5 \
+            "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip" \
+            -o /tmp/protoc.zip
+          unzip -q -o /tmp/protoc.zip -d "$HOME/protoc"
+          echo "$HOME/protoc/bin" >> "$GITHUB_PATH"
+          "$HOME/protoc/bin/protoc" --version
 
       - name: 📥 Install NASM
         if: runner.os == 'Windows'
