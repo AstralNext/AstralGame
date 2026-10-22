@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:astral_game/data/models/active_room_session.dart';
 import 'package:astral_game/data/models/bookmark.dart';
 import 'package:astral_game/data/models/game_catalog.dart';
 import 'package:astral_game/data/services/connection_service.dart';
@@ -18,6 +19,7 @@ import 'package:astral_game/ui/widgets/confirm_dialog.dart';
 import 'package:astral_game/ui/widgets/create_room_dialog.dart';
 import 'package:astral_game/ui/widgets/dashboard_home_panel.dart';
 import 'package:astral_game/ui/widgets/share_room_dialog.dart';
+import 'package:astral_game/utils/error_text.dart';
 import 'package:astral_game/utils/room_share.dart';
 import 'package:flutter/material.dart';
 import 'package:signals/signals_flutter.dart';
@@ -172,8 +174,12 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Future<void> _handleCreateRoom() async {
-    if (_connectionService.isConnecting) return;
-    await getIt<GameAssistRulesService>().ensureLoaded();
+    if (_connectionService.isConnecting) {
+      if (mounted) showAppToast(context, '正在连接中，请稍候…');
+      return;
+    }
+    // 只等本地规则：冷启动远程目录可能很慢，不能拖住游戏目录选择。
+    await getIt<GameAssistRulesService>().ensureLocalLoaded();
     if (!mounted) return;
     final catalog = GameCatalog.pickerItems;
     if (catalog.isEmpty) {
@@ -202,8 +208,22 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Future<void> _handleJoinRoom() async {
-    if (_connectionService.isConnecting) return;
+    if (_connectionService.isConnecting) {
+      if (mounted) showAppToast(context, '正在连接中，请稍候…');
+      return;
+    }
     final codeController = TextEditingController();
+    var saveAndJoin = false;
+
+    String? readInput(BuildContext dialogContext) {
+      final raw = codeController.text.trim();
+      if (raw.isEmpty) {
+        showAppToast(dialogContext, '请输入邀请链接或短码');
+        return null;
+      }
+      return raw;
+    }
+
     final result = await showDialog<String>(
       context: context,
       builder: (dialogContext) {
@@ -221,7 +241,14 @@ class _DashboardPageState extends State<DashboardPage> {
                 hintText: '粘贴 next.astral.fan/j 链接，或短码',
                 alignLabelWithHint: true,
               ),
-              onSubmitted: (v) => Navigator.pop(dialogContext, v.trim()),
+              onSubmitted: (v) {
+                final raw = v.trim();
+                if (raw.isEmpty) {
+                  showAppToast(dialogContext, '请输入邀请链接或短码');
+                  return;
+                }
+                Navigator.pop(dialogContext, raw);
+              },
             ),
           ),
           actions: [
@@ -230,24 +257,33 @@ class _DashboardPageState extends State<DashboardPage> {
               child: const Text('取消'),
             ),
             FilledButton.tonal(
-              onPressed: () async {
-                final raw = codeController.text.trim();
-                if (raw.isEmpty) return;
-                Navigator.pop(dialogContext);
-                await _parseAndBookmark(raw);
+              onPressed: () {
+                final raw = readInput(dialogContext);
+                if (raw == null) return;
+                saveAndJoin = true;
+                Navigator.pop(dialogContext, raw);
               },
-              child: const Text('解析并收藏'),
+              child: const Text('收藏并加入'),
             ),
             FilledButton(
-              onPressed: () =>
-                  Navigator.pop(dialogContext, codeController.text.trim()),
-              child: const Text('加入'),
+              onPressed: () {
+                final raw = readInput(dialogContext);
+                if (raw == null) return;
+                Navigator.pop(dialogContext, raw);
+              },
+              child: const Text('临时加入'),
             ),
           ],
         );
       },
     );
     if (result == null || result.isEmpty) return;
+    if (!mounted) return;
+    if (saveAndJoin) {
+      await _bookmarkAndJoin(result);
+      return;
+    }
+    showAppToast(context, '正在解析邀请…');
     try {
       await _connectionService.joinWithInviteInput(result);
     } on ConnectionAbortedException {
@@ -255,31 +291,45 @@ class _DashboardPageState extends State<DashboardPage> {
     } on ShareCodeException catch (e) {
       if (mounted) showAppToast(context, e.message);
     } catch (e) {
-      if (mounted) showAppToast(context, '$e');
+      if (mounted) showAppToast(context, '加入失败：${errorText(e)}');
     }
   }
 
-  Future<void> _parseAndBookmark(String raw) async {
+  /// 收藏并加入：解析邀请 → 命名保存为收藏 → 直接进房。
+  Future<void> _bookmarkAndJoin(String raw) async {
+    final RoomInvitePayload payload;
+    final String? shortCode;
+    final Bookmark bookmark;
+    showAppToast(context, '正在解析邀请…');
     try {
       final resolved = await _connectionService.resolveInvitePayload(raw);
+      payload = resolved.payload;
+      shortCode = resolved.shortCode;
       if (!mounted) return;
-      final payload = resolved.payload;
       // 弹命名框，预填自动名，用户可改
       final name = await showBookmarkNameDialog(
         context,
         initialName: autoBookmarkName(payload),
+        cancelLabel: '取消加入',
       );
       if (name == null) return; // 用户取消
-      final bookmark = await _roomState.quickSaveBookmark(
-        payload,
-        customName: name,
-      );
-      if (!mounted) return;
-      showAppToast(context, '已加入收藏：${bookmark.customName}');
+      bookmark = await _roomState.quickSaveBookmark(payload, customName: name);
     } on ShareCodeException catch (e) {
       if (mounted) showAppToast(context, e.message);
+      return;
     } catch (e) {
-      if (mounted) showAppToast(context, '$e');
+      if (mounted) showAppToast(context, '解析邀请失败：${errorText(e)}');
+      return;
+    }
+
+    try {
+      await _connectionService.joinWithPayload(payload, shortCode: shortCode);
+      if (!mounted) return;
+      showAppToast(context, '已收藏并加入：${bookmark.customName}');
+    } on ConnectionAbortedException {
+      return;
+    } catch (e) {
+      if (mounted) showAppToast(context, '已收藏，但加入失败：${errorText(e)}');
     }
   }
 

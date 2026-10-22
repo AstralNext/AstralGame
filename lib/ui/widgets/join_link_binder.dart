@@ -8,6 +8,7 @@ import 'package:astral_game/data/services/shell_navigation_service.dart';
 import 'package:astral_game/data/state/room_state.dart';
 import 'package:astral_game/di.dart';
 import 'package:astral_game/ui/widgets/app_toast.dart';
+import 'package:astral_game/utils/error_text.dart';
 import 'package:astral_game/utils/room_share.dart';
 import 'package:flutter/material.dart';
 import 'package:signals/signals_flutter.dart';
@@ -49,14 +50,19 @@ class _JoinLinkBinderState extends State<JoinLinkBinder> {
     if (_busy) return;
     _busy = true;
     final links = getIt<JoinLinkService>();
-    links.consume();
     try {
       final connection = getIt<ConnectionService>();
-      final room = getIt<RoomState>();
+      // 连接中先等它结束，而不是直接吞掉邀请链接。
       if (connection.isConnecting || connection.isLinking.value) {
-        _toast('正在连接中，请稍后再打开邀请链接');
-        return;
+        _toast('正在连接中，稍后自动打开邀请…');
+        if (!await _waitUntilIdle(connection)) {
+          _toast('连接仍未结束，请稍后重新打开邀请链接');
+          return;
+        }
+        if (!mounted) return;
       }
+      links.consume();
+      final room = getIt<RoomState>();
       if (room.session.value != null) {
         final go = await _confirmLeave();
         if (go != true) return;
@@ -84,10 +90,21 @@ class _JoinLinkBinderState extends State<JoinLinkBinder> {
     } on ShareCodeException catch (e) {
       _toast(e.message);
     } catch (e) {
-      _toast('$e');
+      _toast('加入失败：${errorText(e)}');
     } finally {
       _busy = false;
     }
+  }
+
+  /// 等当前连接结束；超时或页面销毁返回 false。
+  Future<bool> _waitUntilIdle(ConnectionService connection) async {
+    final deadline = DateTime.now().add(const Duration(seconds: 60));
+    while (DateTime.now().isBefore(deadline)) {
+      if (!connection.isConnecting && !connection.isLinking.value) return true;
+      await Future.delayed(const Duration(milliseconds: 300));
+      if (!mounted) return false;
+    }
+    return false;
   }
 
   Bookmark? _findBookmarkById(RoomState room, int id) {

@@ -326,20 +326,7 @@ class ConnectionService {
     String? shortCode,
   }) async {
     final invitePeers = joinableInvitePeers(payload);
-
-    // 没有短码（从收藏/离线加入）时补一条：同房间已有有效码会直接复用，
-    // 不会每次加入都生成新码。
-    String? resolvedShortCode = shortCode;
-    String? adminToken;
-    if (resolvedShortCode == null || resolvedShortCode.isEmpty) {
-      try {
-        final created = await _shareCodes.createOrReuse(payload);
-        resolvedShortCode = created.code;
-        adminToken = created.adminToken;
-      } catch (e) {
-        appLogger.w('[ConnectionService] 自动创建短码失败: $e');
-      }
-    }
+    final needShareCode = shortCode == null || shortCode.isEmpty;
 
     final session = ActiveRoomSession(
       isHost: false,
@@ -350,13 +337,18 @@ class ConnectionService {
       displayName: payload.displayName?.isNotEmpty == true
           ? payload.displayName!
           : (payload.gameName.isEmpty ? payload.networkName : payload.gameName),
-      shortCode: resolvedShortCode,
-      adminToken: adminToken,
+      shortCode: shortCode,
       peers: invitePeers,
     );
     _roomState.setSession(session);
     final epoch = _link.begin();
     isLinking.value = true;
+
+    // 短码只用于房间卡展示/分享：从收藏/离线加入时后台补发，不阻塞进房
+    // （冷启动短码服务可能很慢，最长要等 kShareCodeTimeout）。
+    if (needShareCode) {
+      unawaited(_attachGuestShareCode(payload, epoch));
+    }
 
     var linked = false;
     try {
@@ -383,6 +375,29 @@ class ConnectionService {
       if (_isLinkActive(epoch)) {
         isLinking.value = false;
       }
+    }
+  }
+
+  /// 客人侧短码后台补发：只影响房间卡上的分享码，失败静默。
+  ///
+  /// 短码服务慢/不可用时不影响进房；同房间已有有效码会直接复用。
+  Future<void> _attachGuestShareCode(
+    RoomInvitePayload payload,
+    int epoch,
+  ) async {
+    try {
+      final created = await _shareCodes.createOrReuse(payload);
+      if (!_isLinkActive(epoch)) return;
+      final current = _roomState.session.value;
+      if (current == null || current.networkName != payload.networkName) return;
+      _roomState.setSession(
+        current.copyWith(
+          shortCode: created.code,
+          adminToken: created.adminToken,
+        ),
+      );
+    } catch (e) {
+      appLogger.w('[ConnectionService] 自动创建短码失败: $e');
     }
   }
 
@@ -455,12 +470,12 @@ class ConnectionService {
           RuntimePlatform.isAndroid && gameId != null && gameId.isNotEmpty
           ? _gameRules.lanNatRule(gameId)
           : null;
-      // 启动时自动重连可能早于规则加载，补等一次本地 asset。
+      // 启动时自动重连可能早于规则加载，补等一次本地规则（不等远程）。
       if (natRule == null &&
           RuntimePlatform.isAndroid &&
           gameId != null &&
           gameId.isNotEmpty) {
-        await _gameRules.ensureAssetLoaded();
+        await _gameRules.ensureLocalLoaded();
         natRule = _gameRules.lanNatRule(gameId);
       }
       String? lanNatFakeIp;

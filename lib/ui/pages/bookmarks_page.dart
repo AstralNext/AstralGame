@@ -23,6 +23,7 @@ import 'package:astral_game/ui/widgets/grouped_tile_shape.dart';
 import 'package:astral_game/ui/widgets/page_header.dart';
 import 'package:astral_game/ui/widgets/page_navigator.dart';
 import 'package:astral_game/ui/widgets/section_header.dart';
+import 'package:astral_game/utils/error_text.dart';
 import 'package:astral_game/utils/room_display.dart';
 import 'package:astral_game/utils/room_share.dart';
 import 'package:astral_game/utils/room_share_actions.dart';
@@ -488,6 +489,19 @@ class _BookmarksPageState extends State<BookmarksPage> {
       showAppToast(context, '正在连接中，请稍候…');
       return;
     }
+    final current = _roomState.session.value;
+    if (current != null && current.networkName != b.payload.networkName) {
+      final ok = await showConfirmDialog(
+        context,
+        title: '加入「${b.displayName}」？',
+        content:
+            '当前已在房间「${current.displayName.isNotEmpty ? current.displayName : current.gameName}」中，'
+            '加入新房间会断开你现在的连接。',
+        confirmLabel: '断开并加入',
+      );
+      if (!ok || !mounted) return;
+    }
+    showAppToast(context, '正在加入「${b.displayName}」…');
     try {
       // 不传 shortCode：_joinWithPayload 会优先复用同房间仍在用的短码
       await _connectionService.joinWithPayload(b.payload);
@@ -501,7 +515,7 @@ class _BookmarksPageState extends State<BookmarksPage> {
       return;
     } catch (e) {
       if (!mounted) return;
-      final msg = e is ShareCodeException ? e.message : '加入失败：${e.runtimeType}';
+      final msg = e is ShareCodeException ? e.message : '加入失败：${errorText(e)}';
       showAppToast(context, msg);
     }
   }

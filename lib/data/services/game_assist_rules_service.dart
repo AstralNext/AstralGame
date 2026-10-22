@@ -75,6 +75,9 @@ class GameAssistRulesService {
   final Map<String, GameLanNatRule> _lanNatRules = <String, GameLanNatRule>{};
   final Completer<void> _assetApplied = Completer<void>();
 
+  /// 本地 asset + 磁盘缓存落地（不含远程）；进房等实时路径只等这个。
+  final Completer<void> _localApplied = Completer<void>();
+
   /// 目录每次成功应用后递增，供 UI `Watch`。
   final catalogRevision = signal(0);
 
@@ -94,11 +97,13 @@ class GameAssistRulesService {
 
     // 2) 测试目录有 JSON 则覆盖并跳过远程。
     if (await _applyTestDir()) {
+      _completeLocal();
       return _catalog!;
     }
 
     // 3) 上次远程成功结果（ETag 缓存），弱网也能用较新目录。
     await _applyDiskCache();
+    _completeLocal();
 
     // 4) 远程覆盖（If-None-Match；失败则保留 cache / asset）。
     final remote = await _fetchRemote();
@@ -171,6 +176,20 @@ class GameAssistRulesService {
   Future<void> ensureAssetLoaded() {
     ensureLoaded();
     return _assetApplied.future;
+  }
+
+  /// 等本地 asset + 磁盘缓存规则落地，不等远程。
+  ///
+  /// 建/进房、辅助服务启动等实时路径只等这个：冷启动远程目录可能很慢
+  /// （最长 [kGameRulesTimeout]），不能让它拖住进房；远程结果到了会更新
+  /// 目录供后续使用。
+  Future<void> ensureLocalLoaded() {
+    ensureLoaded();
+    return _localApplied.future;
+  }
+
+  void _completeLocal() {
+    if (!_localApplied.isCompleted) _localApplied.complete();
   }
 
   /// 远程 / 测试覆盖同 id；本地独有（如尚未上 CDN 的 inject）保留。
@@ -367,17 +386,18 @@ class GameAssistRulesService {
     }
   }
 
+  /// 房间实时路径用本地规则（不等远程），避免冷启动进房被远程下载拖慢。
   Future<GameAssistPlatformRules?> platformRules(
     String gameId,
     String platform,
   ) async {
-    final catalog = await ensureLoaded();
-    return catalog.platformRules(gameId, platform);
+    await ensureLocalLoaded();
+    return _catalog?.platformRules(gameId, platform);
   }
 
   Future<GameAssistGameRules?> gameRules(String gameId) async {
-    final catalog = await ensureLoaded();
-    return catalog.byId(gameId);
+    await ensureLocalLoaded();
+    return _catalog?.byId(gameId);
   }
 
   /// 该游戏是否要求 EasyTier UDP 广播转发（当前平台，回退 windows）。

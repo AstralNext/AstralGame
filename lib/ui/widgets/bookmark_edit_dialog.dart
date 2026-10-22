@@ -115,18 +115,24 @@ Future<Bookmark?> showBookmarkEditor(
 Future<String?> showBookmarkNameDialog(
   BuildContext context, {
   required String initialName,
+  String cancelLabel = '取消',
 }) {
   return showDialog<String>(
     context: context,
-    builder: (_) => _BookmarkNameDialog(initialName: initialName),
+    builder: (_) =>
+        _BookmarkNameDialog(initialName: initialName, cancelLabel: cancelLabel),
   );
 }
 
 /// 命名框内容：controller 由 State 持有，随弹窗退场动画结束一并释放。
 class _BookmarkNameDialog extends StatefulWidget {
-  const _BookmarkNameDialog({required this.initialName});
+  const _BookmarkNameDialog({
+    required this.initialName,
+    required this.cancelLabel,
+  });
 
   final String initialName;
+  final String cancelLabel;
 
   @override
   State<_BookmarkNameDialog> createState() => _BookmarkNameDialogState();
@@ -181,7 +187,7 @@ class _BookmarkNameDialogState extends State<_BookmarkNameDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
+          child: Text(widget.cancelLabel),
         ),
         FilledButton(onPressed: _submit, child: const Text('保存')),
       ],

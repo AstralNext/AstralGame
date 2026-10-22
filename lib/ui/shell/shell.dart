@@ -22,6 +22,7 @@ import 'package:astral_game/di.dart' show getIt;
 import 'package:astral_game/ui/widgets/app_toast.dart';
 import 'package:astral_game/ui/widgets/bookmark_search_field.dart';
 import 'package:astral_game/ui/widgets/edit_profile_dialog.dart';
+import 'package:astral_game/utils/error_text.dart';
 import 'package:astral_game/utils/runtime_platform.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
@@ -123,11 +124,12 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
         await showEditProfileDialog(context, onboarding: true);
         if (!mounted) return;
       }
-      // 静默检查更新（业务时序统一封装在 UpdateService 内）
-      await getIt<UpdateService>().startAutoCheckIfEnabled(context: context);
-      if (!mounted) return;
-      // 自动进入设定好的收藏房间（不阻塞后续初始化）。
+      // 自动进入设定好的收藏房间：先于更新检查发起，避免被网络检查拖住。
       unawaited(_autoEnterSelectedRoomIfNeeded());
+      // 静默检查更新（业务时序统一封装在 UpdateService 内）
+      unawaited(
+        getIt<UpdateService>().startAutoCheckIfEnabled(context: context),
+      );
       // 同步网络加速驱动真实状态，避免设置页首次打开时 installed=false 与实际脱节
       if (RuntimePlatform.isWindows) {
         // ignore: discarded_futures
@@ -185,7 +187,7 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
       showAppToast(context, '已自动进入房间');
     } catch (e) {
       if (!mounted) return;
-      showAppToast(context, '自动进入房间失败：$e');
+      showAppToast(context, '自动进入房间失败：${errorText(e)}');
     }
   }
 
