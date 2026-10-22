@@ -168,6 +168,9 @@ jobs:
       - name: 📥 Install protoc
         uses: arduino/setup-protoc@v3
         with:
+          # 固定版本：传 23.x 会让 action 调 GitHub API 解析最新版，
+          # 命中限流时报 "unable to get latest version" 导致 Windows 构建失败。
+          version: '23.3'
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 📥 Install NASM
