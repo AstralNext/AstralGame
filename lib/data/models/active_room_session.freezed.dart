@@ -301,7 +301,7 @@ as String?,
 /// @nodoc
 mixin _$ActiveRoomSession {
 
- bool get isHost; String get gameId; String get gameName; String get networkName; String get networkSecret; String get displayName; String? get shortCode; String? get adminToken; List<PeerEndpoint> get peers;
+ bool get isHost; String get gameId; String get gameName; String get networkName; String get networkSecret; String get displayName; String? get shortCode; List<PeerEndpoint> get peers;
 /// Create a copy of ActiveRoomSession
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -312,16 +312,16 @@ $ActiveRoomSessionCopyWith<ActiveRoomSession> get copyWith => _$ActiveRoomSessio
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is ActiveRoomSession&&(identical(other.isHost, isHost) || other.isHost == isHost)&&(identical(other.gameId, gameId) || other.gameId == gameId)&&(identical(other.gameName, gameName) || other.gameName == gameName)&&(identical(other.networkName, networkName) || other.networkName == networkName)&&(identical(other.networkSecret, networkSecret) || other.networkSecret == networkSecret)&&(identical(other.displayName, displayName) || other.displayName == displayName)&&(identical(other.shortCode, shortCode) || other.shortCode == shortCode)&&(identical(other.adminToken, adminToken) || other.adminToken == adminToken)&&const DeepCollectionEquality().equals(other.peers, peers));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ActiveRoomSession&&(identical(other.isHost, isHost) || other.isHost == isHost)&&(identical(other.gameId, gameId) || other.gameId == gameId)&&(identical(other.gameName, gameName) || other.gameName == gameName)&&(identical(other.networkName, networkName) || other.networkName == networkName)&&(identical(other.networkSecret, networkSecret) || other.networkSecret == networkSecret)&&(identical(other.displayName, displayName) || other.displayName == displayName)&&(identical(other.shortCode, shortCode) || other.shortCode == shortCode)&&const DeepCollectionEquality().equals(other.peers, peers));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,isHost,gameId,gameName,networkName,networkSecret,displayName,shortCode,adminToken,const DeepCollectionEquality().hash(peers));
+int get hashCode => Object.hash(runtimeType,isHost,gameId,gameName,networkName,networkSecret,displayName,shortCode,const DeepCollectionEquality().hash(peers));
 
 @override
 String toString() {
-  return 'ActiveRoomSession(isHost: $isHost, gameId: $gameId, gameName: $gameName, networkName: $networkName, networkSecret: $networkSecret, displayName: $displayName, shortCode: $shortCode, adminToken: $adminToken, peers: $peers)';
+  return 'ActiveRoomSession(isHost: $isHost, gameId: $gameId, gameName: $gameName, networkName: $networkName, networkSecret: $networkSecret, displayName: $displayName, shortCode: $shortCode, peers: $peers)';
 }
 
 
@@ -332,7 +332,7 @@ abstract mixin class $ActiveRoomSessionCopyWith<$Res>  {
   factory $ActiveRoomSessionCopyWith(ActiveRoomSession value, $Res Function(ActiveRoomSession) _then) = _$ActiveRoomSessionCopyWithImpl;
 @useResult
 $Res call({
- bool isHost, String gameId, String gameName, String networkName, String networkSecret, String displayName, String? shortCode, String? adminToken, List<PeerEndpoint> peers
+ bool isHost, String gameId, String gameName, String networkName, String networkSecret, String displayName, String? shortCode, List<PeerEndpoint> peers
 });
 
 
@@ -349,7 +349,7 @@ class _$ActiveRoomSessionCopyWithImpl<$Res>
 
 /// Create a copy of ActiveRoomSession
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? isHost = null,Object? gameId = null,Object? gameName = null,Object? networkName = null,Object? networkSecret = null,Object? displayName = null,Object? shortCode = freezed,Object? adminToken = freezed,Object? peers = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? isHost = null,Object? gameId = null,Object? gameName = null,Object? networkName = null,Object? networkSecret = null,Object? displayName = null,Object? shortCode = freezed,Object? peers = null,}) {
   return _then(_self.copyWith(
 isHost: null == isHost ? _self.isHost : isHost // ignore: cast_nullable_to_non_nullable
 as bool,gameId: null == gameId ? _self.gameId : gameId // ignore: cast_nullable_to_non_nullable
@@ -358,7 +358,6 @@ as String,networkName: null == networkName ? _self.networkName : networkName // 
 as String,networkSecret: null == networkSecret ? _self.networkSecret : networkSecret // ignore: cast_nullable_to_non_nullable
 as String,displayName: null == displayName ? _self.displayName : displayName // ignore: cast_nullable_to_non_nullable
 as String,shortCode: freezed == shortCode ? _self.shortCode : shortCode // ignore: cast_nullable_to_non_nullable
-as String?,adminToken: freezed == adminToken ? _self.adminToken : adminToken // ignore: cast_nullable_to_non_nullable
 as String?,peers: null == peers ? _self.peers : peers // ignore: cast_nullable_to_non_nullable
 as List<PeerEndpoint>,
   ));
@@ -445,10 +444,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( bool isHost,  String gameId,  String gameName,  String networkName,  String networkSecret,  String displayName,  String? shortCode,  String? adminToken,  List<PeerEndpoint> peers)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( bool isHost,  String gameId,  String gameName,  String networkName,  String networkSecret,  String displayName,  String? shortCode,  List<PeerEndpoint> peers)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _ActiveRoomSession() when $default != null:
-return $default(_that.isHost,_that.gameId,_that.gameName,_that.networkName,_that.networkSecret,_that.displayName,_that.shortCode,_that.adminToken,_that.peers);case _:
+return $default(_that.isHost,_that.gameId,_that.gameName,_that.networkName,_that.networkSecret,_that.displayName,_that.shortCode,_that.peers);case _:
   return orElse();
 
 }
@@ -466,10 +465,10 @@ return $default(_that.isHost,_that.gameId,_that.gameName,_that.networkName,_that
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( bool isHost,  String gameId,  String gameName,  String networkName,  String networkSecret,  String displayName,  String? shortCode,  String? adminToken,  List<PeerEndpoint> peers)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( bool isHost,  String gameId,  String gameName,  String networkName,  String networkSecret,  String displayName,  String? shortCode,  List<PeerEndpoint> peers)  $default,) {final _that = this;
 switch (_that) {
 case _ActiveRoomSession():
-return $default(_that.isHost,_that.gameId,_that.gameName,_that.networkName,_that.networkSecret,_that.displayName,_that.shortCode,_that.adminToken,_that.peers);case _:
+return $default(_that.isHost,_that.gameId,_that.gameName,_that.networkName,_that.networkSecret,_that.displayName,_that.shortCode,_that.peers);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -486,10 +485,10 @@ return $default(_that.isHost,_that.gameId,_that.gameName,_that.networkName,_that
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( bool isHost,  String gameId,  String gameName,  String networkName,  String networkSecret,  String displayName,  String? shortCode,  String? adminToken,  List<PeerEndpoint> peers)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( bool isHost,  String gameId,  String gameName,  String networkName,  String networkSecret,  String displayName,  String? shortCode,  List<PeerEndpoint> peers)?  $default,) {final _that = this;
 switch (_that) {
 case _ActiveRoomSession() when $default != null:
-return $default(_that.isHost,_that.gameId,_that.gameName,_that.networkName,_that.networkSecret,_that.displayName,_that.shortCode,_that.adminToken,_that.peers);case _:
+return $default(_that.isHost,_that.gameId,_that.gameName,_that.networkName,_that.networkSecret,_that.displayName,_that.shortCode,_that.peers);case _:
   return null;
 
 }
@@ -501,7 +500,7 @@ return $default(_that.isHost,_that.gameId,_that.gameName,_that.networkName,_that
 
 
 class _ActiveRoomSession extends ActiveRoomSession {
-  const _ActiveRoomSession({required this.isHost, required this.gameId, required this.gameName, required this.networkName, required this.networkSecret, required this.displayName, this.shortCode, this.adminToken, required final  List<PeerEndpoint> peers}): _peers = peers,super._();
+  const _ActiveRoomSession({required this.isHost, required this.gameId, required this.gameName, required this.networkName, required this.networkSecret, required this.displayName, this.shortCode, required final  List<PeerEndpoint> peers}): _peers = peers,super._();
   
 
 @override final  bool isHost;
@@ -511,7 +510,6 @@ class _ActiveRoomSession extends ActiveRoomSession {
 @override final  String networkSecret;
 @override final  String displayName;
 @override final  String? shortCode;
-@override final  String? adminToken;
  final  List<PeerEndpoint> _peers;
 @override List<PeerEndpoint> get peers {
   if (_peers is EqualUnmodifiableListView) return _peers;
@@ -530,16 +528,16 @@ _$ActiveRoomSessionCopyWith<_ActiveRoomSession> get copyWith => __$ActiveRoomSes
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ActiveRoomSession&&(identical(other.isHost, isHost) || other.isHost == isHost)&&(identical(other.gameId, gameId) || other.gameId == gameId)&&(identical(other.gameName, gameName) || other.gameName == gameName)&&(identical(other.networkName, networkName) || other.networkName == networkName)&&(identical(other.networkSecret, networkSecret) || other.networkSecret == networkSecret)&&(identical(other.displayName, displayName) || other.displayName == displayName)&&(identical(other.shortCode, shortCode) || other.shortCode == shortCode)&&(identical(other.adminToken, adminToken) || other.adminToken == adminToken)&&const DeepCollectionEquality().equals(other._peers, _peers));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ActiveRoomSession&&(identical(other.isHost, isHost) || other.isHost == isHost)&&(identical(other.gameId, gameId) || other.gameId == gameId)&&(identical(other.gameName, gameName) || other.gameName == gameName)&&(identical(other.networkName, networkName) || other.networkName == networkName)&&(identical(other.networkSecret, networkSecret) || other.networkSecret == networkSecret)&&(identical(other.displayName, displayName) || other.displayName == displayName)&&(identical(other.shortCode, shortCode) || other.shortCode == shortCode)&&const DeepCollectionEquality().equals(other._peers, _peers));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,isHost,gameId,gameName,networkName,networkSecret,displayName,shortCode,adminToken,const DeepCollectionEquality().hash(_peers));
+int get hashCode => Object.hash(runtimeType,isHost,gameId,gameName,networkName,networkSecret,displayName,shortCode,const DeepCollectionEquality().hash(_peers));
 
 @override
 String toString() {
-  return 'ActiveRoomSession(isHost: $isHost, gameId: $gameId, gameName: $gameName, networkName: $networkName, networkSecret: $networkSecret, displayName: $displayName, shortCode: $shortCode, adminToken: $adminToken, peers: $peers)';
+  return 'ActiveRoomSession(isHost: $isHost, gameId: $gameId, gameName: $gameName, networkName: $networkName, networkSecret: $networkSecret, displayName: $displayName, shortCode: $shortCode, peers: $peers)';
 }
 
 
@@ -550,7 +548,7 @@ abstract mixin class _$ActiveRoomSessionCopyWith<$Res> implements $ActiveRoomSes
   factory _$ActiveRoomSessionCopyWith(_ActiveRoomSession value, $Res Function(_ActiveRoomSession) _then) = __$ActiveRoomSessionCopyWithImpl;
 @override @useResult
 $Res call({
- bool isHost, String gameId, String gameName, String networkName, String networkSecret, String displayName, String? shortCode, String? adminToken, List<PeerEndpoint> peers
+ bool isHost, String gameId, String gameName, String networkName, String networkSecret, String displayName, String? shortCode, List<PeerEndpoint> peers
 });
 
 
@@ -567,7 +565,7 @@ class __$ActiveRoomSessionCopyWithImpl<$Res>
 
 /// Create a copy of ActiveRoomSession
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? isHost = null,Object? gameId = null,Object? gameName = null,Object? networkName = null,Object? networkSecret = null,Object? displayName = null,Object? shortCode = freezed,Object? adminToken = freezed,Object? peers = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? isHost = null,Object? gameId = null,Object? gameName = null,Object? networkName = null,Object? networkSecret = null,Object? displayName = null,Object? shortCode = freezed,Object? peers = null,}) {
   return _then(_ActiveRoomSession(
 isHost: null == isHost ? _self.isHost : isHost // ignore: cast_nullable_to_non_nullable
 as bool,gameId: null == gameId ? _self.gameId : gameId // ignore: cast_nullable_to_non_nullable
@@ -576,7 +574,6 @@ as String,networkName: null == networkName ? _self.networkName : networkName // 
 as String,networkSecret: null == networkSecret ? _self.networkSecret : networkSecret // ignore: cast_nullable_to_non_nullable
 as String,displayName: null == displayName ? _self.displayName : displayName // ignore: cast_nullable_to_non_nullable
 as String,shortCode: freezed == shortCode ? _self.shortCode : shortCode // ignore: cast_nullable_to_non_nullable
-as String?,adminToken: freezed == adminToken ? _self.adminToken : adminToken // ignore: cast_nullable_to_non_nullable
 as String?,peers: null == peers ? _self._peers : peers // ignore: cast_nullable_to_non_nullable
 as List<PeerEndpoint>,
   ));

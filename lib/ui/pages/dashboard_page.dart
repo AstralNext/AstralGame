@@ -86,21 +86,10 @@ class _DashboardPageState extends State<DashboardPage> {
       return;
     }
 
-    if (!session.isHost) {
-      final leave = await showConfirmDialog(
-        context,
-        title: '离开房间？',
-        content: '断开后需重新输入短码才能加入。',
-        confirmLabel: '离开',
-      );
-      if (leave) await _connectionService.leaveRoom();
-      return;
-    }
-
     final leave = await showConfirmDialog(
       context,
-      title: '退出房间？',
-      content: '离开房间：作废短码，房间结束。',
+      title: '离开房间？',
+      content: '分享码不会作废，房间里其他人仍可继续使用；重新加入时输入短码即可。',
       confirmLabel: '离开房间',
     );
     if (leave) await _connectionService.leaveRoom();

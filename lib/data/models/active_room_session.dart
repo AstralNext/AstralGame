@@ -39,22 +39,15 @@ abstract class ActiveRoomSession with _$ActiveRoomSession {
     required final String networkSecret,
     required final String displayName,
     final String? shortCode,
-    final String? adminToken,
     required final List<PeerEndpoint> peers,
   }) = _ActiveRoomSession;
 
   /// 支持显式传 null。用 [_unset] 哨兵和"用户未传参"区分。
-  ActiveRoomSession copyWithNullable({
-    Object? shortCode = _unset,
-    Object? adminToken = _unset,
-  }) {
+  ActiveRoomSession copyWithNullable({Object? shortCode = _unset}) {
     return copyWith(
       shortCode: identical(shortCode, _unset)
           ? this.shortCode
           : shortCode as String?,
-      adminToken: identical(adminToken, _unset)
-          ? this.adminToken
-          : adminToken as String?,
     );
   }
 }

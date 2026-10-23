@@ -99,7 +99,7 @@ class RoomState {
   /// 未传或为空时回退到自动命名（游戏名 → 房间名 → 网络名）；两种情况下都做重名去重
   /// （重名自动加序号）。本方法不弹任何 UI。
   ///
-  /// 不存短码：短码绑定当次房间、房主退出即作废；加入与分享时按需 create 新码。
+  /// 不存短码：短码是房间级资源、随活动滑动续期，加入与分享时按需取用即可。
   Future<Bookmark> quickSaveBookmark(
     RoomInvitePayload payload, {
     String? customName,

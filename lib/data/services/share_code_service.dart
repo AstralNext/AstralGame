@@ -10,8 +10,8 @@ import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// 短码服务返回的一条短码（含作废用的管理令牌）。
-typedef ShareCode = ({String code, String adminToken, String expiresAt});
+/// 短码服务返回的一条短码。
+typedef ShareCode = ({String code, String expiresAt});
 
 /// 短码服务异常：保持独立类型，供 UI 精确捕获并给出「短码服务暂不可用」类提示。
 ///
@@ -26,7 +26,7 @@ class ShareCodeException extends RemoteServiceException {
 /// astral-share 客户端（地址内置，不可配置）。
 ///
 /// 内置熔断：连续 [breakerThreshold] 次瞬时故障后短路 [breakerCooldown]。
-/// 短路期间 create/revoke 直接抛错（调用方均有回退：离线邀请/作废失败仅记日志）；
+/// 短路期间 create 直接抛错（调用方有回退：离线邀请）；
 /// fetch 仍放行——用户显式输入短码加入是核心动作，不能被熔断挡住，
 /// 但其成败同样计入计数，服务恢复后熔断自然关闭。
 class ShareCodeService {
@@ -40,7 +40,7 @@ class ShareCodeService {
   /// 连续瞬时故障达到该次数即熔断。
   static const int breakerThreshold = 3;
 
-  /// 熔断冷却：期间短路 create/revoke，到期后半开放行一次真实请求。
+  /// 熔断冷却：期间短路 create，到期后半开放行一次真实请求。
   static const Duration breakerCooldown = Duration(seconds: 60);
 
   final http.Client _client;
@@ -144,7 +144,6 @@ class ShareCodeService {
         final map = jsonDecode(res.body) as Map<String, dynamic>;
         return (
           code: '${map['code']}',
-          adminToken: '${map['admin_token']}',
           expiresAt: '${map['expires_at'] ?? ''}',
         );
       },
@@ -155,7 +154,7 @@ class ShareCodeService {
   ///
   /// 短码服务本身按请求逐条签发，客户端靠本地缓存（跨启动持久化）补上复用：
   /// 命中缓存时先用一次 GET 确认码还有效且指向同一房间——
-  /// - 404（过期/被房主作废）→ 丢掉缓存、重新创建；
+  /// - 404（过期/已作废）→ 丢掉缓存、重新创建；
   /// - 网络/5xx → 直接抛错，调用方回退离线邀请（此刻也创建不了新码）。
   ///
   /// 并发的同房间请求共享同一个 Future，避免连点生成多条短码。
@@ -199,7 +198,6 @@ class ShareCodeService {
     final created = await create(payload);
     _cachedCodes[key] = _CachedCode(
       code: created.code,
-      adminToken: created.adminToken,
       expiresAt: created.expiresAt,
       savedAt: _clock(),
     );
@@ -239,68 +237,6 @@ class ShareCodeService {
           throw ShareCodeException('短码载荷不完整（缺少房间密码）');
         }
         return payload;
-      },
-    );
-  }
-
-  /// 心跳续期：房主在房间存续期间定期调用，让服务端把有效期往后推。
-  ///
-  /// 404 / 403 表示短码已被作废或令牌失效，调用方应停止心跳；
-  /// 其余错误（超时/5xx）只记录，下一次心跳继续重试。
-  Future<void> heartbeat(String code, String adminToken) {
-    return _guard(
-      allowWhenOpen: true,
-      body: () async {
-        final normalized = normalizeShareCode(code);
-        final url = _base().resolve('/v1/codes/$normalized/heartbeat');
-        final res = await _withTimeout(
-          _client.post(url, headers: {'X-Admin-Token': adminToken}),
-        );
-        if (res.statusCode == 404) {
-          await _forgetCode(normalized);
-          throw ShareCodeException('短码无效或已过期', statusCode: 404);
-        }
-        if (res.statusCode == 403) {
-          throw ShareCodeException('短码管理令牌失效', statusCode: 403);
-        }
-        if (res.statusCode == 429) {
-          throw ShareCodeException('操作过于频繁', statusCode: 429);
-        }
-        if (res.statusCode < 200 || res.statusCode >= 300) {
-          throw ShareCodeException(
-            '心跳失败 (${res.statusCode})',
-            statusCode: res.statusCode,
-            transient: res.statusCode >= 500,
-          );
-        }
-        final expiresAt = _readExpiresAt(res.body);
-        if (expiresAt != null) {
-          _updateCachedExpiry(normalized, expiresAt);
-          await _saveCache();
-        }
-      },
-    );
-  }
-
-  Future<void> revoke(String code, String adminToken) {
-    return _guard(
-      allowWhenOpen: false,
-      body: () async {
-        final url = _base().resolve('/v1/codes/${normalizeShareCode(code)}');
-        final res = await _withTimeout(
-          _client.delete(url, headers: {'X-Admin-Token': adminToken}),
-        );
-        if (res.statusCode == 204 || res.statusCode == 404) {
-          await _forgetCode(code);
-          return;
-        }
-        if (res.statusCode == 429) {
-          throw ShareCodeException('操作过于频繁', statusCode: 429);
-        }
-        throw ShareCodeException(
-          '作废失败 (${res.statusCode})',
-          statusCode: res.statusCode,
-        );
       },
     );
   }
@@ -357,43 +293,6 @@ class ShareCodeService {
     }
   }
 
-  /// 短码被作废后同步清掉本地缓存，避免下次复用一条死码。
-  Future<void> _forgetCode(String code) async {
-    final normalized = normalizeShareCode(code);
-    final keys = [
-      for (final e in _cachedCodes.entries)
-        if (e.value.code == normalized) e.key,
-    ];
-    if (keys.isEmpty) return;
-    for (final key in keys) {
-      _cachedCodes.remove(key);
-    }
-    await _saveCache();
-  }
-
-  /// 从心跳应答里取新的到期时间；解析失败返回 null（不影响续期结果）。
-  String? _readExpiresAt(String body) {
-    try {
-      final map = jsonDecode(body);
-      if (map is Map && map['expires_at'] != null) {
-        final value = '${map['expires_at']}';
-        return value.isEmpty ? null : value;
-      }
-    } catch (_) {
-      // 心跳应答格式异常时忽略，服务端有效期已经推进，本地缓存下次 GET 会校准。
-    }
-    return null;
-  }
-
-  /// 心跳续期后同步本地缓存的到期时间，避免下次启动误判为过期。
-  void _updateCachedExpiry(String code, String expiresAt) {
-    for (final entry in _cachedCodes.entries.toList(growable: false)) {
-      if (entry.value.code == code) {
-        _cachedCodes[entry.key] = entry.value.copyWith(expiresAt: expiresAt);
-      }
-    }
-  }
-
   void close() => _client.close();
 }
 
@@ -401,13 +300,11 @@ class ShareCodeService {
 class _CachedCode {
   const _CachedCode({
     required this.code,
-    required this.adminToken,
     required this.expiresAt,
     required this.savedAt,
   });
 
   final String code;
-  final String adminToken;
   final String expiresAt;
   final DateTime savedAt;
 
@@ -417,19 +314,10 @@ class _CachedCode {
     return at != null && !at.isAfter(now);
   }
 
-  ShareCode asResult() =>
-      (code: code, adminToken: adminToken, expiresAt: expiresAt);
-
-  _CachedCode copyWith({String? expiresAt}) => _CachedCode(
-    code: code,
-    adminToken: adminToken,
-    expiresAt: expiresAt ?? this.expiresAt,
-    savedAt: savedAt,
-  );
+  ShareCode asResult() => (code: code, expiresAt: expiresAt);
 
   Map<String, dynamic> toJson() => {
     'code': code,
-    'admin_token': adminToken,
     'expires_at': expiresAt,
     'saved_at': savedAt.toIso8601String(),
   };
@@ -440,7 +328,6 @@ class _CachedCode {
     if (code is! String || code.isEmpty) return null;
     return _CachedCode(
       code: code,
-      adminToken: '${raw['admin_token'] ?? ''}',
       expiresAt: '${raw['expires_at'] ?? ''}',
       savedAt:
           DateTime.tryParse('${raw['saved_at'] ?? ''}') ??
