@@ -1,11 +1,8 @@
 #include "flutter_window.h"
 
-#include <algorithm>
 #include <optional>
-#include <vector>
 
 #include "flutter/generated_plugin_registrant.h"
-#include "utils.h"
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -30,21 +27,13 @@ bool FlutterWindow::OnCreate() {
   RegisterPlugins(flutter_controller_->engine());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
-  // 开机启动（--autostart）时不自动显示窗口：是否显示由 Dart 侧根据
-  // 「启动后到托盘」设置决定，否则窗口总会在首帧后弹出，设置形同虚设。
-  const std::vector<std::string> arguments = GetCommandLineArguments();
-  const bool launched_at_boot =
-      std::find(arguments.begin(), arguments.end(), "--autostart") !=
-      arguments.end();
-  if (!launched_at_boot) {
-    flutter_controller_->engine()->SetNextFrameCallback([&]() {
-      this->Show();
-    });
-  }
+  // 窗口显隐完全交给 Dart 侧（window_manager）：这里不要在首帧时自动 Show，
+  // 否则窗口会先按默认尺寸/位置(10,10)出现，再被 Dart 改成居中的 940x560，
+  // 表现为"左上角一闪然后跳到中间"。--autostart / 启动后到托盘也由 Dart 判断。
 
   // Flutter can complete the first frame before the "show window" callback is
   // registered. The following call ensures a frame is pending to ensure the
-  // window is shown. It is a no-op if the first frame hasn't completed yet.
+  // window is shown. This is a no-op if the first frame hasn't completed yet.
   flutter_controller_->ForceRedraw();
 
   return true;

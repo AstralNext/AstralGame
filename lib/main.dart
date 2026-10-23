@@ -41,7 +41,9 @@ Future<void> main(List<String> args) async {
       titleBarStyle: TitleBarStyle.hidden,
     );
 
-    windowManager.waitUntilReadyToShow(windowOptions);
+    // 必须 await：尺寸/居中是异步应用的，不 await 的话原生窗口会先按默认
+    // 位置(10,10)显示出来，再跳到屏幕中央。
+    await windowManager.waitUntilReadyToShow(windowOptions);
   }
 
   // 初始化完成后再 runApp：窗口在首帧渲染后才显示，不会出现空窗口或加载页。
@@ -64,6 +66,12 @@ Future<void> main(List<String> args) async {
   } catch (error, stackTrace) {
     debugPrint('启动初始化失败: $error\n$stackTrace');
     runApp(_StartupErrorApp(error: error));
+    // 原生侧不再自动显示窗口，兜底页也要主动显示一次。
+    if (RuntimePlatform.isDesktop) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        unawaited(_showMainWindow());
+      });
+    }
     return;
   }
 
