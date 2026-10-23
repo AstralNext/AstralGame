@@ -328,7 +328,10 @@ Future<void> setupDI() async {
   );
   _registerDispose<ConnectionService>((s) => s.disconnect(), async: true);
 
-  getIt.registerSingleton<UpdateState>(UpdateState());
+  getIt.registerSingleton<UpdateState>(
+    UpdateState(getIt<AppSettingsService>()),
+  );
+  getIt<UpdateState>().loadFromPersistence();
   getIt.registerLazySingleton<UpdateService>(
     () => UpdateService(getIt<UpdateState>()),
   );

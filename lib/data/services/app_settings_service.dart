@@ -235,6 +235,21 @@ class AppSettingsService {
   Future<void> setVirtualIpv6(String value) async =>
       await _prefs.setString(_keyVirtualIpv6, value);
 
+  // ---- 更新 ----
+
+  static const String _keyUpdateAutoCheck = 'update_auto_check';
+  static const String _keyUpdateBetaChannel = 'update_beta_channel';
+
+  /// 启动时是否自动检查更新。
+  bool getUpdateAutoCheck() => _prefs.getBool(_keyUpdateAutoCheck) ?? true;
+  Future<void> setUpdateAutoCheck(bool value) async =>
+      await _prefs.setBool(_keyUpdateAutoCheck, value);
+
+  /// 是否加入测试版（预发布）频道。
+  bool getUpdateBetaChannel() => _prefs.getBool(_keyUpdateBetaChannel) ?? false;
+  Future<void> setUpdateBetaChannel(bool value) async =>
+      await _prefs.setBool(_keyUpdateBetaChannel, value);
+
   // ---- Windows 启动行为 ----
 
   static const String _keyStartToTray = 'start_to_tray';
