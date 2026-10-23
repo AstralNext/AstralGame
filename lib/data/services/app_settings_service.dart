@@ -235,6 +235,65 @@ class AppSettingsService {
   Future<void> setVirtualIpv6(String value) async =>
       await _prefs.setString(_keyVirtualIpv6, value);
 
+  // ---- 壁纸 ----
+
+  static const String _keyWallpaperWideUrl = 'wallpaper_wide_url';
+  static const String _keyWallpaperNarrowUrl = 'wallpaper_narrow_url';
+  static const String _wallpaperWideFileName = 'wallpaper_pc.img';
+  static const String _wallpaperNarrowFileName = 'wallpaper_mp.img';
+
+  File? _wallpaperFile({required bool narrow}) {
+    final dir = _supportDir;
+    if (dir == null) return null;
+    return File(
+      p.join(
+        dir.path,
+        narrow ? _wallpaperNarrowFileName : _wallpaperWideFileName,
+      ),
+    );
+  }
+
+  /// 上一次启动时预取、供本次启动展示的壁纸直链。
+  String? getWallpaperUrl({required bool narrow}) {
+    final url = _prefs.getString(
+      narrow ? _keyWallpaperNarrowUrl : _keyWallpaperWideUrl,
+    );
+    return (url == null || url.isEmpty) ? null : url;
+  }
+
+  /// 读取已缓存、准备在本次启动展示的壁纸图片；没有缓存返回 null。
+  Future<Uint8List?> loadWallpaperBytes({required bool narrow}) async {
+    final file = _wallpaperFile(narrow: narrow);
+    if (file == null || !file.existsSync()) return null;
+    try {
+      final bytes = await file.readAsBytes();
+      return bytes.isEmpty ? null : bytes;
+    } catch (e) {
+      appLogger.w('[AppSettingsService] 读取壁纸缓存失败: $e');
+      return null;
+    }
+  }
+
+  /// 写入壁纸（图片 + 直链），供下次启动展示；覆盖旧文件。
+  Future<void> saveWallpaper({
+    required bool narrow,
+    required String url,
+    required Uint8List bytes,
+  }) async {
+    final file = _wallpaperFile(narrow: narrow);
+    if (file == null) return;
+    await file.parent.create(recursive: true);
+    // 先写临时文件再替换，避免读写并发时读到半截图片。
+    final tmp = File('${file.path}.tmp');
+    await tmp.writeAsBytes(bytes, flush: true);
+    if (file.existsSync()) await file.delete();
+    await tmp.rename(file.path);
+    await _prefs.setString(
+      narrow ? _keyWallpaperNarrowUrl : _keyWallpaperWideUrl,
+      url,
+    );
+  }
+
   // ---- 更新 ----
 
   static const String _keyUpdateAutoCheck = 'update_auto_check';

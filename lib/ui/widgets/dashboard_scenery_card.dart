@@ -1,13 +1,15 @@
-import 'package:astral_game/utils/logger.dart';
+import 'dart:async';
 import 'dart:io';
 
 import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/config/network_constants.dart';
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/services/alcy_wallpaper_service.dart';
+import 'package:astral_game/data/services/app_settings_service.dart';
 import 'package:astral_game/data/services/hitokoto_service.dart';
 import 'package:astral_game/di.dart';
 import 'package:astral_game/ui/widgets/app_toast.dart';
+import 'package:astral_game/utils/logger.dart';
 import 'package:astral_game/utils/runtime_platform.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -36,6 +38,7 @@ class DailySceneryCardState extends State<DailySceneryCard> {
   String _title = '';
   String _subtitle = '';
   String? _wallpaperUrl;
+  Uint8List? _wallpaperBytes;
   bool _textLoading = true;
   bool _wallpaperRequested = false;
   bool _downloading = false;
@@ -76,18 +79,60 @@ class DailySceneryCardState extends State<DailySceneryCard> {
     }
   }
 
-  /// 每次启动都重新取一张随机壁纸，不做跨启动缓存。
+  /// 每次启动：先展示上次启动预取好的壁纸，同时后台换一张存起来给下次启动。
   Future<void> _loadWallpaper() async {
     final narrow = MediaQuery.sizeOf(context).width < AppBreakpoints.narrow;
+    final settings = getIt<AppSettingsService>();
+    final cached = await settings.loadWallpaperBytes(narrow: narrow);
+    if (!mounted) return;
+    if (cached != null) {
+      setState(() {
+        _wallpaperBytes = cached;
+        _wallpaperUrl = settings.getWallpaperUrl(narrow: narrow);
+      });
+      unawaited(_prefetchNextWallpaper(narrow));
+      return;
+    }
+    // 首次运行（或缓存丢失）：现取一张并展示，随后它自然成为下次启动的壁纸。
+    await _fetchAndShowWallpaper(narrow);
+  }
+
+  Future<void> _fetchAndShowWallpaper(bool narrow) async {
     try {
       final url = await getIt<AlcyWallpaperService>().fetchImageUrl(
         narrow: narrow,
       );
+      final bytes = await _downloadWallpaper(url);
       if (!mounted) return;
-      setState(() => _wallpaperUrl = url);
+      setState(() {
+        _wallpaperUrl = url;
+        _wallpaperBytes = bytes;
+      });
+      await getIt<AppSettingsService>().saveWallpaper(
+        narrow: narrow,
+        url: url,
+        bytes: bytes,
+      );
     } catch (e) {
       appLogger.w('[SceneryCard] 操作失败', error: e);
       // 保留本地 fallback
+    }
+  }
+
+  /// 为下次启动准备新壁纸：只落盘，不替换当前展示的这张。
+  Future<void> _prefetchNextWallpaper(bool narrow) async {
+    try {
+      final url = await getIt<AlcyWallpaperService>().fetchImageUrl(
+        narrow: narrow,
+      );
+      final bytes = await _downloadWallpaper(url);
+      await getIt<AppSettingsService>().saveWallpaper(
+        narrow: narrow,
+        url: url,
+        bytes: bytes,
+      );
+    } catch (e) {
+      appLogger.w('[SceneryCard] 预取下次壁纸失败', error: e);
     }
   }
 
@@ -110,6 +155,9 @@ class DailySceneryCardState extends State<DailySceneryCard> {
   }
 
   Future<Uint8List> _currentImageBytes() async {
+    // 当前展示的壁纸已在内存里，保存时不必再下一次。
+    final cached = _wallpaperBytes;
+    if (cached != null && cached.isNotEmpty) return cached;
     final url = _wallpaperUrl?.trim();
     if (url != null && url.isNotEmpty) return _downloadWallpaper(url);
     final data = await rootBundle.load(_fallbackAsset);
@@ -165,20 +213,16 @@ class DailySceneryCardState extends State<DailySceneryCard> {
   }
 
   Widget _buildBackground() {
-    final url = _wallpaperUrl;
-    if (url != null && url.isNotEmpty) {
+    final bytes = _wallpaperBytes;
+    if (bytes != null && bytes.isNotEmpty) {
       // 限制解码分辨率，避免全分辨率壁纸占用内存。
       final dpr = MediaQuery.maybeOf(context)?.devicePixelRatio ?? 2;
       final cacheW = (MediaQuery.sizeOf(context).width * dpr).round();
-      return Image.network(
-        url,
+      return Image.memory(
+        bytes,
         fit: BoxFit.cover,
         gaplessPlayback: true,
         cacheWidth: cacheW,
-        loadingBuilder: (context, child, progress) {
-          if (progress == null) return child;
-          return _buildFallback();
-        },
         errorBuilder: (context, error, stackTrace) => _buildFallback(),
       );
     }
