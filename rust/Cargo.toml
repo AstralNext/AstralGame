@@ -63,3 +63,11 @@ windows = { version = "0.52.0", features = [
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
+
+# 发行版瘦身：Rust 库是 Release 目录里最大的文件（默认配置下 30 MB+，大半是
+# 符号表和未合并的泛型代码）。不做 panic=abort——flutter_rust_bridge 依赖
+# 捕获 panic 转成 Dart 异常，abort 会让进程直接退出。
+[profile.release]
+lto = true
+codegen-units = 1
+strip = "symbols"
