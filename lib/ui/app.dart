@@ -109,16 +109,14 @@ class _AstralGameAppState extends State<AstralGameApp>
         ],
         theme: theme,
         themeAnimationDuration: AppThemeAnimation.duration,
-        builder: (context, child) => JoinLinkBinder(
-          child: FloatingOverlayBinder(
-            child: HomeWidgetRefreshBinder(
-              child: ThemeWaterDropHost(
-                child: child ?? const SizedBox.shrink(),
-              ),
-            ),
+        builder: (context, child) => FloatingOverlayBinder(
+          child: HomeWidgetRefreshBinder(
+            child: ThemeWaterDropHost(child: child ?? const SizedBox.shrink()),
           ),
         ),
-        home: const Shell(),
+        // 必须挂在 Navigator 之下：进房流程会弹确认框/Toast，
+        // 而 MaterialApp.builder 的 context 在 Overlay 之上，Overlay.of 会抛异常。
+        home: const JoinLinkBinder(child: Shell()),
       );
     });
   }

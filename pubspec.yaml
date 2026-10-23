@@ -41,6 +41,8 @@ dependencies:
   connectivity_plus: ^7.1.1
   home_widget: ^0.7.0
   cached_network_image: ^3.4.1
+  file: ^7.0.1
+  flutter_cache_manager: ^3.4.5
   flutter_markdown: ^0.7.7+1
   ffi: ^2.1.0
   freezed_annotation: ^3.0.0
@@ -83,27 +85,6 @@ flutter:
   assets:
     - assets/logo.png
     - assets/icon.ico
+    # 只打包规则；游戏图标/封面走远程并缓存到本地，不占安装包体积。
     - assets/games/
-    - assets/games/ark/
-    - assets/games/baldurs_gate_3/
-    - assets/games/dont_starve_together/
-    - assets/games/factorio/
-    - assets/games/forged_alliance/
-    - assets/games/grand_theft_auto_v/
-    - assets/games/left_4_dead/
-    - assets/games/left_4_dead_2/
-    - assets/games/mindustry/
-    - assets/games/minecraft/
-    - assets/games/palworld/
-    - assets/games/payday_the_heist/
-    - assets/games/project_zomboid/
-    - assets/games/raft/
-    - assets/games/rust/
-    - assets/games/satisfactory/
-    - assets/games/seven_days_to_die/
-    - assets/games/stardew_valley/
-    - assets/games/sudden_strike_II/
-    - assets/games/terraria/
-    - assets/games/v_rising/
-    - assets/games/valheim/
     - assets/scenery/

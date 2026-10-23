@@ -1,11 +1,16 @@
+import 'dart:ffi';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:astral_game/data/models/bookmark.dart';
 import 'package:astral_game/data/models/game_catalog.dart';
+import 'package:astral_game/data/services/game_media_cache.dart';
 import 'package:astral_game/utils/logger.dart';
+import 'package:crypto/crypto.dart';
 import 'package:ffi/ffi.dart';
 import 'package:flutter/services.dart';
+import 'package:image/image.dart' as img;
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:win32/win32.dart';
 import 'package:win32_registry/win32_registry.dart';
@@ -13,7 +18,7 @@ import 'package:win32_registry/win32_registry.dart';
 /// Windows / Android 平台的桌面快捷方式服务。
 ///
 /// - Windows：用 win32 FFI 的 IShellLinkW + IPersistFile 创建真正的 .lnk。
-///   图标支持 PNG-in-ICO（Windows Vista+ 原生支持），纯 Dart 写 ICO 头。
+///   图标统一解码成 256×256 PNG 再包一层 ICO 头，兼容 PNG/JPEG 源图。
 /// - Android：用 ShortcutManager.requestPinShortcut()。
 class ShortcutService {
   const ShortcutService();
@@ -38,9 +43,9 @@ class ShortcutService {
       'gameColor': game?.color.toARGB32(),
     };
 
-    // Flutter 端先解析真正的图标 bytes（完整的 asset→network hybrid 兜底），
+    // Flutter 端先解析真正的图标 bytes（asset → network 兜底），
     // 直接传给 Android，避免 Kotlin 端自己处理 asset/network 路径问题。
-    final iconBytes = await _resolveAndroidIconBytes(game);
+    final iconBytes = await _resolveGameIconBytes(game);
     if (iconBytes != null) {
       args['iconBytes'] = iconBytes;
     }
@@ -71,52 +76,6 @@ class ShortcutService {
     }
   }
 
-  /// 拿到 Android 快捷方式需要的 PNG bytes。
-  /// 优先尝试 Flutter 打包的 asset → 失败再走远程 CDN。
-  Future<Uint8List?> _resolveAndroidIconBytes(GameInfo? game) async {
-    if (game == null) return null;
-    final ref = GameMediaRef.tryParse(game.resolvedIconAsset);
-    if (ref == null) return null;
-
-    // 1) asset 或 hybrid 本地路径
-    if (ref.kind == GameMediaKind.asset || ref.kind == GameMediaKind.hybrid) {
-      final assetPath = ref.path;
-      if (assetPath != null) {
-        try {
-          final bytes = await rootBundle.load(assetPath);
-          final list = bytes.buffer.asUint8List(
-            bytes.offsetInBytes,
-            bytes.lengthInBytes,
-          );
-          if (list.isNotEmpty) return list;
-        } catch (e) {
-          appLogger.t('shortcut android icon load asset fail: $e');
-        }
-      }
-    }
-
-    // 2) network 或 hybrid 的远程 URL
-    final url = ref.url;
-    if (url != null) {
-      try {
-        final client = HttpClient();
-        final request = await client.getUrl(Uri.parse(url));
-        final response = await request.close();
-        if (response.statusCode == 200) {
-          final sink = BytesBuilder();
-          await for (final chunk in response) {
-            sink.add(chunk);
-          }
-          final result = sink.toBytes();
-          if (result.isNotEmpty) return result;
-        }
-      } catch (e) {
-        appLogger.t('shortcut android icon download fail: $e');
-      }
-    }
-    return null;
-  }
-
   // ======================================================================
   // Windows —— 纯 Dart + win32 FFI
   // ======================================================================
@@ -131,21 +90,28 @@ class ShortcutService {
     }
 
     final exe = Platform.resolvedExecutable;
+    final exeDir = File(exe).parent.path;
     final url = 'astralgame://join?bookmark=${bookmark.id}';
-    final safeName = bookmark.displayName
-        .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')
-        .trim();
-    if (safeName.isEmpty) throw ShortcutException('快捷方式名字为空');
+    final safeName = _safeShortcutName(bookmark.displayName);
 
-    // 解析图标：游戏图标 → 转 ICO；没图标就用 exe 自带
+    // 解析图标：游戏图标 → 统一转成 256×256 的 ICO；没有图标就用 exe 自带。
     String? iconPath;
     final game = GameCatalog.byId(bookmark.payload.gameId);
     if (game != null) {
-      final pngPath = await _resolveGameIconFile(game);
-      if (pngPath != null) {
-        final tempDir = await getTemporaryDirectory();
-        iconPath = '${tempDir.path}\\astral_${game.id}.ico';
-        await _writeIcoFromPng(File(pngPath), File(iconPath));
+      final rawIcon = await _resolveGameIconBytes(game);
+      if (rawIcon != null) {
+        final icoBytes = _buildIcoBytes(rawIcon);
+        if (icoBytes != null && icoBytes.isNotEmpty) {
+          iconPath = await _writeShortcutIcon(gameId: game.id, bytes: icoBytes);
+          appLogger.i(
+            '[Shortcut] 图标已生成 ${game.id}: '
+            'raw=${rawIcon.length}B ico=${icoBytes.length}B $iconPath',
+          );
+        } else {
+          appLogger.w('[Shortcut] 图标解码失败，回退 exe 图标: ${game.id}');
+        }
+      } else {
+        appLogger.w('[Shortcut] 未取到游戏图标，回退 exe 图标: ${game.id}');
       }
     }
     final finalIcon = iconPath ?? exe;
@@ -155,6 +121,7 @@ class ShortcutService {
       lnkPath: lnkPath,
       target: exe,
       arguments: url,
+      workingDirectory: exeDir,
       iconPath: finalIcon,
       description: '加入 Astral Game 房间：${bookmark.displayName}',
     );
@@ -162,17 +129,48 @@ class ShortcutService {
     return true;
   }
 
+  /// 快捷方式文件名：去掉 Windows 非法字符、结尾的点/空格，避开保留设备名。
+  String _safeShortcutName(String raw) {
+    var name = raw.replaceAll(RegExp(r'[\\/:*?"<>|\x00-\x1F]'), '_').trim();
+    // Windows 不允许文件名以点或空格结尾（资源管理器会静默截断）。
+    name = name.replaceAll(RegExp(r'[. ]+$'), '');
+    if (name.isEmpty) name = 'Astral 房间';
+    const reserved = {
+      'CON', 'PRN', 'AUX', 'NUL', //
+      'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9',
+      'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9',
+    };
+    if (reserved.contains(name.toUpperCase())) name = '_$name';
+    // 控制总长度，避免桌面路径过长导致 IPersistFile 保存失败。
+    if (name.runes.length > 80) {
+      name = String.fromCharCodes(name.runes.take(80));
+    }
+    return name;
+  }
+
   /// 用 win32 COM 创建真正的 Windows 快捷方式（.lnk）。
   void _writeWindowsLnk({
     required String lnkPath,
     required String target,
     required String arguments,
+    required String workingDirectory,
     required String iconPath,
     required String description,
   }) {
+    // Dart 跑在独立的 UI 线程，进程启动时 runner 的 CoInitializeEx 不覆盖这里，
+    // 不初始化会直接 CoCreateInstance 失败（CO_E_NOTINITIALIZED / 0x800401F0）。
+    final coHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    final shouldUninitialize = coHr >= 0;
+    if (coHr < 0) {
+      appLogger.w(
+        '[Shortcut] CoInitializeEx 失败: HRESULT=0x${coHr.toRadixString(16)}',
+      );
+    }
+
     final lnkPathPtr = lnkPath.toNativeUtf16();
     final targetPtr = target.toNativeUtf16();
     final argsPtr = arguments.toNativeUtf16();
+    final workDirPtr = workingDirectory.toNativeUtf16();
     final iconPtr = iconPath.toNativeUtf16();
     final descPtr = description.toNativeUtf16();
 
@@ -180,6 +178,7 @@ class ShortcutService {
       final shellLink = ShellLink.createInstance();
       shellLink.setPath(targetPtr);
       shellLink.setArguments(argsPtr);
+      shellLink.setWorkingDirectory(workDirPtr);
       shellLink.setIconLocation(iconPtr, 0);
       shellLink.setDescription(descPtr);
 
@@ -201,8 +200,10 @@ class ShortcutService {
       calloc.free(lnkPathPtr);
       calloc.free(targetPtr);
       calloc.free(argsPtr);
+      calloc.free(workDirPtr);
       calloc.free(iconPtr);
       calloc.free(descPtr);
+      if (shouldUninitialize) CoUninitialize();
     }
   }
 
@@ -211,6 +212,10 @@ class ShortcutService {
   // ======================================================================
 
   String? _findWindowsDesktopDir() {
+    // 首选 Known Folder API：能正确处理 OneDrive 重定向、企业重定向和组策略。
+    final known = _desktopFromKnownFolder();
+    if (known != null) return known;
+
     try {
       const key =
           r'Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders';
@@ -255,99 +260,172 @@ class ShortcutService {
     return null;
   }
 
+  /// SHGetKnownFolderPath(FOLDERID_Desktop)：桌面被重定向时也能拿到真实路径。
+  String? _desktopFromKnownFolder() {
+    Pointer<GUID>? guid;
+    Pointer<Pointer<Utf16>>? outPath;
+    try {
+      guid = GUIDFromString(FOLDERID_Desktop);
+      outPath = calloc<Pointer<Utf16>>();
+      final hr = SHGetKnownFolderPath(guid, 0, 0, outPath);
+      if (hr < 0) return null;
+      final ptr = outPath.value;
+      if (ptr == nullptr) return null;
+      final path = ptr.toDartString();
+      return path.isEmpty ? null : path;
+    } catch (e) {
+      appLogger.w('[Shortcut] SHGetKnownFolderPath 失败: $e');
+      return null;
+    } finally {
+      if (outPath != null) {
+        final ptr = outPath.value;
+        if (ptr != nullptr) CoTaskMemFree(ptr.cast());
+        calloc.free(outPath);
+      }
+      if (guid != null) calloc.free(guid);
+    }
+  }
+
   // ======================================================================
-  // 图标下载 + PNG → ICO（纯 Dart）
+  // 图标下载 + 图片 → ICO
   // ======================================================================
 
-  Future<String?> _resolveGameIconFile(GameInfo game) async {
+  /// 取游戏图标的原始字节：本地 asset 优先（hybrid 也一样），失败再走远程。
+  Future<Uint8List?> _resolveGameIconBytes(GameInfo? game) async {
+    if (game == null) return null;
     final ref = GameMediaRef.tryParse(game.resolvedIconAsset);
     if (ref == null) return null;
-    final tempDir = await getTemporaryDirectory();
-    final iconTarget = File('${tempDir.path}\\astral_raw_${game.id}.png');
 
-    if (ref.kind == GameMediaKind.asset) {
+    final assetPath = ref.path;
+    if (assetPath != null && assetPath.isNotEmpty) {
       try {
-        final bytes = await rootBundle.load(ref.path!);
-        await iconTarget.writeAsBytes(
-          bytes.buffer.asUint8List(bytes.offsetInBytes, bytes.lengthInBytes),
+        final bytes = await rootBundle.load(assetPath);
+        final list = bytes.buffer.asUint8List(
+          bytes.offsetInBytes,
+          bytes.lengthInBytes,
         );
-        return iconTarget.path;
+        if (list.isNotEmpty) return list;
       } catch (e) {
-        appLogger.w('[Shortcut] 加载 asset 图标失败: $e');
+        appLogger.t('[Shortcut] 加载 asset 图标失败: $e');
       }
-      return null;
     }
 
     final url = ref.url;
-    if (url == null) return null;
+    if (url == null || url.isEmpty) return null;
     try {
-      final client = HttpClient();
-      final request = await client.getUrl(Uri.parse(url));
-      final response = await request.close();
-      if (response.statusCode == 200) {
-        final sink = iconTarget.openWrite();
-        await response.pipe(sink);
-        await sink.flush();
-        await sink.close();
-        return iconTarget.path;
-      }
+      // 走统一的游戏图片缓存：已下载过就直接读本地文件，不再重复请求。
+      final file = await GameMediaCache.manager.getSingleFile(url);
+      final bytes = await file.readAsBytes();
+      return bytes.isEmpty ? null : bytes;
     } catch (e) {
       appLogger.w('[Shortcut] 下载游戏图标失败: $e');
+      return null;
     }
-    return null;
   }
 
-  /// 把 PNG 文件包装成 ICO（Windows Vista+ 原生支持 PNG-in-ICO）。
+  /// 图标写到支持目录（不能放 %TEMP%：清理后会变成空白图标）。
+  /// 文件名带内容哈希，图标更新后路径随之变化，绕开资源管理器的图标缓存。
+  Future<String> _writeShortcutIcon({
+    required String gameId,
+    required Uint8List bytes,
+  }) async {
+    final support = await getApplicationSupportDirectory();
+    final dir = Directory(p.join(support.path, 'shortcut_icons'));
+    await dir.create(recursive: true);
+    final stamp = sha256.convert(bytes).toString().substring(0, 8);
+    final file = File(p.join(dir.path, 'astral_${gameId}_$stamp.ico'));
+    if (!file.existsSync() || file.lengthSync() != bytes.length) {
+      await file.writeAsBytes(bytes, flush: true);
+    }
+    return file.path;
+  }
+
+  /// 把任意格式（PNG/JPEG/WebP…）的图片转成 256×256 的经典 BMP 图标。
   ///
-  /// ICO 格式：
-  ///   6 字节头: reserved(0) + type(1) + count
-  ///   每条 16 字节目录项: w + h + colors + reserved + planes + bpp + size + offset
-  ///   然后是 PNG 原始字节
-  Future<void> _writeIcoFromPng(File png, File ico) async {
-    final pngBytes = await png.readAsBytes();
-    if (pngBytes.length < 24) return;
+  /// 不用 PNG-in-ICO：GDI 和部分外壳实现解析不了，快捷方式会显示空白。
+  /// 结构：ICONDIR(6) + ICONDIRENTRY(16) + BITMAPINFOHEADER(40)
+  ///       + 32bpp BGRA 位图（自下而上）+ 1bpp AND 掩码（全 0）。
+  Uint8List? _buildIcoBytes(Uint8List raw) {
+    try {
+      final decoded = img.decodeImage(raw);
+      if (decoded == null) return null;
+      final side = decoded.width < decoded.height
+          ? decoded.width
+          : decoded.height;
+      final cropped = img.copyCrop(
+        decoded,
+        x: (decoded.width - side) ~/ 2,
+        y: (decoded.height - side) ~/ 2,
+        width: side,
+        height: side,
+      );
+      final resized = img.copyResize(
+        cropped,
+        width: 256,
+        height: 256,
+        interpolation: img.Interpolation.cubic,
+      );
 
-    // 从 PNG IHDR chunk 读宽高（都是 4 字节 big-endian）：
-    //   0-7:  PNG签名
-    //   8-11: IHDR chunk length
-    //   12-15: IHDR ASCII tag
-    //   16-19: width (4 bytes, BE)
-    //   20-23: height (4 bytes, BE)
-    final bd = pngBytes.buffer.asByteData(
-      16,
-      8, // width 4 bytes + height 4 bytes = 8 bytes
-    );
-    // PNG 尺寸字段为大端；显式传 Endian.big 防止误改（默认值相同，lint 报冗余）。
-    final w =
-        // ignore: avoid_redundant_argument_values
-        bd.getUint32(0, Endian.big);
-    final h =
-        // ignore: avoid_redundant_argument_values
-        bd.getUint32(4, Endian.big);
+      const w = 256;
+      const h = 256;
+      const xorSize = w * h * 4;
+      const andStride = ((w + 31) ~/ 32) * 4; // 每行按 32 位对齐
+      const andSize = andStride * h;
+      const dibSize = 40 + xorSize + andSize;
 
-    // ICO header: 6 字节
-    final header = ByteData(6);
-    header.setUint16(0, 0); // reserved
-    header.setUint16(2, 1); // type = 1 (icon)
-    header.setUint16(4, 1); // count = 1
+      final out = Uint8List(22 + dibSize);
+      final bd = ByteData.sublistView(out);
+      // ICO / BMP 头都是小端；ByteData 默认大端，必须显式指定。
+      const le = Endian.little;
 
-    // ICO directory entry: 16 字节
-    final dir = ByteData(16);
-    dir.setUint8(0, w > 255 ? 0 : w);
-    dir.setUint8(1, h > 255 ? 0 : h);
-    dir.setUint8(2, 0); // color count
-    dir.setUint8(3, 0); // reserved
-    dir.setUint16(4, 1); // color planes
-    dir.setUint16(6, 32); // bits per pixel
-    dir.setUint32(8, pngBytes.length); // size of image data
-    dir.setUint32(12, 22); // offset = 6 + 16 = 22
+      // ICONDIR
+      bd.setUint16(0, 0, le); // reserved
+      bd.setUint16(2, 1, le); // type = icon
+      bd.setUint16(4, 1, le); // count
+      // ICONDIRENTRY
+      bd.setUint8(6, 0); // 0 表示 256
+      bd.setUint8(7, 0);
+      bd.setUint8(8, 0); // color count
+      bd.setUint8(9, 0); // reserved
+      bd.setUint16(10, 1, le); // color planes
+      bd.setUint16(12, 32, le); // bits per pixel
+      bd.setUint32(14, dibSize, le);
+      bd.setUint32(18, 22, le); // image offset
 
-    final output = <int>[
-      ...header.buffer.asUint8List(),
-      ...dir.buffer.asUint8List(),
-      ...pngBytes,
-    ];
-    await ico.writeAsBytes(output);
+      // BITMAPINFOHEADER
+      var o = 22;
+      bd.setUint32(o, 40, le);
+      o += 4;
+      bd.setInt32(o, w, le);
+      o += 4;
+      bd.setInt32(o, h * 2, le); // XOR + AND 两段高度
+      o += 4;
+      bd.setUint16(o, 1, le); // planes
+      o += 2;
+      bd.setUint16(o, 32, le); // bpp
+      o += 2;
+      bd.setUint32(o, 0, le); // BI_RGB
+      o += 4;
+      bd.setUint32(o, xorSize, le);
+      o += 4;
+      o += 16; // x/y ppm、clrUsed、clrImportant
+
+      // XOR 位图：BGRA，自下而上
+      for (var y = h - 1; y >= 0; y--) {
+        for (var x = 0; x < w; x++) {
+          final px = resized.getPixel(x, y);
+          out[o++] = px.b.toInt();
+          out[o++] = px.g.toInt();
+          out[o++] = px.r.toInt();
+          out[o++] = px.a.toInt();
+        }
+      }
+      // AND 掩码保持全 0（不透明），Uint8List 默认即 0
+      return out;
+    } catch (e) {
+      appLogger.w('[Shortcut] 生成 ICO 失败: $e');
+      return null;
+    }
   }
 }
 

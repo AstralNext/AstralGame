@@ -175,7 +175,7 @@ class _IdleHome extends StatelessWidget {
   }
 }
 
-/// 首页「⭐ 我的收藏」预览：显示前 3 个 + 跳转到 BookmarksPage 入口。
+/// 首页「我的收藏」预览：显示前 3 个 + 跳转到 BookmarksPage 入口。
 class _BookmarkPreviewCard extends StatelessWidget {
   const _BookmarkPreviewCard({
     required this.bookmarks,

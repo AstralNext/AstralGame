@@ -1,4 +1,5 @@
 import 'package:astral_game/data/models/game_assist_rules.dart';
+import 'package:astral_game/data/services/game_media_cache.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
@@ -269,6 +270,11 @@ class GameMediaImage extends StatelessWidget {
       width: width,
       height: height,
       fit: fit,
+      // 游戏图片不打包进应用：首次下载后存到应用支持目录，之后直接复用。
+      cacheManager: GameMediaCache.manager,
+      // 游戏图标/封面追求"立刻出现"：默认的 500ms 淡入会让缓存里已有的图
+      // 也慢慢浮现，和本地 asset 的即时显示不一致。
+      fadeInDuration: Duration.zero,
       placeholder: placeholder != null
           ? (context, _) => placeholder!(context)
           : null,

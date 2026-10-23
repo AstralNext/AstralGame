@@ -16,7 +16,7 @@ Future<void> showShareRoomDialog(
         children: [
           const Expanded(child: Text('分享房间')),
           IconButton(
-            tooltip: '⭐ 收藏当前房间',
+            tooltip: '收藏当前房间',
             onPressed: () {
               Navigator.pop(dialogContext);
               onBookmark();

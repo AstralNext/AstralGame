@@ -201,7 +201,7 @@ class ConnectionService {
   }
 
   /// 解析邀请输入（短码/离线）并返回完整 payload，**不真正加入房间**。
-  /// 用于「⭐ 解析并收藏」等场景。
+  /// 用于「解析并收藏」等场景。
   Future<({RoomInvitePayload payload, String? shortCode, String? offlineToken})>
   resolveInvitePayload(String raw) async {
     final token = requireJoinInviteToken(raw);

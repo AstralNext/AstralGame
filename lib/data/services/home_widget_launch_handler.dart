@@ -7,7 +7,7 @@ import 'package:home_widget/home_widget.dart';
 
 /// 处理从小部件启动 / 点击带来的 URI，切换 Tab。
 ///
-/// 收藏（Rooms）路径：跳到 Dashboard 首页，用户在首页收藏预览卡/⭐入口
+/// 收藏（Rooms）路径：跳到 Dashboard 首页，用户在首页收藏预览卡入口
 /// 进入「我的收藏」页查看详情，不再"自动选中某个收藏"（避免误操作触发连接）。
 class HomeWidgetLaunchHandler {
   HomeWidgetLaunchHandler({

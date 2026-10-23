@@ -76,6 +76,7 @@ class DailySceneryCardState extends State<DailySceneryCard> {
     }
   }
 
+  /// 每次启动都重新取一张随机壁纸，不做跨启动缓存。
   Future<void> _loadWallpaper() async {
     final narrow = MediaQuery.sizeOf(context).width < AppBreakpoints.narrow;
     try {
@@ -90,6 +91,16 @@ class DailySceneryCardState extends State<DailySceneryCard> {
     }
   }
 
+  Future<Uint8List> _downloadWallpaper(String url) async {
+    final res = await http
+        .get(Uri.parse(url))
+        .timeout(kWallpaperDownloadTimeout);
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw StateError('图片下载失败：${res.statusCode}');
+    }
+    return res.bodyBytes;
+  }
+
   String _imageExt() {
     final url = (_wallpaperUrl ?? '').toLowerCase();
     if (url.contains('.png')) return '.png';
@@ -100,15 +111,7 @@ class DailySceneryCardState extends State<DailySceneryCard> {
 
   Future<Uint8List> _currentImageBytes() async {
     final url = _wallpaperUrl?.trim();
-    if (url != null && url.isNotEmpty) {
-      final res = await http
-          .get(Uri.parse(url))
-          .timeout(kWallpaperDownloadTimeout);
-      if (res.statusCode < 200 || res.statusCode >= 300) {
-        throw StateError('图片下载失败：${res.statusCode}');
-      }
-      return res.bodyBytes;
-    }
+    if (url != null && url.isNotEmpty) return _downloadWallpaper(url);
     final data = await rootBundle.load(_fallbackAsset);
     return data.buffer.asUint8List();
   }
@@ -174,30 +177,15 @@ class DailySceneryCardState extends State<DailySceneryCard> {
         cacheWidth: cacheW,
         loadingBuilder: (context, child, progress) {
           if (progress == null) return child;
-          return Image.asset(_fallbackAsset, fit: BoxFit.cover);
+          return _buildFallback();
         },
-        errorBuilder: (context, error, stackTrace) {
-          return Image.asset(
-            _fallbackAsset,
-            fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) {
-              return DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      context.astralPalette.accent.withValues(alpha: 0.55),
-                      context.astralPalette.canvas,
-                    ],
-                  ),
-                ),
-              );
-            },
-          );
-        },
+        errorBuilder: (context, error, stackTrace) => _buildFallback(),
       );
     }
+    return _buildFallback();
+  }
+
+  Widget _buildFallback() {
     return Image.asset(
       _fallbackAsset,
       fit: BoxFit.cover,

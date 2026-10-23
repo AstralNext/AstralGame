@@ -9,6 +9,7 @@ import 'package:astral_game/data/state/room_state.dart';
 import 'package:astral_game/di.dart';
 import 'package:astral_game/ui/widgets/app_toast.dart';
 import 'package:astral_game/utils/error_text.dart';
+import 'package:astral_game/utils/logger.dart';
 import 'package:astral_game/utils/room_share.dart';
 import 'package:flutter/material.dart';
 import 'package:signals/signals_flutter.dart';
@@ -139,7 +140,13 @@ class _JoinLinkBinderState extends State<JoinLinkBinder> {
   void _toast(String msg) {
     final ctx = context;
     if (!ctx.mounted) return;
-    showAppToast(ctx, msg);
+    // Toast 只是提示，任何 UI 层异常（例如 context 不在 Overlay 之下）
+    // 都不能中断真正的进房流程。
+    try {
+      showAppToast(ctx, msg);
+    } catch (e) {
+      appLogger.w('[JoinLink] Toast 失败: $e');
+    }
   }
 
   @override

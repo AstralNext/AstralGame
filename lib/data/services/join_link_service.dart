@@ -38,6 +38,9 @@ class JoinLinkService {
       appLogger.d('[JoinLink] 读取启动链接失败: $e');
     } finally {
       if (!_initialLinkReady.isCompleted) _initialLinkReady.complete();
+      // 首次链接已经交给 pendingToken，之后不再需要按原文去重；
+      // 否则在应用运行中重复点同一个快捷方式会被当作重复链接丢弃。
+      _lastRaw = null;
     }
     _uriSub = _appLinks.uriLinkStream.listen(
       _considerUri,

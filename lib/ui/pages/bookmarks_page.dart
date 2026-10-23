@@ -119,7 +119,7 @@ class _BookmarksPageState extends State<BookmarksPage> {
                       icon: Icons.bookmark_add_outlined,
                       iconSize: 72,
                       title: '还没有收藏的房间',
-                      subtitle: '加入或创建房间后，点 ⭐ 即可保存',
+                      subtitle: '加入或创建房间后，点击收藏即可保存',
                       actionLabel: '去联机页',
                       onAction: _shellNav.openDashboardTab,
                     )
