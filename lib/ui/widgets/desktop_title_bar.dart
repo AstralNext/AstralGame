@@ -5,6 +5,9 @@ import 'package:window_manager/window_manager.dart';
 
 /// 桌面窗口标题栏（拖拽 + 三窗口按钮）。
 ///
+/// 底色透明：桌面壳整窗统一用页面底色，顶栏不再单独铺一条画布色，
+/// 否则会在侧栏胶囊旁边露出一块颜色不同的接缝。
+///
 /// 由父级 Shell 维护 [isMaximized] 状态，通过 WindowListener 同步
 /// 最大化/还原事件，避免本地状态与系统真实状态漂移（双击标题栏、
 /// 系统菜单最大化、拖拽到顶部边缘都不会触发按钮自身 setState）。
@@ -29,11 +32,12 @@ class DesktopTitleBar extends StatelessWidget {
     final palette = context.astralPalette;
 
     return GestureDetector(
+      // 顶栏不再铺底色，必须显式吃下整个区域，否则空白处拖不动窗口。
+      behavior: HitTestBehavior.opaque,
       onPanStart: (_) => windowManager.startDragging(),
       child: SizedBox(
         height: 44,
-        child: Container(
-          color: palette.canvas,
+        child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Row(
             children: [

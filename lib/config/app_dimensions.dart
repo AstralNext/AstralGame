@@ -16,6 +16,9 @@ abstract final class AppDimensions {
   /// 页面底部留白。
   static const pagePaddingBottom = 24.0;
 
+  /// 桌面侧栏总宽（悬浮胶囊 + 左右留白），与 [LeftNav] 保持一致。
+  static const sideNavWidth = 92.0;
+
   /// 悬浮胶囊底栏的高度（与 BottomNav 保持一致）。
   static const navBarHeight = 64.0;
 

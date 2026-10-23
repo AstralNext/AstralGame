@@ -441,17 +441,12 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
         AppDimensions.navBarHeight;
     final nodes = getIt<NodeManagementService>();
 
-    // 手机端去掉模拟顶栏，内容通栏铺到状态栏下方（Apple 页面规范）。
-    final contentRadius = isCompact
-        ? BorderRadius.zero
-        : const BorderRadius.only(
-            topLeft: Radius.circular(AppDimensions.radiusMd),
-          );
-
     return PopScope(
       canPop: false,
       child: Scaffold(
-        backgroundColor: palette.canvas,
+        // 桌面整窗统一用页面底色：侧栏胶囊与内容落在同一块表面上，
+        // 玻璃的高光/投影才读得出来，也不会再有画布色分栏的接缝。
+        backgroundColor: isCompact ? palette.canvas : palette.background,
         // 悬浮胶囊：内容一直延伸到底部、从胶囊下方透出，不再有“内容区底边”。
         extendBody: isCompact,
         body: Stack(
@@ -459,63 +454,66 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
             Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // 只占位，真正的侧栏画在 Stack 上层：内容区的底色是后画的，
+                // 侧栏留在这里会被它盖掉胶囊溢出的投影，看起来像被裁了一刀。
                 if (!isCompact)
-                  ColoredBox(
-                    color: palette.canvas,
-                    child: Watch((context) {
-                      return LeftNav(
-                        items: _navigationItems,
-                        selectedIndex: _selectedIndex,
-                        onSelected: _handleDestinationSelected,
-                        avatar: nodes.currentUserAvatar.value,
-                        username: nodes.currentUsername.value,
-                        onAvatarTap: () => showEditProfileDialog(context),
-                      );
-                    }),
-                  ),
+                  const SizedBox(width: AppDimensions.sideNavWidth),
                 Expanded(
-                  child: ColoredBox(
-                    color: palette.canvas,
-                    child: Column(
-                      children: [
-                        if (_isDesktop)
-                          DesktopTitleBar(
-                            onClose: () => unawaited(_handleCloseRequested()),
-                            isMaximized: _isMaximized,
-                            onToggleMaximize: _toggleMaximize,
+                  child: Column(
+                    children: [
+                      if (_isDesktop)
+                        DesktopTitleBar(
+                          onClose: () => unawaited(_handleCloseRequested()),
+                          isMaximized: _isMaximized,
+                          onToggleMaximize: _toggleMaximize,
+                          // 收藏 Tab：顶栏中央放搜索胶囊
+                          center: _selectedIndex == _bookmarksTabIndex
+                              ? const BookmarkSearchField()
+                              : null,
+                        )
+                      // 平板保留模拟顶栏；手机按 Apple 页面规范不显示，标题与操作交给页内。
+                      else if (!isCompact)
+                        Watch((context) {
+                          return MobileChromeBar(
+                            avatar: nodes.currentUserAvatar.value,
+                            username: nodes.currentUsername.value,
+                            onAvatarTap: () => showEditProfileDialog(context),
                             // 收藏 Tab：顶栏中央放搜索胶囊
                             center: _selectedIndex == _bookmarksTabIndex
                                 ? const BookmarkSearchField()
                                 : null,
-                          )
-                        // 平板保留模拟顶栏；手机按 Apple 页面规范不显示，标题与操作交给页内。
-                        else if (!isCompact)
-                          Watch((context) {
-                            return MobileChromeBar(
-                              avatar: nodes.currentUserAvatar.value,
-                              username: nodes.currentUsername.value,
-                              onAvatarTap: () => showEditProfileDialog(context),
-                              // 收藏 Tab：顶栏中央放搜索胶囊
-                              center: _selectedIndex == _bookmarksTabIndex
-                                  ? const BookmarkSearchField()
-                                  : null,
-                            );
-                          }),
-                        Expanded(
-                          child: ClipRRect(
-                            borderRadius: contentRadius,
-                            child: ColoredBox(
-                              color: palette.background,
-                              child: _buildTabBody(isCompact),
-                            ),
-                          ),
+                          );
+                        }),
+                      Expanded(
+                        child: ColoredBox(
+                          color: palette.background,
+                          child: _buildTabBody(isCompact),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
+            // 侧栏浮在内容之上：胶囊的投影可以越过内容区左边界，
+            // 与底栏一样是"一块玻璃浮在页面表面"，而不是被内容底色切断。
+            if (!isCompact)
+              PositionedDirectional(
+                start: 0,
+                top: 0,
+                bottom: 0,
+                width: AppDimensions.sideNavWidth,
+                child: Watch((context) {
+                  return LeftNav(
+                    items: _navigationItems,
+                    selectedIndex: _selectedIndex,
+                    onSelected: _handleDestinationSelected,
+                    avatar: nodes.currentUserAvatar.value,
+                    username: nodes.currentUsername.value,
+                    onAvatarTap: () => showEditProfileDialog(context),
+                  );
+                }),
+              ),
             // 搜索胶囊单独浮在 body 里：键盘弹起时 Scaffold 会把 body 压到键盘顶部，
             // 贴住 body 底部就等于跟着键盘上移；胶囊底栏留在原位不动（被键盘遮住）。
             if (searchOpen)
