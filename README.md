@@ -1,43 +1,66 @@
 # Astral Game
 
-Flutter 游戏联机客户端（Windows / Linux / Android）。
+Astral Game 是一款面向玩家的跨平台游戏联机工具。创建房间并邀请好友，即可像在同一个局域网内一样一起游玩，无需繁琐的网络设置。
 
-## 构建
+支持 Windows、Linux 与 Android。
+
+## 主要功能
+
+- **快速组网**：创建房间、邀请好友，几步之内开始游戏。
+- **跨平台互通**：不同系统的玩家可以在同一房间内一起游玩。
+- **游戏适配**：针对常见局域网联机游戏做了适配，减少手动配置。
+- **房间分享**：通过分享码或邀请链接，好友可一键加入。
+- **游戏库**：查看游戏封面与信息，收藏常玩的游戏。
+- **网络状态**：实时查看延迟与连接质量，并支持测速。
+- **界面主题**：提供多种主题，可按喜好自由切换。
+- **版本更新**：新版本发布后可直接在客户端内完成更新。
+
+## 下载
+
+请前往 [Releases](https://github.com/AstralNext/AstralGame/releases) 页面下载最新版本。
+
+| 平台 | 下载文件 | 说明 |
+| --- | --- | --- |
+| Windows | `astral-game-<版本>-windows-x64-setup.exe` | 安装版，推荐使用 |
+| Windows | `astral-game-<版本>-windows-x64.zip` | 免安装版，解压即用 |
+| Linux | `astral-game-<版本>-linux-x64.tar.gz` | 通用版本 |
+| Arch Linux | `astral-game-bin-<版本>-1-x86_64.pkg.tar.zst` | Arch 软件包 |
+| Android | `astral-game-<版本>-android-arm64.apk` | 安装包 |
+
+## 安装与启动
+
+### Windows
+
+下载安装包后双击，按提示完成安装即可。免安装版解压到任意目录后运行主程序。
+
+### Linux
+
+Arch 用户可直接安装 Release 中的软件包（将 `<版本>` 替换为实际版本号）：
 
 ```bash
-flutter pub get
-flutter run -d windows
-```
-
-Rust 核心已用 flutter_rust_bridge 内化到本仓：
-- `rust/`：Rust crate（`rust_lib_astral_game`）
-- `rust_builder/`：本地构建插件（cargokit）
-- `lib/src/rust/`：FRB 自动生成的绑定（业务代码直接 import 这些生成文件）
-
-改动 Rust 后重新生成绑定：`flutter_rust_bridge_codegen generate`。
-
-CI：`.github/workflows/build.yml`（含 Windows 安装包）。
-
-## Linux 安装
-
-Arch 用户最省事的方式：Release 里会附带一个 Arch 包，一条命令装（pacman 原生支持 URL，yay 也能 `yay -U <url>`）：
-
-```bash
-# 把 <版本> 换成 Release 里的实际版本号，例如 1.5.1
 sudo pacman -U https://github.com/AstralNext/AstralGame/releases/latest/download/astral-game-bin-<版本>-1-x86_64.pkg.tar.zst
 ```
 
-包会把程序装到 `/opt/astral-game`，并自动补上建虚拟网卡所需的 `cap_net_admin` / `cap_net_raw`；
-打包与系统集成的细节见 [packaging/aur](packaging/aur)。
+其他发行版下载 `tar.gz` 压缩包，解压后直接运行。首次启动时客户端会提示授予网络权限，按提示完成操作即可正常使用。
 
-其它发行版 / 不想装包：下载 Release 里的 `astral-game-<版本>-linux-x64.tar.gz` 解压直接运行，
-首次启动会提示一次「立即授权」来补网络权限。
+### Android
 
-## 游戏规则 / 封面
+下载 APK 安装，首次启动时按提示授予必要权限。
 
-规则 JSON 写法见 [docs/gamerules.md](docs/gamerules.md)。
+## 快速开始
 
-运行时先读本地 `assets/games/rules.json`，再读旁边的 `gamerules/`（仅本机测试，不入库；有 JSON 则不拉线上），否则拉 `https://astral.fan/gamerules.json`。
+1. 打开客户端，完善昵称与头像等个人信息。
+2. 创建房间，并选择本次要游玩的游戏。
+3. 将邀请链接或分享码发送给好友。
+4. 好友加入房间后，启动游戏即可开始联机。
 
-可选：用 `tool/fetch_steamgriddb_covers.dart` 拉封面后上传到 CDN，并在线上 JSON 里写网络路径。
+## 反馈与支持
 
+- 使用中遇到问题或有功能建议，欢迎通过 [Issues](https://github.com/AstralNext/AstralGame/issues) 反馈。
+- 如需适配新的游戏，可选择「游戏适配」模板提交申请。
+
+更多信息请访问官方网站：[astral.fan](https://astral.fan)
+
+## 许可证
+
+本项目基于 [GNU General Public License v3.0](LICENSE) 发布。
