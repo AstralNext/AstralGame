@@ -61,6 +61,14 @@ sudo pacman -U https://github.com/AstralNext/AstralGame/releases/latest/download
 
 更多信息请访问官方网站：[astral.fan](https://astral.fan)
 
+## 开源致谢
+
+本项目的联机核心基于 [EasyTier](https://github.com/EasyTier/EasyTier) 构建。EasyTier 采用 LGPL-3.0 许可证发布，本项目使用其修改分支 `main-astral`（[ldoubil/EasyTier](https://github.com/ldoubil/EasyTier/tree/main-astral)），相关修改同样遵循 LGPL-3.0。
+
+其他第三方组件的版权与许可信息见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。
+
 ## 许可证
 
 本项目基于 [GNU General Public License v3.0](LICENSE) 发布。
+
+依据 GPL-3.0 第 7 条，本项目附加以下条款：任何修改版本或衍生作品在分发时，必须在显著位置保留原项目名称「Astral Game」及项目地址 <https://github.com/AstralNext/AstralGame>，不得移除、隐藏或替换；修改版本还应以合理方式标明其与原版的区别。完整说明见 [ADDITIONAL-TERMS.md](ADDITIONAL-TERMS.md)。
