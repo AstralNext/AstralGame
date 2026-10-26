@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:astral_game/data/services/app_settings_service.dart';
 import 'package:astral_game/data/services/connection_service.dart';
 import 'package:astral_game/data/services/connectivity_status_service.dart';
+import 'package:astral_game/data/services/easytier_core_event_bus.dart';
 import 'package:astral_game/data/services/isp_info_service.dart';
 import 'package:astral_game/data/services/firewall_service.dart';
 import 'package:astral_game/data/services/hitokoto_service.dart';
@@ -213,6 +214,10 @@ Future<void> setupDI() async {
   getIt<VpnState>().setCustomRoutes(
     getIt<AppSettingsService>().getCustomVpnRoutes(),
   );
+  getIt.registerLazySingleton<EasyTierCoreEventBus>(
+    EasyTierCoreEventBus.new,
+  );
+  _registerDispose<EasyTierCoreEventBus>((s) => s.dispose(), async: true);
 
   getIt.registerLazySingleton<ShareCodeService>(() => ShareCodeService());
   _registerDispose<ShareCodeService>((s) => s.close());
@@ -324,6 +329,7 @@ Future<void> setupDI() async {
       getIt<OpenGamesService>(),
       getIt<PeerRpcClient>(),
       getIt<PeerRpcRouter>(),
+      getIt<EasyTierCoreEventBus>(),
     ),
   );
   _registerDispose<ConnectionService>((s) => s.disconnect(), async: true);
@@ -356,6 +362,10 @@ void _initEasyTierCoreLogs() {
     final message = event.message.trim();
     if (message.isEmpty) return;
     appLogger.i('[EasyTier] $message');
+    // 同一份事件流再交给总线，供连接健康检查（TUN / 服务器连通）使用。
+    if (getIt.isRegistered<EasyTierCoreEventBus>()) {
+      getIt<EasyTierCoreEventBus>().add(event);
+    }
   }, onError: (Object e) => appLogger.w('[EasyTier] 内核日志流异常: $e'));
   _disposeCallbacks.add(() {
     unawaited(subscription.cancel());

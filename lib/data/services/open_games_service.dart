@@ -69,7 +69,7 @@ class OpenGamesService {
     required bool isHost,
   }) async {
     await stop();
-    await _rules.ensureLoaded();
+    await _rules.ensureLocalLoaded();
     final game = await _rules.gameRules(gameId);
     final cfg = game?.lanGameDiscoverFor(GameAssistRulesService.platformKey);
     if (cfg == null || cfg.entries.isEmpty) {

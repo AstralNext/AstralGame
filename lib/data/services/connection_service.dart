@@ -6,6 +6,7 @@ import 'package:astral_game/data/models/active_room_session.dart';
 import 'package:astral_game/data/models/game_assist_rules.dart';
 import 'package:astral_game/data/models/server_mod.dart';
 import 'package:astral_game/data/services/app_settings_service.dart';
+import 'package:astral_game/data/services/easytier_core_event_bus.dart';
 import 'package:astral_game/data/services/game_assist_rules_service.dart';
 import 'package:astral_game/data/services/game_inject_service.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
@@ -40,6 +41,7 @@ class ConnectionService {
     this._openGames,
     this._peerRpc,
     this._peerRpcRouter,
+    this._coreEvents,
   );
 
   final P2PConfigService _p2pConfig;
@@ -54,6 +56,23 @@ class ConnectionService {
   final OpenGamesService _openGames;
   final PeerRpcClient _peerRpc;
   final PeerRpcRouter _peerRpcRouter;
+  final EasyTierCoreEventBus _coreEvents;
+
+  /// 桌面端虚拟网卡（Wintun / Linux tun）创建超时。
+  ///
+  /// 权限不足、驱动异常时 EasyTier 会卡在建网卡这一步，用户只看到「连接中」
+  /// 没有任何提示，因此超过这个时间就判定失败并给出可操作的原因。
+  static const Duration desktopTunTimeout = Duration(seconds: 30);
+
+  /// 全平台：实例启动后等待与服务器建立连接的时间。
+  static const Duration serverLinkTimeout = Duration(seconds: 20);
+
+  /// 健康检查轮询间隔。
+  static const Duration _healthCheckInterval = Duration(milliseconds: 200);
+
+  static const String _desktopTunFailureMessage =
+      '虚拟网卡（TUN）创建失败，无法建立联机网络。请检查网络权限后重试：'
+      'Windows 请以管理员身份运行，Linux 请确认已授予网络能力。';
 
   bool _isConnecting = false;
   bool get isConnecting => _isConnecting;
@@ -391,6 +410,9 @@ class ConnectionService {
       return false;
     }
     _isConnecting = true;
+    final connectStartedAt = DateTime.now();
+    // 健康检查的后台撤销标记：TUN/VPN 失败提前抛出时，让并行的服务器连通检查立刻退出。
+    var checksAborted = false;
     String? createdInstanceId;
     try {
       if (_nodeManagement.isRunning) {
@@ -480,6 +502,10 @@ class ConnectionService {
         appLogger.e('[ConnectionService] 实例启动异常 id=$createdInstanceId');
         await closeInstance(instanceId: createdInstanceId);
         createdInstanceId = null;
+        // 桌面端启动失败绝大多数是虚拟网卡没建起来（权限 / 驱动）。
+        if (RuntimePlatform.isDesktop) {
+          throw const ConnectionFailureException(_desktopTunFailureMessage);
+        }
         return false;
       }
 
@@ -493,17 +519,52 @@ class ConnectionService {
       _nodeManagement.setRunning(createdInstanceId);
       _roomState.setConnected(true);
       _armGuestPresenceWatch();
+
+      // 全平台：实例起来了但连不上任何服务器时，房间等于没有网络。
+      // 只在真的配置了服务器时检查，避免把「无服务器」误判成连接失败。
+      // 该检查与虚拟网卡 / Android VPN 就绪互不依赖，两件事并行等，
+      // 否则会把「建网卡」和「连服务器」两段耗时直接相加。
+      final peers = _p2pConfig.resolvePeers(peersOverride: peersOverride);
+      final serverLinkCheck = peers.isEmpty
+          ? null
+          : _waitServerLink(
+              createdInstanceId,
+              isAborted: () => checksAborted || !_isLinkActive(epoch),
+            );
+
+      // 桌面端：实例「运行」不等于虚拟网卡可用，这里额外等一个明确的就绪信号，
+      // 超时即判定 TUN 创建失败（常见于缺少管理员权限 / CAP_NET_ADMIN）。
+      if (RuntimePlatform.isDesktop) {
+        final tun = await _waitDesktopTun(
+          createdInstanceId,
+          isAborted: () => !_isLinkActive(epoch),
+        );
+        if (!_isLinkActive(epoch)) {
+          checksAborted = true;
+          await closeInstance(instanceId: createdInstanceId);
+          createdInstanceId = null;
+          return false;
+        }
+        if (!tun.ready) {
+          throw ConnectionFailureException(
+            tun.reason ?? _desktopTunFailureMessage,
+          );
+        }
+      }
+
       if (RuntimePlatform.isAndroid) {
         final vpnOk = await _startAndroidVpnWhenIpReady(
           createdInstanceId,
           extraRoutes: lanNatFakeIp == null ? const [] : ['$lanNatFakeIp/32'],
         );
         if (!_isLinkActive(epoch)) {
+          checksAborted = true;
           await disconnect(clearSession: false, abortLink: false);
           createdInstanceId = null;
           return false;
         }
         if (!vpnOk) {
+          checksAborted = true;
           appLogger.e('[ConnectionService] Android VPN 启动失败，回滚连接');
           await disconnect(forceEndNotice: '虚拟网络（VPN）启动失败，请检查权限后重试');
           createdInstanceId = null;
@@ -522,8 +583,26 @@ class ConnectionService {
           }
         }
       }
+
+      // 全平台：服务器连通检查（与上面的 TUN / VPN 等待并行）。
+      if (serverLinkCheck != null) {
+        final serverError = await serverLinkCheck;
+        if (!_isLinkActive(epoch)) {
+          await closeInstance(instanceId: createdInstanceId);
+          createdInstanceId = null;
+          return false;
+        }
+        if (serverError != null) {
+          throw ConnectionFailureException(serverError);
+        }
+      }
+      appLogger.i(
+        '[ConnectionService] $purpose 连接就绪，耗时 '
+        '${DateTime.now().difference(connectStartedAt).inMilliseconds}ms',
+      );
       return true;
     } catch (e, st) {
+      checksAborted = true;
       appLogger.e('[ConnectionService] 连接失败: $e', error: e, stackTrace: st);
       await _unbindPeerRpc();
       _disarmGuestPresenceWatch();
@@ -540,6 +619,7 @@ class ConnectionService {
       }
       _nodeManagement.setStopped();
       _roomState.setConnected(false, clearSession: false);
+      if (e is ConnectionFailureException) rethrow;
       final translated = _translateConnectionError(e);
       if (translated != e) throw translated;
       return false;
@@ -642,6 +722,136 @@ class ConnectionService {
       if (await isEasytierRunning(instanceId: instanceId)) return true;
       if (isAborted() || !DateTime.now().isBefore(deadline)) return false;
       await Future.delayed(interval);
+    }
+  }
+
+  /// 桌面端等待虚拟网卡就绪。
+  ///
+  /// 三个就绪信号任一出现即视为成功：系统网络接口里出现 EasyTier 的虚拟网卡
+  /// （`dev_name = ASGame`）、内核事件 `tun device ready`，或已轮询到虚拟 IP
+  /// （事件可能在订阅前发出，后两者用于兜底）。同时监听 `tun device error`，
+  /// 有明确错误时立即返回原因，不必等满超时。返回的 `reason` 为空表示被用户取消。
+  Future<({bool ready, String? reason})> _waitDesktopTun(
+    String instanceId, {
+    required bool Function() isAborted,
+    Duration timeout = desktopTunTimeout,
+  }) async {
+    var tunReady = false;
+    String? tunError;
+    void consume(CoreLogEventC event) {
+      if (event.instanceId != instanceId) return;
+      final message = event.message.trim();
+      final lower = message.toLowerCase();
+      if (lower.startsWith('tun device ready')) {
+        tunReady = true;
+      } else if (lower.startsWith('tun device error')) {
+        tunError ??= message;
+      }
+    }
+
+    // 事件可能在开始监听前就已发出（实例 Running 之后才进到这里），先补看缓冲。
+    for (final event in _coreEvents.recentEventsFor(instanceId)) {
+      consume(event);
+    }
+    final sub = _coreEvents.events.listen(consume);
+    try {
+      final deadline = DateTime.now().add(timeout);
+      var tick = 0;
+      while (true) {
+        if (isAborted()) return (ready: false, reason: null);
+        final error = tunError;
+        if (error != null) {
+          return (
+            ready: false,
+            reason: '虚拟网卡（TUN）创建失败：$error。'
+                '请检查网络权限后重试（Windows 请以管理员身份运行，'
+                'Linux 请确认已授予网络能力）。',
+          );
+        }
+        if (tunReady || _nodeManagement.myVirtualIpv4.value.isNotEmpty) {
+          return (ready: true, reason: null);
+        }
+        // 网卡枚举比事件更可靠，但开销大，约每秒查一次。
+        if (tick % 5 == 0 && await _hasDesktopTunInterface()) {
+          return (ready: true, reason: null);
+        }
+        tick++;
+        if (!DateTime.now().isBefore(deadline)) {
+          return (
+            ready: false,
+            reason: '虚拟网卡（TUN）在 ${timeout.inSeconds} 秒内未能创建成功，'
+                '请检查网络权限后重试（Windows 请以管理员身份运行，'
+                'Linux 请确认已授予网络能力）。',
+          );
+        }
+        await Future.delayed(_healthCheckInterval);
+      }
+    } finally {
+      await sub.cancel();
+    }
+  }
+
+  /// 系统网络接口里是否已有 EasyTier 的虚拟网卡（`dev_name = ASGame`）。
+  Future<bool> _hasDesktopTunInterface() async {
+    try {
+      final interfaces = await NetworkInterface.list();
+      return interfaces.any(
+        (interface) => interface.name.toLowerCase().contains('asgame'),
+      );
+    } catch (e) {
+      appLogger.d('[ConnectionService] 枚举网络接口失败: $e');
+      return false;
+    }
+  }
+
+  /// 等待与任意服务器/对端建立连接；超时返回可读的失败原因，成功返回 null。
+  ///
+  /// 判定依据二选一：内核事件 `peer connection added`，或轮询到的节点列表里
+  /// 出现非本机节点（覆盖事件订阅晚于连接建立的情况）。
+  Future<String?> _waitServerLink(
+    String instanceId, {
+    required bool Function() isAborted,
+    Duration timeout = serverLinkTimeout,
+  }) async {
+    var linked = false;
+    String? firstError;
+    void consume(CoreLogEventC event) {
+      if (event.instanceId != instanceId) return;
+      final message = event.message.trim();
+      final lower = message.toLowerCase();
+      if (lower.startsWith('peer connection added')) {
+        linked = true;
+      } else if (firstError == null && lower.startsWith('connect error')) {
+        firstError = message;
+      }
+    }
+
+    // 与 TUN 同理：连上服务器的日志可能在开始监听前就已发出，先补看缓冲。
+    for (final event in _coreEvents.recentEventsFor(instanceId)) {
+      consume(event);
+    }
+    final sub = _coreEvents.events.listen(consume);
+    try {
+      final deadline = DateTime.now().add(timeout);
+      while (true) {
+        if (isAborted()) return null;
+        if (linked) return null;
+        final status = _nodeManagement.networkStatus.value;
+        final hasRemoteNode = status != null &&
+            (status.totalNodes > BigInt.one ||
+                status.nodes.any(
+                  (n) => n.peerId != 0 && !_nodeManagement.isLocalPeer(n.peerId),
+                ));
+        if (hasRemoteNode) return null;
+        if (!DateTime.now().isBefore(deadline)) {
+          final detail = firstError == null ? '' : '（$firstError）';
+          return '服务器连接失败$detail：${timeout.inSeconds} 秒内未能连接到任何服务器，'
+              '请检查网络，或在「服务器」页更换服务器后重试。';
+        }
+        await Future.delayed(_healthCheckInterval);
+      }
+    } finally {
+      await sub.cancel();
     }
   }
 
@@ -787,6 +997,18 @@ class ConnectionService {
       (_) => alphabet[r.nextInt(alphabet.length)],
     ).join();
   }
+}
+
+/// 连接失败的明确原因（虚拟网卡创建失败 / 服务器连不上等）。
+///
+/// 与 [StateError] 不同，[toString] 直接返回可展示给用户的文案。
+class ConnectionFailureException implements Exception {
+  const ConnectionFailureException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
 }
 
 /// 用户在乐观连接完成前离开/取消。

@@ -46,12 +46,7 @@ class P2PConfigService {
 
     // peersOverride != null：加入短码/离线邀请，只用载荷里的服务器，绝不回退本地列表。
     // peersOverride == null：建房，用本机当前启用的服务器。
-    final peers = <PeerEndpoint>[];
-    if (peersOverride != null) {
-      peers.addAll(peersOverride.where((p) => p.uri.trim().isNotEmpty));
-    } else {
-      peers.addAll(enabledPeers());
-    }
+    final peers = resolvePeers(peersOverride: peersOverride);
 
     final peerBlock = peers.map(_peerTomlBlock).join('\n\n');
 
@@ -147,6 +142,18 @@ disable_kcp_input = true
 disable_relay_kcp = true
 enable_relay_foreign_network_kcp = false
 $quic''';
+  }
+
+  /// 本次连接实际使用的服务器列表。
+  ///
+  /// [peersOverride] 非空时只用邀请载荷里的服务器（不回退本地列表），
+  /// 否则用本机当前启用的服务器。建房与连接共用同一份解析结果，
+  /// 避免「写进 TOML 的服务器」和「连通性校验的目标」不一致。
+  List<PeerEndpoint> resolvePeers({List<PeerEndpoint>? peersOverride}) {
+    if (peersOverride != null) {
+      return peersOverride.where((p) => p.uri.trim().isNotEmpty).toList();
+    }
+    return enabledPeers();
   }
 
   String _peerTomlBlock(PeerEndpoint peer) {

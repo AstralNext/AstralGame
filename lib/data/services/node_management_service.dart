@@ -196,6 +196,8 @@ class NodeManagementService {
     currentInstanceId.value = null;
     _myPeerId = null;
     userNodes.value = [];
+    // 清掉上一个实例的快照，避免下一次连接的健康检查读到过期节点。
+    networkStatus.value = null;
     _clearLinkMetrics();
     myVirtualIpv4.value = '';
     _noIpSince = null;

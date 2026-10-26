@@ -27,7 +27,7 @@ class GameInjectService {
   Future<void> startForRoom({required String gameId}) async {
     await stop();
     if (!RuntimePlatform.isWindows) return;
-    await _rules.ensureLoaded();
+    await _rules.ensureLocalLoaded();
     final platform = await _rules.platformRules(
       gameId,
       GameAssistRulesService.platformKey,
