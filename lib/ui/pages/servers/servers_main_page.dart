@@ -42,7 +42,10 @@ Future<void> probeAllServers(BuildContext context) async {
 }
 
 class ServersMainPage extends StatefulWidget {
-  const ServersMainPage({super.key});
+  const ServersMainPage({super.key, this.scrollController});
+
+  /// Shell 注入的滚动控制器：重按当前 Tab 时用它回到顶部。
+  final ScrollController? scrollController;
 
   @override
   State<ServersMainPage> createState() => _ServersMainPageState();
@@ -205,9 +208,14 @@ class _ServersMainPageState extends State<ServersMainPage> {
 
       // 与全站一致的窄屏断点；窄屏收紧左右边距，给内容更多横向空间。
       final isNarrow = MediaQuery.sizeOf(context).width < AppBreakpoints.narrow;
-      final hPad = isNarrow
+      // 宽屏有悬浮侧栏：左侧收紧贴近胶囊，右侧仍保持常规页边距。
+      final startPad = isNarrow
+          ? AppDimensions.pagePaddingHMobile
+          : AppDimensions.pagePaddingHWithSideNav;
+      final endPad = isNarrow
           ? AppDimensions.pagePaddingHMobile
           : AppDimensions.pagePaddingH;
+      final isRtl = Directionality.of(context) == TextDirection.rtl;
       final lastProbeAt = _serverStatusState.lastProbeAt.value;
       final onlineCount = servers.where((server) {
         final status = statuses[server.id];
@@ -216,7 +224,7 @@ class _ServersMainPageState extends State<ServersMainPage> {
       // 刷新与添加在手机端移入悬浮底栏右侧行动胶囊；宽屏没有底栏，
       // 放回页头右侧，与手机端保持同一套动作语义。
       final header = PageHeader(
-        horizontalPadding: hPad,
+        padding: EdgeInsetsDirectional.fromSTEB(startPad, 12, endPad, 8),
         subtitle: servers.isEmpty
             ? '还没有添加服务器'
             : '${servers.length} 台 · $onlineCount 在线 · '
@@ -252,11 +260,13 @@ class _ServersMainPageState extends State<ServersMainPage> {
             child: RefreshIndicator(
               onRefresh: () => probeAllServers(context),
               child: ReorderableListView.builder(
+                scrollController: widget.scrollController,
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: EdgeInsets.fromLTRB(
-                  hPad,
+                  // ReorderableListView 只接受 EdgeInsets，这里手动镜像 RTL。
+                  isRtl ? endPad : startPad,
                   AppDimensions.sectionGap,
-                  hPad,
+                  isRtl ? startPad : endPad,
                   // 内容延伸到屏幕底部：为悬浮胶囊留出余量。
                   isNarrow
                       ? AppDimensions.listBottomWithNav(context)

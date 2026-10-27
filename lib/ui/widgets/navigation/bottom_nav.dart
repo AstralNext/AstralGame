@@ -1,17 +1,16 @@
 import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/ui/widgets/glass_capsule.dart';
+import 'package:astral_game/ui/widgets/navigation/liquid_nav.dart';
 import 'package:astral_game/ui/widgets/navigation/navigation_item.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/physics.dart';
-import 'package:flutter/services.dart';
 
 /// 悬浮胶囊式底部导航：选中指示器用弹簧动画滑动，图标随距离渐变；
 /// 按住胶囊可直接左右拖动切换，松手吸附到最近的 Tab。
 ///
 /// 液态观感由三部分组成：
 /// * 半透明磨砂玻璃胶囊（[BackdropFilter] + 高光描边）；
-/// * 指示器在两 Tab 之间被“拉长压扁”，回到 Tab 时再回弹成胶囊；
+/// * 指示器在两 Tab 之间被“拉长压扁”，并按速度做非对称拖尾；
 /// * 按住时指示器与图标轻微放大，松手弹簧回弹。
 ///
 /// 传入 [trailingActions] 时，右侧会展开同款玻璃行动胶囊，
@@ -23,6 +22,7 @@ class BottomNav extends StatefulWidget {
     required this.selectedIndex,
     required this.onSelected,
     this.trailingActions = const [],
+    this.statusDots = const <int>{},
   });
 
   final List<NavigationItem> navigationItems;
@@ -31,6 +31,9 @@ class BottomNav extends StatefulWidget {
 
   /// 右侧行动胶囊里的操作；为空时收起到 0 宽。
   final List<BottomNavAction> trailingActions;
+
+  /// 需要显示状态点的导航项索引（例如联机中）。
+  final Set<int> statusDots;
 
   @override
   State<BottomNav> createState() => _BottomNavState();
@@ -49,148 +52,54 @@ class BottomNavAction {
   final VoidCallback? onPressed;
   final String? tooltip;
 
-  /// 进行中：图标换成小号 spinner，按钮不可点。
+  /// 进行中：图标持续旋转，按钮不可点。
   final bool loading;
 }
 
 class _BottomNavState extends State<BottomNav> with TickerProviderStateMixin {
-  /// 带回弹的弹簧：按下/切换时略冲一点再弹回来，Q 但不晃。
-  static const _spring = SpringDescription(
-    mass: 1,
-    stiffness: 460,
-    damping: 19,
-  );
-
-  /// 拖动结束时的最大初速度（Tab/s），避免快速甩动时弹簧冲得太远。
-  static const _maxDragVelocity = 6.0;
-
   /// 指示器被拉长的最大比例（位于两个 Tab 正中间时）。
   static const _maxStretch = 0.30;
 
   /// 拉长时竖向被压扁的最大比例，体积守恒，像一滴液体。
   static const _maxSquash = 0.14;
 
-  late final AnimationController _position;
-
-  late int _currentIndex;
-
-  /// 行动胶囊当前承载的操作。
-  ///
-  /// 收起到 0 宽的过程中继续沿用最后一组非空操作，让玻璃是被宽度裁掉，
-  /// 而不是内容先瞬间消失。
-  List<BottomNavAction> _visibleActions = const [];
-
-  /// 正在拖动：指示器跟手并放大。
-  bool _dragging = false;
-
-  /// 当前按住的项（未松手），用于按压放大反馈。
-  int? _pressedIndex;
+  late final LiquidNavController _liquid;
 
   @override
   void initState() {
     super.initState();
-    _currentIndex = widget.selectedIndex;
-    _position = AnimationController.unbounded(
+    _liquid = LiquidNavController(
       vsync: this,
-      value: _currentIndex.toDouble(),
+      count: widget.navigationItems.length,
+      initialIndex: widget.selectedIndex,
+      onSelected: (index) => widget.onSelected(index),
     );
-    _visibleActions = widget.trailingActions;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _liquid.reduceMotion = MediaQuery.disableAnimationsOf(context);
   }
 
   @override
   void didUpdateWidget(covariant BottomNav oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.trailingActions.isNotEmpty) {
-      _visibleActions = widget.trailingActions;
-    }
-    if (widget.selectedIndex == _currentIndex) return;
-    _currentIndex = widget.selectedIndex;
-    _position.animateWith(
-      SpringSimulation(
-        _spring,
-        _position.value,
-        _currentIndex.toDouble(),
-        _position.velocity,
-      ),
-    );
+    _liquid.updateSelection(widget.selectedIndex);
   }
 
   @override
   void dispose() {
-    _position.dispose();
+    _liquid.dispose();
     super.dispose();
   }
 
-  /// 开始拖动：停掉进行中的弹簧，指示器立即吸附到手指下方。
-  void _beginDrag(double dx, double itemWidth, int count) {
-    _position.stop();
-    if (count < 2) return;
-    _dragTo(dx, itemWidth, count);
-    if (_dragging) return;
-    setState(() => _dragging = true);
-  }
+  bool get _isRtl => Directionality.of(context) == TextDirection.rtl;
 
-  /// 指示器中心跟到手指下方。
-  void _updateDrag(double dx, double itemWidth, int count) {
-    if (count < 2) return;
-    _dragTo(dx, itemWidth, count);
-  }
-
-  void _dragTo(double dx, double itemWidth, int count) {
-    final raw = dx / itemWidth - 0.5;
-    _position.value = raw.clamp(0.0, (count - 1).toDouble());
-  }
-
-  /// 松手：吸附到最近的 Tab，并把拖动速度交给弹簧。
-  void _endDrag(double velocity, int count) {
-    if (count == 0) return;
-    final target = _position.value.round().clamp(0, count - 1);
-    final changed = target != _currentIndex;
-    _currentIndex = target;
-    setState(() {
-      _dragging = false;
-      _pressedIndex = null;
-    });
-    _position.animateWith(
-      SpringSimulation(
-        _spring,
-        _position.value,
-        target.toDouble(),
-        velocity.clamp(-_maxDragVelocity, _maxDragVelocity),
-      ),
-    );
-    if (!changed) return;
-    HapticFeedback.selectionClick();
-    widget.onSelected(target);
-  }
-
-  void _setPressed(int index, bool pressed) {
-    final next = pressed ? index : null;
-    if (_pressedIndex == next) return;
-    setState(() => _pressedIndex = next);
-    if (pressed) {
-      // 按下就先把指示器弹向该 Tab，不等手指抬起才动。
-      _springTo(index);
-      return;
-    }
-    // 松手后如果并没有切换选中（手势取消），再弹回当前 Tab。
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _dragging || _pressedIndex != null) return;
-      if (widget.selectedIndex != index) _springTo(_currentIndex);
-    });
-  }
-
-  /// 用同一套弹簧把指示器送到 [target]。
-  void _springTo(int target) {
-    if (_dragging) return;
-    _position.animateWith(
-      SpringSimulation(
-        _spring,
-        _position.value,
-        target.toDouble(),
-        _position.velocity,
-      ),
-    );
+  /// 把手指的横向坐标换算成“第几项”，RTL 时从右向左。
+  double _dragPosition(double dx, double itemWidth, double barWidth) {
+    final x = _isRtl ? barWidth - dx : dx;
+    return x / itemWidth - 0.5;
   }
 
   @override
@@ -198,6 +107,8 @@ class _BottomNavState extends State<BottomNav> with TickerProviderStateMixin {
     final palette = context.astralPalette;
     final size = MediaQuery.sizeOf(context);
     final isSmallWindow = size.width < 320 || size.height < 420;
+    final reduceMotion = _liquid.reduceMotion;
+    final textScale = MediaQuery.textScalerOf(context).scale(11) / 11;
 
     final barHeight = isSmallWindow ? 56.0 : 64.0;
 
@@ -231,68 +142,92 @@ class _BottomNavState extends State<BottomNav> with TickerProviderStateMixin {
                     final count = widget.navigationItems.length;
                     if (count == 0) return const SizedBox.shrink();
                     final itemWidth = constraints.maxWidth / count;
-                    final height = isSmallWindow ? 56.0 : 64.0;
-                    final showLabels = !isSmallWindow && itemWidth >= 56;
+                    const height = 64.0;
+                    // 用“动画终点”的稳定宽度决定标签是否可能显示，
+                    // 避免行动胶囊收缩时标签整批闪现/消失。
+                    final stableItemWidth =
+                        (size.width - 40 - targetSlotWidth) / count;
+                    final labelsCapable =
+                        !isSmallWindow &&
+                        stableItemWidth >= 54 &&
+                        textScale < 1.8;
+                    // 宽度动画过程中让标签连续淡入淡出，图标位移也跟随，
+                    // 不再从 64 高度瞬间跳成 24。
+                    final labelScaleFade = ((2.0 - textScale) / 0.5).clamp(
+                      0.0,
+                      1.0,
+                    );
+                    final labelProgress = labelsCapable
+                        ? ((itemWidth - 50) / 14).clamp(0.0, 1.0) *
+                              labelScaleFade
+                        : 0.0;
 
                     return SizedBox(
-                      height: height,
+                      height: isSmallWindow ? 56.0 : height,
                       child: GestureDetector(
                         behavior: HitTestBehavior.opaque,
                         // 按住后左右拖动：指示器跟手，松手吸附到最近的 Tab。
-                        onHorizontalDragStart: (details) => _beginDrag(
-                          details.localPosition.dx,
-                          itemWidth,
-                          count,
+                        onHorizontalDragStart: (details) => _liquid.beginDrag(
+                          _dragPosition(
+                            details.localPosition.dx,
+                            itemWidth,
+                            constraints.maxWidth,
+                          ),
                         ),
-                        onHorizontalDragUpdate: (details) => _updateDrag(
-                          details.localPosition.dx,
-                          itemWidth,
-                          count,
+                        onHorizontalDragUpdate: (details) => _liquid.updateDrag(
+                          _dragPosition(
+                            details.localPosition.dx,
+                            itemWidth,
+                            constraints.maxWidth,
+                          ),
                         ),
-                        onHorizontalDragEnd: (details) => _endDrag(
-                          details.velocity.pixelsPerSecond.dx / itemWidth,
-                          count,
-                        ),
-                        onHorizontalDragCancel: () => _endDrag(0, count),
+                        onHorizontalDragEnd: (details) {
+                          final velocity =
+                              details.velocity.pixelsPerSecond.dx / itemWidth;
+                          _liquid.endDrag(_isRtl ? -velocity : velocity);
+                        },
+                        onHorizontalDragCancel: () => _liquid.endDrag(0),
                         child: AnimatedBuilder(
-                          animation: _position,
+                          animation: _liquid.listenable,
                           builder: (context, _) {
-                            final position = _position.value.clamp(
-                              0.0,
-                              (count - 1).toDouble(),
-                            );
-                            // 离最近的 Tab 越远，液滴拉得越长；回到 Tab 复原。
-                            final gap = (position - position.round()).abs();
-                            final liquid = (gap / 0.5).clamp(0.0, 1.0);
-                            final active = _dragging || _pressedIndex != null;
-                            final press = active ? 1.08 : 1.0;
-
+                            final barHeight = isSmallWindow ? 56.0 : height;
+                            final position = _liquid.renderPosition;
+                            final liquid = _liquid.liquidAmount;
+                            final speed = _liquid.velocityRatio;
+                            final direction = _liquid.position.velocity.sign;
+                            // 距离决定基础拉伸，速度额外拉出一点尾巴。
+                            final stretch =
+                                _maxStretch *
+                                    liquid *
+                                    (_liquid.dragging ? 1.0 : 0.78) +
+                                0.18 * speed;
+                            final squash = _maxSquash * liquid + 0.10 * speed;
                             final baseWidth = itemWidth - 12;
-                            final blobWidth =
-                                baseWidth * (1 + _maxStretch * liquid);
-                            final blobHeight =
-                                (height - 12) * (1 - _maxSquash * liquid);
-                            final center = position * itemWidth + itemWidth / 2;
+                            final baseHeight = barHeight - 12;
+                            final rawCenter =
+                                position * itemWidth +
+                                itemWidth / 2 -
+                                direction * itemWidth * 0.02 * speed;
+                            final center = _isRtl
+                                ? constraints.maxWidth - rawCenter
+                                : rawCenter;
 
                             return Stack(
                               clipBehavior: Clip.none,
                               children: [
-                                // 选中指示器：位置由弹簧动画驱动，宽度随距离拉伸。
-                                Positioned(
-                                  left: center - blobWidth / 2,
-                                  top: (height - blobHeight) / 2,
-                                  width: blobWidth,
-                                  height: blobHeight,
-                                  child: AnimatedScale(
-                                    scale: press,
-                                    duration: const Duration(milliseconds: 240),
-                                    curve: Curves.easeOutBack,
-                                    child: DecoratedBox(
-                                      decoration: BoxDecoration(
-                                        color: palette.accentMuted,
-                                        borderRadius: BorderRadius.circular(
-                                          blobHeight,
-                                        ),
+                                // 指示器只走绘制：位置、拉伸、按压都不触发布局。
+                                Positioned.fill(
+                                  child: IgnorePointer(
+                                    child: CustomPaint(
+                                      painter: LiquidNavPainter(
+                                        axis: Axis.horizontal,
+                                        center: center,
+                                        crossExtent: baseHeight,
+                                        baseLength: baseWidth,
+                                        lengthFactor: 1 + stretch,
+                                        crossFactor: 1 - squash,
+                                        lift: _liquid.liftAmount,
+                                        palette: palette,
                                       ),
                                     ),
                                   ),
@@ -303,17 +238,23 @@ class _BottomNavState extends State<BottomNav> with TickerProviderStateMixin {
                                       Expanded(
                                         child: _NavItem(
                                           item: widget.navigationItems[i],
-                                          selected: i == _currentIndex,
+                                          selected:
+                                              i == widget.selectedIndex,
                                           selectedness:
                                               (1 - (position - i).abs()).clamp(
                                                 0.0,
                                                 1.0,
                                               ),
-                                          showLabel: showLabels,
-                                          pressed: _pressedIndex == i,
+                                          labelProgress: labelProgress,
+                                          labelsCapable: labelsCapable,
+                                          pressed:
+                                              _liquid.pressedIndex == i &&
+                                              !reduceMotion,
+                                          showStatusDot: widget.statusDots
+                                              .contains(i),
                                           onPressedChanged: (pressed) =>
-                                              _setPressed(i, pressed),
-                                          onTap: () => widget.onSelected(i),
+                                              _liquid.setPressed(i, pressed),
+                                          onTap: () => _liquid.tap(i),
                                         ),
                                       ),
                                   ],
@@ -344,19 +285,22 @@ class _BottomNavState extends State<BottomNav> with TickerProviderStateMixin {
                 begin: targetSlotWidth,
                 end: targetSlotWidth,
               ),
-              // 与 Tab 淡入同时长：收起/展开和页面切换是同一次动作。
-              duration: const Duration(
-                milliseconds: AppDimensions.fadeDurationMs,
+              // 与页面切换共用同一时基：收起/展开和页面是同一次动作。
+              duration: Duration(
+                milliseconds: reduceMotion
+                    ? 1
+                    : AppDimensions.tabTransitionMs,
               ),
               curve: Curves.easeOutCubic,
               // 内容作为 child 传入：宽度动画每帧只重建几何，
               // 不重建玻璃里的按钮，避免动画期间的无谓开销和按压状态丢失。
               child: IgnorePointer(
-                // 收起过程中沿用上一组内容，但不应还能点到已离开页面的操作。
+                // 收起过程中不应还能点到已离开页面的操作。
                 ignoring: widget.trailingActions.isEmpty,
                 child: _ActionCapsuleContent(
                   height: barHeight,
-                  actions: _visibleActions,
+                  actions: widget.trailingActions,
+                  reduceMotion: reduceMotion,
                 ),
               ),
               builder: (context, slotWidth, child) {
@@ -365,6 +309,7 @@ class _BottomNavState extends State<BottomNav> with TickerProviderStateMixin {
                   0.0,
                   double.infinity,
                 );
+                final animating = (slotWidth - targetSlotWidth).abs() > 0.5;
                 return SizedBox(
                   width: slotWidth,
                   height: barHeight,
@@ -377,6 +322,10 @@ class _BottomNavState extends State<BottomNav> with TickerProviderStateMixin {
                             height: barHeight,
                             child: GlassCapsule(
                               radius: BorderRadius.circular(barHeight),
+                              // 宽度动画期间降低模糊，减少每帧重新采样背景。
+                              sigma: animating
+                                  ? GlassCapsule.animatingBlurSigma
+                                  : GlassCapsule.blurSigma,
                               child: OverflowBox(
                                 alignment: Alignment.centerRight,
                                 minWidth: 0,
@@ -405,15 +354,57 @@ double _trailingWidth(List<BottomNavAction> actions, double height) {
 }
 
 /// 行动胶囊的内容：按操作数量自然排布，宽度由外层玻璃动画裁剪。
+///
+/// 操作集合变化时用淡入 + 轻微缩放交叉切换，避免按钮“突然换人”。
 class _ActionCapsuleContent extends StatelessWidget {
-  const _ActionCapsuleContent({required this.height, required this.actions});
+  const _ActionCapsuleContent({
+    required this.height,
+    required this.actions,
+    required this.reduceMotion,
+  });
 
   final double height;
   final List<BottomNavAction> actions;
+  final bool reduceMotion;
 
   @override
   Widget build(BuildContext context) {
-    if (actions.isEmpty) return SizedBox(height: height);
+    final signature = actions.isEmpty
+        ? 'empty'
+        : actions.map((action) => action.icon.codePoint).join('-');
+
+    return AnimatedSwitcher(
+      duration: Duration(milliseconds: reduceMotion ? 1 : 140),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      layoutBuilder: (currentChild, previousChildren) => Stack(
+        alignment: Alignment.centerRight,
+        children: [...previousChildren, ?currentChild],
+      ),
+      transitionBuilder: (child, animation) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return FadeTransition(
+          opacity: curved,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.94, end: 1).animate(curved),
+            alignment: Alignment.centerRight,
+            child: child,
+          ),
+        );
+      },
+      child: KeyedSubtree(
+        key: ValueKey(signature),
+        child: _content(context),
+      ),
+    );
+  }
+
+  Widget _content(BuildContext context) {
+    if (actions.isEmpty) return SizedBox(width: 0, height: height);
     if (actions.length == 1) {
       return SizedBox(
         width: height,
@@ -484,29 +475,66 @@ class _CapsuleAction extends StatelessWidget {
   }
 }
 
-class _ActionIcon extends StatelessWidget {
+/// 行动图标：进行中不再换成小 spinner（会带来布局跳变），
+/// 而是让原图标原地连续旋转，保持同一枚按钮的连续性。
+class _ActionIcon extends StatefulWidget {
   const _ActionIcon({required this.action, required this.size});
 
   final BottomNavAction action;
   final double size;
 
   @override
+  State<_ActionIcon> createState() => _ActionIconState();
+}
+
+class _ActionIconState extends State<_ActionIcon>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _spin = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1100),
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncSpin();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ActionIcon oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncSpin();
+  }
+
+  void _syncSpin() {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    if (widget.action.loading && !reduceMotion) {
+      if (!_spin.isAnimating) _spin.repeat();
+      return;
+    }
+    if (_spin.isAnimating) _spin.stop();
+  }
+
+  @override
+  void dispose() {
+    _spin.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (action.loading) {
-      return const SizedBox(
-        width: 18,
-        height: 18,
-        child: CircularProgressIndicator(strokeWidth: 2),
+    final palette = context.astralPalette;
+    final color = widget.action.loading || widget.action.onPressed != null
+        ? palette.textSecondary
+        : palette.textTertiary;
+
+    if (widget.action.loading) {
+      return RotationTransition(
+        turns: _spin,
+        child: Icon(widget.action.icon, size: widget.size, color: color),
       );
     }
-    final palette = context.astralPalette;
-    return Icon(
-      action.icon,
-      size: size,
-      color: action.onPressed == null
-          ? palette.textTertiary
-          : palette.textSecondary,
-    );
+    return Icon(widget.action.icon, size: widget.size, color: color);
   }
 }
 
@@ -515,8 +543,10 @@ class _NavItem extends StatelessWidget {
     required this.item,
     required this.selected,
     required this.selectedness,
-    required this.showLabel,
+    required this.labelProgress,
+    required this.labelsCapable,
     required this.pressed,
+    required this.showStatusDot,
     required this.onPressedChanged,
     required this.onTap,
   });
@@ -524,16 +554,26 @@ class _NavItem extends StatelessWidget {
   final NavigationItem item;
   final bool selected;
   final double selectedness;
-  final bool showLabel;
+
+  /// 0..1 的标签展开程度：宽度不够时连续收起，而不是整批隐藏。
+  final double labelProgress;
+
+  /// 稳定布局下的标签可容纳性；只在长按 / 悬停时用于补一个文字提示。
+  final bool labelsCapable;
 
   /// 按住时图标轻微放大，松手回弹。
   final bool pressed;
+  final bool showStatusDot;
   final ValueChanged<bool> onPressedChanged;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final palette = context.astralPalette;
+    // 减少动态效果时状态点直接切换，不做缩放/淡入。
+    final dotDuration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : const Duration(milliseconds: 200);
     final iconColor = Color.lerp(
       palette.textTertiary,
       palette.accent,
@@ -544,14 +584,93 @@ class _NavItem extends StatelessWidget {
       palette.accent,
       selectedness,
     )!;
+    // 线性/实心图标交叉淡入；selectedness 由指示器位置连续驱动。
+    final filled = ((selectedness - 0.3) / 0.7).clamp(0.0, 1.0);
+    final iconScale = (22 + 2 * selectedness) / 24;
 
-    return Semantics(
-      button: true,
-      selected: selected,
-      label: item.label,
+    final icon = SizedBox(
+      width: 24,
+      height: 24,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.center,
+        children: [
+          Transform.scale(
+            scale: iconScale,
+            child: Opacity(
+              opacity: 1 - filled,
+              child: Icon(item.icon, size: 24, color: iconColor),
+            ),
+          ),
+          Transform.scale(
+            scale: iconScale,
+            child: Opacity(
+              opacity: filled,
+              child: Icon(item.activeIcon, size: 24, color: iconColor),
+            ),
+          ),
+          PositionedDirectional(
+            top: -2,
+            end: -2,
+            child: IgnorePointer(
+              child: AnimatedScale(
+                scale: showStatusDot ? 1 : 0,
+                duration: dotDuration,
+                curve: Curves.easeOutBack,
+                child: AnimatedOpacity(
+                  opacity: showStatusDot ? 1 : 0,
+                  duration: dotDuration,
+                  child: Container(
+                    width: 7,
+                    height: 7,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: palette.accent,
+                      border: Border.all(color: palette.card, width: 1.5),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    final label = labelProgress <= 0.01
+        ? null
+        : SizeTransition(
+            sizeFactor: AlwaysStoppedAnimation<double>(labelProgress),
+            alignment: Alignment.topCenter,
+            child: FadeTransition(
+              opacity: AlwaysStoppedAnimation<double>(labelProgress),
+              child: MediaQuery.withClampedTextScaling(
+                maxScaleFactor: 1.3,
+                child: Text(
+                  item.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: labelColor,
+                    fontWeight: FontWeight.lerp(
+                      FontWeight.w500,
+                      FontWeight.w600,
+                      selectedness,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+
+    Widget content = Listener(
+      // 用 Listener 而不是 InkWell 的 onHighlightChanged：后者在桌面端连
+      // 鼠标悬停/焦点都会回调，会让指示器追着鼠标跑。
+      onPointerDown: (_) => onPressedChanged(true),
+      onPointerUp: (_) => onPressedChanged(false),
+      onPointerCancel: (_) => onPressedChanged(false),
       child: InkWell(
         onTap: onTap,
-        onHighlightChanged: onPressedChanged,
         excludeFromSemantics: true,
         borderRadius: BorderRadius.circular(32),
         // 与行动胶囊一致：玻璃上只用极轻的主题色高亮，
@@ -563,32 +682,36 @@ class _NavItem extends StatelessWidget {
         highlightColor: Colors.transparent,
         child: AnimatedScale(
           scale: pressed ? 1.10 : 1.0,
-          duration: const Duration(milliseconds: 240),
+          duration: const Duration(milliseconds: AppDimensions.navPressMs),
           curve: Curves.easeOutBack,
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                selected ? item.activeIcon : item.icon,
-                size: 22 + 2 * selectedness,
-                color: iconColor,
-              ),
-              if (showLabel) ...[
+              icon,
+              if (label != null) ...[
                 const SizedBox(height: 2),
-                Text(
-                  item.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: labelColor,
-                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                  ),
-                ),
+                label,
               ],
             ],
           ),
         ),
       ),
+    );
+
+    if (!labelsCapable) {
+      content = Tooltip(
+        message: item.label,
+        excludeFromSemantics: true,
+        waitDuration: const Duration(milliseconds: 500),
+        child: content,
+      );
+    }
+
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: item.label,
+      child: content,
     );
   }
 }

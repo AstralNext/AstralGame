@@ -37,7 +37,8 @@ class DashboardWideLayout extends StatelessWidget {
       final Widget content;
       if (!showRoom) {
         content = Padding(
-          padding: const EdgeInsets.fromLTRB(4, 0, 4, 0),
+          // 左侧不再额外留白：主体直接贴到页面内边距，靠近侧栏胶囊。
+          padding: const EdgeInsets.fromLTRB(0, 0, 4, 0),
           child: DashboardHomePanel(
             isConnected: false,
             username: nodeManagement.currentUsername.value,

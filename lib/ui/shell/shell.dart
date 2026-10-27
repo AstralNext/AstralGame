@@ -54,6 +54,10 @@ class Shell extends StatefulWidget {
 class _ShellState extends State<Shell> with WindowListener, TrayListener {
   late final ScreenStateService _screenStateService;
   late final List<NavigationItem> _navigationItems;
+
+  /// 四个一级 Tab 各自的滚动控制器：重按当前 Tab 时回到顶部。
+  late final List<ScrollController> _tabScrollControllers;
+
   final TrayManager _trayManager = TrayManager.instance;
   EffectCleanup? _shellNavEffect;
 
@@ -90,30 +94,48 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
       getIt<ShellNavigationService>().clearPending();
     });
 
+    _tabScrollControllers = List<ScrollController>.generate(
+      4,
+      (_) => ScrollController(),
+      growable: false,
+    );
+
     _navigationItems = [
-      const NavigationItem(
+      NavigationItem(
         icon: Icons.sports_esports_outlined,
         activeIcon: Icons.sports_esports,
         label: '联机',
-        page: DashboardPage(key: PageStorageKey('dashboard')),
+        page: DashboardPage(
+          key: const PageStorageKey('dashboard'),
+          scrollController: _tabScrollControllers[0],
+        ),
       ),
-      const NavigationItem(
+      NavigationItem(
         icon: Icons.dns_outlined,
         activeIcon: Icons.dns,
         label: '服务器',
-        page: ServersMainPage(key: PageStorageKey('servers')),
+        page: ServersMainPage(
+          key: const PageStorageKey('servers'),
+          scrollController: _tabScrollControllers[1],
+        ),
       ),
-      const NavigationItem(
+      NavigationItem(
         icon: Icons.bookmark_border_rounded,
         activeIcon: Icons.bookmark_rounded,
         label: '收藏',
-        page: BookmarksPage(key: PageStorageKey('bookmarks')),
+        page: BookmarksPage(
+          key: const PageStorageKey('bookmarks'),
+          scrollController: _tabScrollControllers[2],
+        ),
       ),
-      const NavigationItem(
+      NavigationItem(
         icon: Icons.settings_outlined,
         activeIcon: Icons.settings,
         label: '设置',
-        page: SettingsMainPage(key: PageStorageKey('settings')),
+        page: SettingsMainPage(
+          key: const PageStorageKey('settings'),
+          scrollController: _tabScrollControllers[3],
+        ),
       ),
     ];
 
@@ -194,6 +216,9 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
   @override
   void dispose() {
     _shellNavEffect?.call();
+    for (final controller in _tabScrollControllers) {
+      controller.dispose();
+    }
     if (_isDesktop) {
       windowManager.removeListener(this);
       _trayManager.removeListener(this);
@@ -344,10 +369,33 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
   }
 
   void _handleDestinationSelected(int index) {
-    if (index == _selectedIndex) return;
+    if (index == _selectedIndex) {
+      _handleTabReselect(index);
+      return;
+    }
     if (_bookmarkSearchOpen) _closeBookmarkSearch();
     setState(() => _selectedIndex = index);
     if (index == _settingsTabIndex) _refreshFirewallStatus();
+  }
+
+  /// 重按当前 Tab：收藏页先收起搜索，否则把页面平滑滚回顶部。
+  void _handleTabReselect(int index) {
+    if (index == _bookmarksTabIndex && _bookmarkSearchOpen) {
+      _closeBookmarkSearch();
+      return;
+    }
+    final controller = _tabScrollControllers[index];
+    if (!controller.hasClients || controller.offset <= 0) return;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    unawaited(
+      controller.animateTo(
+        0,
+        duration: reduceMotion
+            ? const Duration(milliseconds: 1)
+            : const Duration(milliseconds: 320),
+        curve: Curves.easeOutCubic,
+      ),
+    );
   }
 
   /// 展开手机端底部搜索胶囊；离开收藏页或收起时清空搜索词。
@@ -358,6 +406,8 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
 
   void _closeBookmarkSearch() {
     getIt<BookmarkSearchState>().clear();
+    // 收起搜索时一并释放输入焦点，避免键盘还留在已经被隐藏的输入框上。
+    FocusManager.instance.primaryFocus?.unfocus();
     if (!_bookmarkSearchOpen) return;
     setState(() => _bookmarkSearchOpen = false);
   }
@@ -434,6 +484,10 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
         isCompact && _selectedIndex == _bookmarksTabIndex;
     final searchOpen = showBookmarkSearch && _bookmarkSearchOpen;
     final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final searchDuration = reduceMotion
+        ? Duration.zero
+        : const Duration(milliseconds: AppDimensions.searchBarTransitionMs);
     // 没有键盘时搜索胶囊停在底栏上方：底栏贴底留白 + 胶囊自身高度（含内部留白）。
     final navTopOffset =
         AppDimensions.navBottomGap(context) +
@@ -511,23 +565,64 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
                     avatar: nodes.currentUserAvatar.value,
                     username: nodes.currentUsername.value,
                     onAvatarTap: () => showEditProfileDialog(context),
+                    statusDots: getIt<RoomState>().session.value != null
+                        ? const <int>{0}
+                        : const <int>{},
                   );
                 }),
               ),
             // 搜索胶囊单独浮在 body 里：键盘弹起时 Scaffold 会把 body 压到键盘顶部，
             // 贴住 body 底部就等于跟着键盘上移；胶囊底栏留在原位不动（被键盘遮住）。
-            if (searchOpen)
-              AnimatedPositioned(
-                duration: const Duration(milliseconds: 160),
-                curve: Curves.easeOutCubic,
-                left: 0,
-                right: 0,
-                bottom: keyboardInset > 0 ? 0 : navTopOffset,
-                child: BookmarkSearchBar(
-                  key: const ValueKey('bookmark_search_bar'),
-                  onClose: _closeBookmarkSearch,
+            //
+            // 常驻在树里只切换可见性，避免开合时整块子树被硬插入/移除：
+            // 淡入 + 轻微上移缩放，收起时反向淡出，跟底栏行动胶囊同一套手感。
+            AnimatedPositioned(
+              duration: searchDuration,
+              curve: Curves.easeOutCubic,
+              left: 0,
+              right: 0,
+              bottom: keyboardInset > 0 ? 0 : navTopOffset,
+              child: IgnorePointer(
+                ignoring: !searchOpen,
+                child: AnimatedSwitcher(
+                  duration: searchDuration,
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  transitionBuilder: (child, animation) {
+                    final curved = CurvedAnimation(
+                      parent: animation,
+                      curve: Curves.easeOutCubic,
+                      reverseCurve: Curves.easeInCubic,
+                    );
+                    return FadeTransition(
+                      opacity: curved,
+                      child: SlideTransition(
+                        position: Tween<Offset>(
+                          begin: const Offset(0, 0.06),
+                          end: Offset.zero,
+                        ).animate(curved),
+                        child: ScaleTransition(
+                          scale: Tween<double>(
+                            begin: 0.94,
+                            end: 1,
+                          ).animate(curved),
+                          alignment: Alignment.bottomRight,
+                          child: child,
+                        ),
+                      ),
+                    );
+                  },
+                  child: searchOpen
+                      ? BookmarkSearchBar(
+                          key: const ValueKey('bookmark_search_bar'),
+                          onClose: _closeBookmarkSearch,
+                        )
+                      : const SizedBox.shrink(
+                          key: ValueKey('bookmark_search_closed'),
+                        ),
                 ),
               ),
+            ),
           ],
         ),
         // 不加底色，让胶囊外的区域直接透出下面的内容。
@@ -539,12 +634,18 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
                 ),
                 // 行动胶囊依赖服务器列表与探测状态，放在 Watch 里响应式更新。
                 child: Watch((navContext) {
+                  // 读取 session 让联机状态点随进出房间响应式重建。
+                  final connected =
+                      getIt<RoomState>().session.value != null;
                   return BottomNav(
                     key: const ValueKey('bottom_nav'),
                     navigationItems: _navigationItems,
                     selectedIndex: _selectedIndex,
                     onSelected: _handleDestinationSelected,
                     trailingActions: _trailingActions(navContext),
+                    statusDots: connected
+                        ? const <int>{0}
+                        : const <int>{},
                   );
                 }),
               )

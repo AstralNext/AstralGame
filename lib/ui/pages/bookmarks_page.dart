@@ -38,7 +38,10 @@ import 'package:signals/signals_flutter.dart';
 /// - 宽屏：Steam 游戏墙式网格 + 假分页（每页 [_pageSize] 条）
 /// - 操作：加入 / 分享 / 编辑 / 删除 / 置顶 / 封面
 class BookmarksPage extends StatefulWidget {
-  const BookmarksPage({super.key});
+  const BookmarksPage({super.key, this.scrollController});
+
+  /// Shell 注入的滚动控制器：重按当前 Tab 时用它回到顶部。
+  final ScrollController? scrollController;
 
   @override
   State<BookmarksPage> createState() => _BookmarksPageState();
@@ -87,7 +90,11 @@ class _BookmarksPageState extends State<BookmarksPage> {
         final unpinned = filtered.where((b) => !b.pinned).toList();
         final isWide =
             MediaQuery.sizeOf(context).width >= AppBreakpoints.narrow;
-        final hPad = isWide
+        // 宽屏有悬浮侧栏：左侧收紧贴近胶囊，右侧仍保持常规页边距。
+        final startPad = isWide
+            ? AppDimensions.pagePaddingHWithSideNav
+            : AppDimensions.pagePaddingHMobile;
+        final endPad = isWide
             ? AppDimensions.pagePaddingH
             : AppDimensions.pagePaddingHMobile;
 
@@ -108,7 +115,12 @@ class _BookmarksPageState extends State<BookmarksPage> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             PageHeader(
-              horizontalPadding: hPad,
+              padding: EdgeInsetsDirectional.fromSTEB(
+                startPad,
+                12,
+                endPad,
+                8,
+              ),
               subtitle: q.isEmpty
                   ? '${all.length} 个房间'
                   : '找到 ${filtered.length} 个房间',
@@ -133,7 +145,8 @@ class _BookmarksPageState extends State<BookmarksPage> {
                     )
                   : _buildBody(
                       isWide: isWide,
-                      horizontalPadding: hPad,
+                      startPadding: startPad,
+                      endPadding: endPad,
                       pinned: pinned,
                       unpinned: unpinned,
                       unpinnedSlice: unpinnedSlice,
@@ -158,7 +171,8 @@ class _BookmarksPageState extends State<BookmarksPage> {
   /// 宽屏：Steam 游戏墙式网格；窄屏：无限滚动的横版卡片列表。
   Widget _buildBody({
     required bool isWide,
-    required double horizontalPadding,
+    required double startPadding,
+    required double endPadding,
     required List<Bookmark> pinned,
     required List<Bookmark> unpinned,
     required List<Bookmark> unpinnedSlice,
@@ -186,7 +200,10 @@ class _BookmarksPageState extends State<BookmarksPage> {
     if (!isWide) {
       Widget mobileList(List<Bookmark> items) {
         return SliverPadding(
-          padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+          padding: EdgeInsetsDirectional.only(
+            start: startPadding,
+            end: endPadding,
+          ),
           sliver: SliverList.builder(
             itemCount: items.length,
             itemBuilder: (context, i) => Padding(
@@ -198,13 +215,14 @@ class _BookmarksPageState extends State<BookmarksPage> {
       }
 
       return CustomScrollView(
+        controller: widget.scrollController,
         slivers: [
           if (pinned.isNotEmpty) ...[
             SliverPadding(
-              padding: EdgeInsets.fromLTRB(
-                horizontalPadding,
+              padding: EdgeInsetsDirectional.fromSTEB(
+                startPadding,
                 4,
-                horizontalPadding,
+                endPadding,
                 8,
               ),
               sliver: SliverToBoxAdapter(
@@ -215,10 +233,10 @@ class _BookmarksPageState extends State<BookmarksPage> {
           ],
           if (unpinned.isNotEmpty) ...[
             SliverPadding(
-              padding: EdgeInsets.fromLTRB(
-                horizontalPadding,
+              padding: EdgeInsetsDirectional.fromSTEB(
+                startPadding,
                 pinned.isEmpty ? 4 : 8,
-                horizontalPadding,
+                endPadding,
                 8,
               ),
               sliver: SliverToBoxAdapter(
@@ -243,14 +261,17 @@ class _BookmarksPageState extends State<BookmarksPage> {
     );
 
     return CustomScrollView(
+      controller: widget.scrollController,
       slivers: [
         if (pinned.isNotEmpty) ...[
-          const SliverPadding(
-            padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
-            sliver: SliverToBoxAdapter(child: SectionHeader(title: '置顶')),
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(startPadding, 12, 16, 0),
+            sliver: const SliverToBoxAdapter(
+              child: SectionHeader(title: '置顶'),
+            ),
           ),
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+            padding: EdgeInsets.fromLTRB(startPadding, 10, 16, 0),
             sliver: SliverGrid(
               gridDelegate: gridDelegate,
               delegate: SliverChildBuilderDelegate(
@@ -262,13 +283,13 @@ class _BookmarksPageState extends State<BookmarksPage> {
         ],
         if (unpinned.isNotEmpty) ...[
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            padding: EdgeInsets.fromLTRB(startPadding, 12, 16, 0),
             sliver: SliverToBoxAdapter(
               child: SectionHeader(title: '全部收藏', count: unpinned.length),
             ),
           ),
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+            padding: EdgeInsets.fromLTRB(startPadding, 10, 16, 16),
             sliver: SliverGrid(
               gridDelegate: gridDelegate,
               delegate: SliverChildBuilderDelegate(

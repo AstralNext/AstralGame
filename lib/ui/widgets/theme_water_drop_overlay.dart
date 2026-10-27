@@ -21,6 +21,7 @@ class _ThemeWaterDropHostState extends State<ThemeWaterDropHost>
   late final AnimationController _controller;
   late final EffectCleanup _revealEffect;
   ThemeRevealState? _animatingReveal;
+  bool _reduceMotion = false;
 
   @override
   void initState() {
@@ -36,6 +37,12 @@ class _ThemeWaterDropHostState extends State<ThemeWaterDropHost>
         _startReveal(reveal);
       }
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _reduceMotion = MediaQuery.disableAnimationsOf(context);
   }
 
   void _onRevealStatus(AnimationStatus status) {
@@ -56,6 +63,12 @@ class _ThemeWaterDropHostState extends State<ThemeWaterDropHost>
   void _startReveal(ThemeRevealState reveal) {
     if (_controller.isAnimating) {
       _controller.stop();
+    }
+    // 系统开启“减少动态效果”：新主题已经生效，跳过水滴扩散直接收尾。
+    if (_reduceMotion) {
+      getIt<ThemeRevealController>().finishReveal();
+      if (mounted) setState(() => _animatingReveal = null);
+      return;
     }
     setState(() => _animatingReveal = reveal);
     _controller

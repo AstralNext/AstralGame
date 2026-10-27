@@ -10,13 +10,20 @@ abstract final class AppDimensions {
   static const pagePaddingV = 20.0;
   static const sectionGap = 16.0;
 
+  /// 宽屏有悬浮侧栏时，页面内容左侧的内边距。
+  ///
+  /// 侧栏胶囊自身已经留出投影空间，页面若再按 [pagePaddingH] 留白，
+  /// 主体和胶囊之间会空出一条明显的缝隙。这里只收紧左侧，
+  /// 右侧仍保持 [pagePaddingH]，避免内容整体贴边。
+  static const pagePaddingHWithSideNav = 8.0;
+
   /// 窄屏（手机）左右边距，给内容更多横向空间。
   static const pagePaddingHMobile = 16.0;
 
   /// 页面底部留白。
   static const pagePaddingBottom = 24.0;
 
-  /// 桌面侧栏总宽（悬浮胶囊 + 左右留白），与 [LeftNav] 保持一致。
+  /// 桌面侧栏总宽（悬浮胶囊 + 靠近窗口一侧的投影留白）。
   static const sideNavWidth = 92.0;
 
   /// 悬浮胶囊底栏的高度（与 BottomNav 保持一致）。
@@ -55,6 +62,15 @@ abstract final class AppDimensions {
 
   static const fadeBaseDelayMs = 60;
   static const fadeDurationMs = 250;
+
+  /// Tab 切换（页面 + 底栏指示器 + 行动胶囊）的统一时基。
+  static const tabTransitionMs = 220;
+
+  /// 手机搜索胶囊入场 / 退场。
+  static const searchBarTransitionMs = 190;
+
+  /// 导航项按压放大。
+  static const navPressMs = 180;
 }
 
 /// 全站统一断点，避免各页面各写一套魔法数字。

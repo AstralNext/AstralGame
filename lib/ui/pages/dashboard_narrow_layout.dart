@@ -20,11 +20,15 @@ class DashboardNarrowLayout extends StatelessWidget {
     required this.nodeManagement,
     required this.roomState,
     required this.callbacks,
+    this.scrollController,
   });
 
   final NodeManagementService nodeManagement;
   final RoomState roomState;
   final DashboardCallbacks callbacks;
+
+  /// Shell 注入的滚动控制器：重按当前 Tab 时用它回到顶部。
+  final ScrollController? scrollController;
 
   @override
   Widget build(BuildContext context) {
@@ -62,6 +66,7 @@ class DashboardNarrowLayout extends StatelessWidget {
       final active = session;
       return CustomScrollView(
         key: const PageStorageKey<String>('dashboard_narrow_scroll'),
+        controller: scrollController,
         physics: const ClampingScrollPhysics(),
         slivers: [
           SliverPadding(

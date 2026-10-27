@@ -42,7 +42,10 @@ import 'vpn_routes_page.dart';
 /// 行组件统一走 [AstralGroupedTile]（MD3：主色图标 + 缩进分隔线 + trailing 控件），
 /// 分区标题统一在卡片上方（[buildSettingsHeader]）。
 class SettingsMainPage extends StatefulWidget {
-  const SettingsMainPage({super.key});
+  const SettingsMainPage({super.key, this.scrollController});
+
+  /// Shell 注入的滚动控制器：重按当前 Tab 时用它回到顶部。
+  final ScrollController? scrollController;
 
   @override
   State<SettingsMainPage> createState() => _SettingsMainPageState();
@@ -104,7 +107,11 @@ class _SettingsMainPageState extends State<SettingsMainPage>
     final updateState = getIt<UpdateState>();
     final nodeManagement = getIt<NodeManagementService>();
     final isNarrow = MediaQuery.sizeOf(context).width < AppBreakpoints.narrow;
-    final hPad = isNarrow
+    // 宽屏有悬浮侧栏：左侧收紧贴近胶囊，右侧仍保持常规页边距。
+    final startPad = isNarrow
+        ? AppDimensions.pagePaddingHMobile
+        : AppDimensions.pagePaddingHWithSideNav;
+    final endPad = isNarrow
         ? AppDimensions.pagePaddingHMobile
         : AppDimensions.pagePaddingH;
 
@@ -113,10 +120,11 @@ class _SettingsMainPageState extends State<SettingsMainPage>
       children: [
         Expanded(
           child: ListView(
-            padding: EdgeInsets.fromLTRB(
-              hPad,
+            controller: widget.scrollController,
+            padding: EdgeInsetsDirectional.fromSTEB(
+              startPad,
               12,
-              hPad,
+              endPad,
               // 悬浮胶囊高度 + 系统底部安全区，避免最后一项被手势条/胶囊压住。
               AppDimensions.listBottomWithNav(context),
             ),

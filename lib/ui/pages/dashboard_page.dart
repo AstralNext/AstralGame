@@ -9,6 +9,7 @@ import 'package:astral_game/data/services/node_management_service.dart';
 import 'package:astral_game/data/services/screen_state_service.dart';
 import 'package:astral_game/data/services/share_code_service.dart';
 import 'package:astral_game/data/state/room_state.dart';
+import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/config/constants.dart';
 import 'package:astral_game/di.dart';
 import 'package:astral_game/ui/pages/dashboard_narrow_layout.dart';
@@ -26,7 +27,10 @@ import 'package:signals/signals_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class DashboardPage extends StatefulWidget {
-  const DashboardPage({super.key});
+  const DashboardPage({super.key, this.scrollController});
+
+  /// Shell 注入的滚动控制器：重按当前 Tab 时用它回到顶部。
+  final ScrollController? scrollController;
 
   @override
   State<DashboardPage> createState() => _DashboardPageState();
@@ -339,9 +343,16 @@ class _DashboardPageState extends State<DashboardPage> {
               nodeManagement: _nodeManagement,
               roomState: _roomState,
               callbacks: callbacks,
+              scrollController: widget.scrollController,
             )
           : Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              // 左侧收紧到侧栏胶囊旁边，右侧保持常规页边距。
+              padding: const EdgeInsetsDirectional.fromSTEB(
+                AppDimensions.pagePaddingHWithSideNav,
+                12,
+                16,
+                16,
+              ),
               child: DashboardWideLayout(
                 nodeManagement: _nodeManagement,
                 screenStateService: _screenStateService,
