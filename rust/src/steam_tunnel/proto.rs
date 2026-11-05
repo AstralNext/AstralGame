@@ -477,3 +477,149 @@ pub fn parse_rpc_ping(data: &[u8]) -> Option<u64> {
     }
     r.u64()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn host_vip() -> Ipv4Addr {
+        Ipv4Addr::new(100, 100, 100, 1)
+    }
+
+    fn peer_vip() -> Ipv4Addr {
+        Ipv4Addr::new(100, 100, 100, 2)
+    }
+
+    #[test]
+    fn frame_roundtrip_preserves_header_and_payload() {
+        let payload = b"hello";
+        let bytes = encode(KIND_IP, FLAG_FLOOD, peer_vip(), host_vip(), payload);
+        assert_eq!(bytes.len(), HEADER_LEN + payload.len());
+
+        let frame = decode(&bytes).expect("正常帧应能解出");
+        assert_eq!(frame.kind, KIND_IP);
+        assert_eq!(frame.flags, FLAG_FLOOD);
+        assert_eq!(frame.src, peer_vip());
+        assert_eq!(frame.dst, host_vip());
+        assert_eq!(frame.payload, payload);
+    }
+
+    #[test]
+    fn frame_with_empty_payload_is_valid_boundary() {
+        let bytes = encode(KIND_CONTROL, 0, host_vip(), BROADCAST_VIP, &[]);
+        assert_eq!(bytes.len(), HEADER_LEN);
+
+        let frame = decode(&bytes).expect("只有帧头也应能解出");
+        assert!(frame.payload.is_empty());
+        assert_eq!(frame.dst, BROADCAST_VIP);
+    }
+
+    #[test]
+    fn frame_with_max_batch_payload_roundtrips() {
+        let payload = vec![0xAB; MAX_BATCH_BYTES];
+        let bytes = encode(KIND_IP, 0, peer_vip(), host_vip(), &payload);
+        assert_eq!(bytes.len(), MAX_MESSAGE);
+
+        let frame = decode(&bytes).expect("上限长度帧应能解出");
+        assert_eq!(frame.payload.len(), MAX_BATCH_BYTES);
+        assert_eq!(frame.payload, payload.as_slice());
+    }
+
+    #[test]
+    fn decode_rejects_short_input_and_version_mismatch() {
+        assert!(decode(&[]).is_none());
+        assert!(decode(&[VERSION; HEADER_LEN - 1]).is_none());
+
+        let mut bad_version = encode(KIND_IP, 0, peer_vip(), host_vip(), b"x");
+        bad_version[0] = VERSION.wrapping_add(1);
+        assert!(decode(&bad_version).is_none());
+    }
+
+    #[test]
+    fn decode_never_panics_on_malformed_input() {
+        // 任意长度 / 内容的输入都只应返回 None 或原样透出，不得 panic。
+        for len in 0..HEADER_LEN + 8 {
+            let _ = decode(&vec![0x5A; len]);
+        }
+
+        // 帧头合法但 kind 未知：保留原始 kind，由上层忽略。
+        let data = [VERSION, 0xFF, 0xFF, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+        let frame = decode(&data).expect("帧头合法即可解出");
+        assert_eq!(frame.kind, 0xFF);
+    }
+
+    #[test]
+    fn roster_roundtrip_preserves_flags_latency_and_counters() {
+        let entries = vec![
+            RosterEntry {
+                peer_id: 1,
+                steam_id: 42,
+                nickname: "房主".to_string(),
+                vip: host_vip(),
+                online: true,
+                is_host: true,
+                latency_ms: 12,
+                via_relay: false,
+                bytes_in: 100,
+                bytes_out: 200,
+            },
+            RosterEntry {
+                peer_id: 2,
+                steam_id: 7,
+                nickname: "成员".to_string(),
+                vip: peer_vip(),
+                online: false,
+                is_host: false,
+                // 超过 u16 上限：编码时按 u16::MAX 截断。
+                latency_ms: u32::MAX,
+                via_relay: true,
+                bytes_in: 1 << 40,
+                bytes_out: 1 << 41,
+            },
+        ];
+
+        let parsed = parse_roster(&roster(&entries)).expect("正常 Roster 应能解出");
+        assert_eq!(parsed.len(), 2);
+
+        let host = &parsed[0];
+        assert_eq!(host.peer_id, 1);
+        assert_eq!(host.steam_id, 42);
+        assert_eq!(host.nickname, "房主");
+        assert_eq!(host.vip, host_vip());
+        assert!(host.online);
+        assert!(host.is_host);
+        assert!(!host.via_relay);
+        assert_eq!(host.latency_ms, 12);
+        assert_eq!(host.bytes_in, 100);
+        assert_eq!(host.bytes_out, 200);
+
+        let member = &parsed[1];
+        assert!(!member.online);
+        assert!(!member.is_host);
+        assert!(member.via_relay);
+        assert_eq!(member.latency_ms, u16::MAX as u32);
+        assert_eq!(member.bytes_in, 1 << 40);
+        assert_eq!(member.bytes_out, 1 << 41);
+    }
+
+    #[test]
+    fn roster_with_no_entries_is_valid_boundary() {
+        let parsed = parse_roster(&roster(&[])).expect("空成员表是合法边界");
+        assert!(parsed.is_empty());
+    }
+
+    #[test]
+    fn roster_parse_rejects_truncated_or_wrong_type_input() {
+        assert!(parse_roster(&[]).is_none());
+        assert!(parse_roster(&[CTL_HELLO]).is_none());
+
+        // 声明 1 条成员但没有任何成员数据。
+        let truncated = [CTL_ROSTER, 1, 0, 0, 0];
+        assert!(parse_roster(&truncated).is_none());
+
+        // 声称有 u32::MAX 条：不应尝试分配巨量内存，直接因数据不足返回 None。
+        let mut huge = vec![CTL_ROSTER];
+        huge.extend_from_slice(&u32::MAX.to_le_bytes());
+        assert!(parse_roster(&huge).is_none());
+    }
+}

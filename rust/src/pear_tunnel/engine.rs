@@ -1996,3 +1996,104 @@ fn engine_thread(rx: Receiver<Cmd>, pear_dir: PathBuf) {
     }
     engine.shutdown_room("Pear 线程结束");
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    fn roster_entry(
+        peer_id: u32,
+        steam_id: u64,
+        vip: Ipv4Addr,
+        is_host: bool,
+        latency_ms: u32,
+    ) -> RosterEntry {
+        RosterEntry {
+            peer_id,
+            steam_id,
+            nickname: format!("peer-{peer_id}"),
+            vip,
+            online: true,
+            is_host,
+            latency_ms,
+            via_relay: false,
+            bytes_in: 0,
+            bytes_out: 0,
+        }
+    }
+
+    #[test]
+    fn sidecar_event_parser_skips_malformed_lines() {
+        let input = concat!(
+            "{\"op\":\"ready\",\"selfKey\":\"abc\"}\n",
+            "not-json\n",
+            "{\"op\":\"peer\",\"id\":7,\"state\":\"open\"}\n",
+            "{\"op\":\"data\"}\n",
+            "{\"op\":\"data\",\"from\":3,\"data\":\"%%%\"}\n",
+            "{\"op\":\"peer\",\"id\":7,\"state\":\"close\"}\n",
+            "{\"op\":\"error\",\"message\":\"boom\"}\n",
+        );
+        let (tx, rx) = mpsc::channel();
+        read_events(Cursor::new(input.as_bytes()), tx);
+        let events: Vec<LinkEvent> = rx.try_iter().collect();
+
+        // 非 JSON、缺字段、非法 base64 的行都应被安静跳过，不 panic。
+        assert_eq!(events.len(), 5, "畸形行应跳过，正常事件按序保留");
+        assert!(matches!(&events[0], LinkEvent::Ready { self_key } if self_key == "abc"));
+        assert!(matches!(&events[1], LinkEvent::PeerOpen(7)));
+        assert!(matches!(&events[2], LinkEvent::PeerClose(7)));
+        assert!(matches!(&events[3], LinkEvent::Error(msg) if msg == "boom"));
+        assert!(matches!(&events[4], LinkEvent::Exited));
+    }
+
+    #[test]
+    fn guest_roster_backfills_host_latency_from_local_measurement() {
+        let mut engine = Engine::new(PathBuf::new());
+        engine.role = Role::Guest;
+        engine.guest_host_latency_ms = 37;
+
+        let body = proto::roster(&[
+            roster_entry(1, 1, proto::HOST_VIP, true, 0),
+            roster_entry(2, 2, proto::vip(2), false, 5),
+        ]);
+        let frame_bytes = proto::encode(
+            proto::KIND_CONTROL,
+            0,
+            proto::HOST_VIP,
+            proto::vip(100),
+            &body,
+        );
+        let frame = proto::decode(&frame_bytes).expect("合法控制帧");
+        engine.on_control(HOST_LINK_KEY, &frame);
+
+        assert_eq!(engine.roster.len(), 2);
+        let host = engine.roster.iter().find(|e| e.is_host).expect("房主条目");
+        assert_eq!(
+            host.latency_ms, 37,
+            "房主下发的 0ms 应被客机实测值回填"
+        );
+        let peer = engine.roster.iter().find(|e| !e.is_host).expect("成员条目");
+        assert_eq!(peer.latency_ms, 5, "其他成员延迟不应被改写");
+    }
+
+    #[test]
+    fn peer_close_clears_guest_roster_and_presence_state() {
+        let mut engine = Engine::new(PathBuf::new());
+        engine.role = Role::Guest;
+        engine.roster = vec![roster_entry(1, 1, proto::HOST_VIP, true, 0)];
+        engine.guest_open = true;
+        engine.hello_sent = true;
+        engine.guest_ping_at = Some(Instant::now());
+        engine.guest_host_latency_ms = 42;
+
+        engine.on_link_event(LinkEvent::PeerClose(HOST_LINK_KEY));
+
+        assert!(engine.roster.is_empty(), "房主链路断开后旧 Roster 必须清空");
+        assert!(!engine.guest_open);
+        assert!(!engine.hello_sent);
+        assert!(engine.guest_ping_at.is_none());
+        assert_eq!(engine.guest_host_latency_ms, 0);
+        assert!(engine.reconnect_at.is_some(), "断开后应安排重连");
+    }
+}
