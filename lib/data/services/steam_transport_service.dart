@@ -21,32 +21,11 @@ class SteamTransportService {
   /// 超时后回读一次快照兜底。
   Future<rust_steam.SteamStatusInfo> waitReady({
     Duration timeout = const Duration(seconds: 25),
-  }) async {
-    var last = await rust_steam.steamStatus();
-    if (_isReady(last) || _failedFast(last)) return last;
-
-    final completer = Completer<rust_steam.SteamStatusInfo>();
-    final sub = rust_steam.steamSubscribeStatus().listen((status) {
-      last = status;
-      if (!completer.isCompleted &&
-          (_isReady(status) || _failedFast(status))) {
-        completer.complete(status);
-      }
-    }, onError: (Object _) {});
-    final timer = Timer(timeout, () async {
-      if (completer.isCompleted) return;
-      try {
-        last = await rust_steam.steamStatus();
-      } catch (_) {}
-      if (!completer.isCompleted) completer.complete(last);
-    });
-    try {
-      return await completer.future;
-    } finally {
-      timer.cancel();
-      await sub.cancel();
-    }
-  }
+  }) => awaitSteamReady(
+    readStatus: rust_steam.steamStatus,
+    subscribeStatus: rust_steam.steamSubscribeStatus,
+    timeout: timeout,
+  );
 
   static bool _isReady(rust_steam.SteamStatusInfo status) =>
       status.ok && status.loggedOn && status.relayReady;
@@ -84,3 +63,44 @@ class SteamTransportService {
 
   Future<void> stop() => rust_steam.steamStop();
 }
+
+/// [SteamTransportService.waitReady] 的核心逻辑，抽成纯函数便于单测。
+///
+/// 先读一次快照；未就绪则订阅状态事件，首个「就绪」或「快速失败」事件
+/// 完成等待（只完成一次），超时后回读一次快照兜底并取消订阅。
+Future<rust_steam.SteamStatusInfo> awaitSteamReady({
+  required Future<rust_steam.SteamStatusInfo> Function() readStatus,
+  required Stream<rust_steam.SteamStatusInfo> Function() subscribeStatus,
+  Duration timeout = const Duration(seconds: 25),
+}) async {
+  var last = await readStatus();
+  if (_steamStatusReady(last) || _steamStatusFailedFast(last)) return last;
+
+  final completer = Completer<rust_steam.SteamStatusInfo>();
+  final sub = subscribeStatus().listen((status) {
+    last = status;
+    if (!completer.isCompleted &&
+        (_steamStatusReady(status) || _steamStatusFailedFast(status))) {
+      completer.complete(status);
+    }
+  }, onError: (Object _) {});
+  final timer = Timer(timeout, () async {
+    if (completer.isCompleted) return;
+    try {
+      last = await readStatus();
+    } catch (_) {}
+    if (!completer.isCompleted) completer.complete(last);
+  });
+  try {
+    return await completer.future;
+  } finally {
+    timer.cancel();
+    await sub.cancel();
+  }
+}
+
+bool _steamStatusReady(rust_steam.SteamStatusInfo status) =>
+    SteamTransportService._isReady(status);
+
+bool _steamStatusFailedFast(rust_steam.SteamStatusInfo status) =>
+    SteamTransportService._failedFast(status);

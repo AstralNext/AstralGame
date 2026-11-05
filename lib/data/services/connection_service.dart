@@ -170,7 +170,6 @@ class ConnectionService {
   }
 
   EffectCleanup? _guestPresenceDispose;
-  DateTime? _hostMissingSince;
 
   /// 最近一次离线邀请串（短码服务失败时的回退）。
   String? lastOfflineInvite;
@@ -1025,32 +1024,35 @@ class ConnectionService {
 
   void _armGuestPresenceWatch() {
     _disarmGuestPresenceWatch();
-    _hostMissingSince = null;
+    final watch = GuestPresenceWatch();
     _guestPresenceDispose = effect(() {
       final session = _roomState.session.value;
       final connected = _roomState.isConnected.value;
       final nodes = _nodeManagement.userNodes.value;
-      if (session == null || session.isHost || !connected) {
-        _hostMissingSince = null;
-        return;
-      }
-      // 共享密码模式无法按凭据识别房主：有任意远端成员即视为房间仍有人。
-      final hasOther = nodes.any((n) => !_nodeManagement.isLocalPeer(n.peerId));
-      if (hasOther) {
-        _hostMissingSince = null;
-        if (!_roomState.hostOnline.value) {
-          _roomState.setHostOnline(true);
-        }
-        return;
-      }
-      _hostMissingSince ??= DateTime.now();
-      if (DateTime.now().difference(_hostMissingSince!) <
-          const Duration(seconds: 10)) {
-        return;
-      }
-      if (_roomState.hostOnline.value) {
-        _roomState.setHostOnline(false);
-        appLogger.w('[ConnectionService] 房间内无其他成员');
+      final action = watch.evaluate(
+        hasSession: session != null,
+        isHostSession: session?.isHost ?? true,
+        connected: connected,
+        // 共享密码模式无法按凭据识别房主：有任意远端成员即视为房间仍有人。
+        hasOtherMembers: nodes.any(
+          (n) => !_nodeManagement.isLocalPeer(n.peerId),
+        ),
+      );
+      switch (action) {
+        case GuestPresenceAction.idle:
+        case GuestPresenceAction.waiting:
+          break;
+        case GuestPresenceAction.online:
+          if (!_roomState.hostOnline.value) {
+            _roomState.setHostOnline(true);
+          }
+          break;
+        case GuestPresenceAction.offline:
+          if (_roomState.hostOnline.value) {
+            _roomState.setHostOnline(false);
+            appLogger.w('[ConnectionService] 房间内无其他成员');
+          }
+          break;
       }
     });
   }
@@ -1058,7 +1060,6 @@ class ConnectionService {
   void _disarmGuestPresenceWatch() {
     _guestPresenceDispose?.call();
     _guestPresenceDispose = null;
-    _hostMissingSince = null;
   }
 
   /// Steam / Pear 分支不经过 [_connectAndStartServices]，这里补齐与具体传输
@@ -1413,4 +1414,60 @@ class ConnectionLinkEpoch {
   void abort() => _value++;
 
   bool isLive(int epoch) => epoch == _value;
+}
+
+/// 客机侧房主在线判定的结果。
+enum GuestPresenceAction {
+  /// 不适用（无会话 / 房主自己 / 未连接）：不改变在线状态。
+  idle,
+
+  /// 房间内仍有其他成员：房主在线。
+  online,
+
+  /// 暂无远端成员，但未超过宽限期：先不下结论。
+  waiting,
+
+  /// 持续无远端成员超过宽限期：判定房主离线。
+  offline,
+}
+
+/// 客机侧「房主是否还在房间」的判定。
+///
+/// 从成员列表推断：共享密码模式无法按凭据识别房主，因此房间内只要有任意
+/// 远端成员就视为房主仍在线；完全为空才开始计时，超过 [grace] 才判定离线，
+/// 避免断线重连的抖动造成误判。抽成独立类以便脱离 signals / 原生调用单测。
+class GuestPresenceWatch {
+  GuestPresenceWatch({
+    this.grace = const Duration(seconds: 10),
+    DateTime Function()? clock,
+  }) : _clock = clock ?? DateTime.now;
+
+  /// 判定离线前的宽限期。
+  final Duration grace;
+  final DateTime Function() _clock;
+
+  DateTime? _missingSince;
+
+  GuestPresenceAction evaluate({
+    required bool hasSession,
+    required bool isHostSession,
+    required bool connected,
+    required bool hasOtherMembers,
+  }) {
+    if (!hasSession || isHostSession || !connected) {
+      _missingSince = null;
+      return GuestPresenceAction.idle;
+    }
+    if (hasOtherMembers) {
+      _missingSince = null;
+      return GuestPresenceAction.online;
+    }
+    final now = _clock();
+    final since = _missingSince ??= now;
+    return now.difference(since) < grace
+        ? GuestPresenceAction.waiting
+        : GuestPresenceAction.offline;
+  }
+
+  void reset() => _missingSince = null;
 }
