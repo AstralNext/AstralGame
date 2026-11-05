@@ -43,6 +43,14 @@ abstract final class AppDimensions {
   /// 悬浮胶囊底栏的基准高度（与 BottomNav 保持一致）。
   static const navBarHeight = 64.0;
 
+  /// 动效时长统一档位，避免各页面散写 150/160/220/240/320ms。
+  static const motionFast = Duration(milliseconds: 150);
+  static const motionBase = Duration(milliseconds: 160);
+  static const motionMedium = Duration(milliseconds: 220);
+  static const motionSheet = Duration(milliseconds: 240);
+  static const motionPage = Duration(milliseconds: 320);
+  static const motionReveal = Duration(milliseconds: 580);
+
   /// 底栏随系统字号放大，最多放大到 1.3 倍。
   static double navBarHeightFor(BuildContext context) {
     final scale = (MediaQuery.textScalerOf(context).scale(11) / 11).clamp(

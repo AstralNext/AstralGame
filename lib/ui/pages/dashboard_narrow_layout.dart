@@ -167,7 +167,7 @@ class _NarrowOpenGamesSlot extends StatelessWidget {
       if (!showOpenGames) return const SizedBox.shrink();
       final openGamesHeight = openListings.isEmpty ? 72.0 : 220.0;
       return AnimatedSize(
-        duration: const Duration(milliseconds: 240),
+        duration: AppDimensions.motionSheet,
         curve: Curves.easeOutCubic,
         alignment: Alignment.topCenter,
         child: SizedBox(

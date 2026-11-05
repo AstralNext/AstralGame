@@ -282,7 +282,7 @@ class DailySceneryCardState extends State<DailySceneryCard> {
             child: IgnorePointer(
               ignoring: !showDownloadButton,
               child: AnimatedOpacity(
-                duration: const Duration(milliseconds: 160),
+                duration: AppDimensions.motionBase,
                 opacity: showDownloadButton ? 1 : 0,
                 child: Material(
                   color: Colors.black.withValues(alpha: 0.38),
@@ -314,7 +314,7 @@ class DailySceneryCardState extends State<DailySceneryCard> {
             right: 20,
             bottom: 20,
             child: AnimatedOpacity(
-              duration: const Duration(milliseconds: 320),
+              duration: AppDimensions.motionPage,
               opacity: _textLoading ? 0.55 : 1,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

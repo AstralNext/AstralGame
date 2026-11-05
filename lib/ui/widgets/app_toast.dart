@@ -87,8 +87,8 @@ class _ToastViewState extends State<_ToastView>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 220),
-      reverseDuration: const Duration(milliseconds: 160),
+      duration: AppDimensions.motionMedium,
+      reverseDuration: AppDimensions.motionBase,
     );
     final curve = CurvedAnimation(
       parent: _controller,

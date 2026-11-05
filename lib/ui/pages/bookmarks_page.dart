@@ -266,7 +266,9 @@ class _BookmarksPageState extends State<BookmarksPage> {
               endPadding,
               0,
             ),
-            sliver: const SliverToBoxAdapter(child: SectionHeader(title: '置顶')),
+            sliver: SliverToBoxAdapter(
+              child: SectionHeader(title: '置顶', count: pinned.length),
+            ),
           ),
           SliverPadding(
             padding: EdgeInsets.fromLTRB(

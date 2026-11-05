@@ -1,14 +1,3 @@
-import 'package:flutter/painting.dart';
-
-/// MD3 设计规范 - 状态颜色（语义色）
-class AppColors {
-  AppColors._();
-  static const Color online = Color(0xFF4CAF50);
-  static const Color warning = Color(0xFFFFC107);
-  static const Color error = Color(0xFFEF5350);
-  static const Color info = Color(0xFF2196F3);
-}
-
 /// 应用常量定义
 class AppConstants {
   AppConstants._();

@@ -21,6 +21,9 @@ class AppThemePalette {
     required this.shadowHairline,
     required this.error,
     required this.onError,
+    required this.online,
+    required this.warning,
+    required this.info,
     required this.morandi,
   });
 
@@ -40,6 +43,11 @@ class AppThemePalette {
   final Color shadowHairline;
   final Color error;
   final Color onError;
+
+  /// 语义状态色：在线 / 警告 / 信息。深色主题单独给值，避免浅色高饱和色扎眼。
+  final Color online;
+  final Color warning;
+  final Color info;
   final List<Color> morandi;
 
   Color get iconPlaceholder => textTertiary.withValues(alpha: 0.5);
@@ -71,6 +79,9 @@ class AppThemePalette {
       shadowHairline: c(shadowHairline, other.shadowHairline),
       error: c(error, other.error),
       onError: c(onError, other.onError),
+      online: c(online, other.online),
+      warning: c(warning, other.warning),
+      info: c(info, other.info),
       morandi: List.generate(
         count,
         (i) => c(
@@ -82,14 +93,14 @@ class AppThemePalette {
   }
 
   static AppThemePalette of(AppThemeId id) => switch (id) {
-        AppThemeId.insCream => _insCream,
-        AppThemeId.elegantGreen => _elegantGreen,
-        AppThemeId.mistBlue => _mistBlue,
-        AppThemeId.lavenderGrey => _lavenderGrey,
-        AppThemeId.cementGrey => _cementGrey,
-        AppThemeId.darkCoffee => _darkCoffee,
-        AppThemeId.cyber2077 => _cyber2077,
-      };
+    AppThemeId.insCream => _insCream,
+    AppThemeId.elegantGreen => _elegantGreen,
+    AppThemeId.mistBlue => _mistBlue,
+    AppThemeId.lavenderGrey => _lavenderGrey,
+    AppThemeId.cementGrey => _cementGrey,
+    AppThemeId.darkCoffee => _darkCoffee,
+    AppThemeId.cyber2077 => _cyber2077,
+  };
 
   static const _insCream = AppThemePalette(
     // 浅色：页底/凹槽压深，白卡靠色差浮起（对齐通用版台阶感）
@@ -109,6 +120,9 @@ class AppThemePalette {
     shadowHairline: Color(0x0D3D3835),
     error: Color(0xFFC17B7B),
     onError: Color(0xFFFFFFFF),
+    online: Color(0xFF4CAF50),
+    warning: Color(0xFFFFC107),
+    info: Color(0xFF2196F3),
     morandi: [
       Color(0xFFC4B5A8),
       Color(0xFFA8B5B2),
@@ -137,6 +151,9 @@ class AppThemePalette {
     shadowHairline: Color(0x0D2E3834),
     error: Color(0xFFC48888),
     onError: Color(0xFFFFFFFF),
+    online: Color(0xFF4CAF50),
+    warning: Color(0xFFFFC107),
+    info: Color(0xFF2196F3),
     morandi: [
       Color(0xFFB5C4B8),
       Color(0xFFA8B5B0),
@@ -165,6 +182,9 @@ class AppThemePalette {
     shadowHairline: Color(0x0D353A3D),
     error: Color(0xFFC17B7B),
     onError: Color(0xFFFFFFFF),
+    online: Color(0xFF4CAF50),
+    warning: Color(0xFFFFC107),
+    info: Color(0xFF2196F3),
     morandi: [
       Color(0xFFB5C4CE),
       Color(0xFFA8B5C4),
@@ -193,6 +213,9 @@ class AppThemePalette {
     shadowHairline: Color(0x0D38353D),
     error: Color(0xFFC17B7B),
     onError: Color(0xFFFFFFFF),
+    online: Color(0xFF4CAF50),
+    warning: Color(0xFFFFC107),
+    info: Color(0xFF2196F3),
     morandi: [
       Color(0xFFC9C0D4),
       Color(0xFFB8A8C4),
@@ -221,6 +244,9 @@ class AppThemePalette {
     shadowHairline: Color(0x0D2C2C2C),
     error: Color(0xFFC17B7B),
     onError: Color(0xFFFFFFFF),
+    online: Color(0xFF4CAF50),
+    warning: Color(0xFFFFC107),
+    info: Color(0xFF2196F3),
     morandi: [
       Color(0xFFB8B8B8),
       Color(0xFFA8A8A8),
@@ -249,6 +275,9 @@ class AppThemePalette {
     shadowHairline: Color(0x26000000),
     error: Color(0xFFD48989),
     onError: Color(0xFF1A1A1A),
+    online: Color(0xFF7BBF8A),
+    warning: Color(0xFFD9B45B),
+    info: Color(0xFF6FA8DC),
     morandi: [
       Color(0xFF8A8078),
       Color(0xFF7A7570),
@@ -277,6 +306,9 @@ class AppThemePalette {
     shadowHairline: Color(0x2600E5FF),
     error: Color(0xFFFF375F),
     onError: Color(0xFF0B0E14),
+    online: Color(0xFF39FF88),
+    warning: Color(0xFFFFCC00),
+    info: Color(0xFF00E5FF),
     morandi: [
       Color(0xFFFCEE0A),
       Color(0xFF00E5FF),
@@ -287,5 +319,4 @@ class AppThemePalette {
       Color(0xFF1C2333),
     ],
   );
-
 }

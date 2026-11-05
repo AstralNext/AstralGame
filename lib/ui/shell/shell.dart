@@ -427,7 +427,7 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
         0,
         duration: reduceMotion
             ? const Duration(milliseconds: 1)
-            : const Duration(milliseconds: 320),
+            : AppDimensions.motionPage,
         curve: Curves.easeOutCubic,
       ),
     );

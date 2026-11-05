@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/state/theme_reveal_state.dart';
 import 'package:astral_game/di.dart';
@@ -28,7 +29,7 @@ class _ThemeWaterDropHostState extends State<ThemeWaterDropHost>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: AppThemeAnimation.revealDuration,
+      duration: AppDimensions.motionReveal,
     )..addStatusListener(_onRevealStatus);
 
     _revealEffect = effect(() {

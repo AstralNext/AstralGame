@@ -540,24 +540,31 @@ PopupMenuItem(
 
 ## 8. P2-1 探测数据可信度与缓存
 
-### 8.1 当前问题
+### 8.1 当前实现（已完成，勿改回模拟数据）
 
-`lib/data/services/server_probe_service.dart:26-77` 是模拟实现：按 URL 哈希生成“是否 ET / 版本号 / 提交号”。界面展示的 `EasyTier 2.7.0-xxxx` 与“非 EasyTier 服务器”并非真实握手结果。
+`lib/data/services/server_probe_service.dart` 已改为真实握手探测，不再按 URL 哈希伪造结果：
 
-### 8.2 处理方案（按优先级）
+- **TCP 接入**：发送 `packet_type = HandShake(2)`、`magic = 0xd1e1a5e1` 的 EasyTier 握手帧，
+  回包同为 `HandShake` 且魔数匹配才算 ET 端点；连接成功但回包不是 ET 握手 → 明确判定为非 ET。
+- **UDP 接入**：发送带 8 字节 magic 的 `Syn`，收到同 conn_id / magic 的 `Sack` 才算 ET 端点；
+  超时或不可达返回 `isEasyTier = null`（无法判断），不作为“非 ET”警告。
+- **ws / wss / quic / wg**：不是裸 TCP/UDP 帧，统一返回 `null`，界面保持“未知”。
+- 握手报文不包含软件版本、在线人数、中转能力，因此卡片不再展示 `EasyTier x.y.z-commit` 之类的信息。
 
-1. **短期（推荐）**：在真实握手实现前，不展示伪造版本号。
-   - 删除卡片上的 `EasyTier x.y.z-commit · 协议 vN` 行。
-   - 保留 `TCP ping` 延迟与在线/离线状态。
-   - 删除 `_handleProbe` 中的“非 ET 服务器”SnackBar，或改为“兼容性检测暂不可用”。
-2. **中期**：按 `ServerProbeService` 注释实现真实 EasyTier TCP 握手，校验魔数 `0xd1e1a5e1`，再恢复版本展示。
-3. **如果必须保留模拟数据**：所有相关文案追加“（模拟）”，且不得据此给出风险警告。
+界面约定：只有 `isEasyTier == true` 显示 `EasyTier`，`false` 才提示“非 EasyTier 服务器”（告警色），
+`null` 不显示任何兼容性结论。
 
-### 8.3 编辑 URL 后清除旧探测结果
+### 8.2 修改约束
+
+1. 不要重新引入基于 URL 哈希的模拟探测结果，也不要恢复伪造版本号。
+2. 握手帧的字段偏移与魔数来自 `peer_conn.rs`（魔数 `0xd1e1a5e1`、协议版本 `1`），改动前先对照服务端源码。
+3. UDP 超时不得判定为“非 EasyTier 服务器”，否则会把丢包误报成兼容性问题。
+4. 新增的探测协议（如 quic/wg）需要单独实现握手，未实现时一律返回 `null`。
+
+### 8.3 编辑 URL 后清除旧探测结果（已实现）
 
 `serverProbes` 以 `server.id` 为 key，编辑 URL 不会改变 id，旧结果会残留。
-
-在 `ServerStatusState` 中新增：
+以下逻辑已落地在 `lib/data/state/server_state.dart`，保留作实现参考。
 
 ```dart
 final Map<int, String> _probedUrls = {};
@@ -621,9 +628,12 @@ bool _sameStatusMap(Map<int, ServerStatus> a, Map<int, ServerStatus> b) {
 
 ### 8.5 验收标准
 
-- [ ] 编辑服务器 URL 后，卡片不再显示旧版本/旧兼容性信息。
-- [ ] 未实现真实握手前，界面不存在伪造的 ET 版本号或误导性警告。
-- [ ] 真实握手上线后，探测失败有明确错误态，不会静默显示“探测中”。
+- [x] TCP 端点通过 ET 握手判断，UDP 端点通过 SYN/SACK 判断，无法判断时统一返回 `null`。
+- [x] 界面不再展示版本号 / 提交号等握手不包含的信息。
+- [x] 仅 `isEasyTier == false` 提示“非 EasyTier 服务器”，UDP 超时不会误报。
+- [x] 编辑服务器 URL 后，旧探测结果会被 `invalidateStaleProbes` 清除。
+- [x] 探测过程有“检测中…”占位，失败后回到延迟/状态展示，不会永久停留在检测中。
+- [ ] 未来新增 quic/wg 等接入方式时，先实现对应握手再展示兼容性结论（当前保持未知）。
 
 ---
 

@@ -65,7 +65,7 @@ class DashboardHomePanel extends StatelessWidget {
     final rs = getIt<RoomState>();
     final cs = getIt<ConnectionService>();
     return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 320),
+      duration: AppDimensions.motionPage,
       switchInCurve: Curves.easeOutCubic,
       switchOutCurve: Curves.easeInCubic,
       child: isConnected
@@ -121,55 +121,63 @@ class _IdleHome extends StatelessWidget {
     final version = ClientRuntimeInfo.appVersion;
     final os = ClientRuntimeInfo.operatingSystemVersion;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(child: DailySceneryCard(username: username)),
-        const SizedBox(height: 16),
-        Watch((context) {
-          final list = getIt<RoomState>().bookmarksList.value;
-          if (list.isEmpty) return const SizedBox.shrink();
-          return Padding(
-            padding: const EdgeInsets.only(bottom: AppDimensions.space16),
-            child: _BookmarkPreviewCard(
-              bookmarks: list,
-              onOpenAll: () =>
-                  getIt<ShellNavigationService>().openBookmarksTab(),
-              onJoin: (b) => _handlePreviewJoin(context, b),
-            ),
-          );
-        }),
-        // 版本信息与右侧「创建/加入」胶囊同一行、底部对齐
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
+    return CustomScrollView(
+      physics: const ClampingScrollPhysics(),
+      slivers: [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: DailySceneryCard(username: username)),
+              const SizedBox(height: 16),
+              Watch((context) {
+                final list = getIt<RoomState>().bookmarksList.value;
+                if (list.isEmpty) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: AppDimensions.space16),
+                  child: _BookmarkPreviewCard(
+                    bookmarks: list,
+                    onOpenAll: () =>
+                        getIt<ShellNavigationService>().openBookmarksTab(),
+                    onJoin: (b) => _handlePreviewJoin(context, b),
+                  ),
+                );
+              }),
+              // 版本信息与右侧「创建/加入」胶囊同一行、底部对齐
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text(
-                    'v$version',
-                    style: textTheme.labelMedium?.copyWith(
-                      color: palette.textSecondary,
-                      fontWeight: FontWeight.w600,
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'v$version',
+                          style: textTheme.labelMedium?.copyWith(
+                            color: palette.textSecondary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          os,
+                          style: textTheme.labelSmall?.copyWith(
+                            color: palette.textTertiary,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    os,
-                    style: textTheme.labelSmall?.copyWith(
-                      color: palette.textTertiary,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  const SizedBox(width: 16),
+                  CreateJoinPill(onCreate: onCreate, onJoin: onJoin),
                 ],
               ),
-            ),
-            const SizedBox(width: 16),
-            CreateJoinPill(onCreate: onCreate, onJoin: onJoin),
-          ],
+            ],
+          ),
         ),
       ],
     );

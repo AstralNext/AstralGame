@@ -32,7 +32,6 @@ abstract final class AppInteraction {
 
 /// 主题切换与水滴揭示动画参数。
 abstract final class AppThemeAnimation {
-  static const revealDuration = Duration(milliseconds: 580);
   static const revealCurve = Curves.easeOutCubic;
 
   /// Material 主题色插值（已改用水滴揭示，保持为 0）。

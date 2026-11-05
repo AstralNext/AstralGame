@@ -12,7 +12,6 @@ import 'package:flutter/material.dart';
 import 'package:signals/signals_flutter.dart';
 import 'package:astral_game/di.dart';
 import 'package:astral_game/data/state/server_state.dart';
-import 'package:astral_game/config/constants.dart';
 import 'package:astral_game/data/models/server_mod.dart';
 import 'package:astral_game/utils/runtime_platform.dart';
 
@@ -57,22 +56,24 @@ class _ServersMainPageState extends State<ServersMainPage> {
   String? _lastServersFingerprint;
 
   Color _getStatusColor(BuildContext context, ServerStatus status) {
+    final palette = context.astralPalette;
     switch (status) {
       case ServerStatus.online:
-        return AppColors.online;
+        return palette.online;
       case ServerStatus.offline:
-        return AppColors.error;
+        return palette.error;
       case ServerStatus.inUse:
-        return AppColors.info;
+        return palette.info;
       case ServerStatus.unknown:
-        return context.astralPalette.textTertiary;
+        return palette.textTertiary;
     }
   }
 
   Color _getLatencyColor(int latencyMs) {
-    if (latencyMs <= 80) return AppColors.online;
-    if (latencyMs <= 160) return AppColors.warning;
-    return AppColors.error;
+    final palette = context.astralPalette;
+    if (latencyMs <= 80) return palette.online;
+    if (latencyMs <= 160) return palette.warning;
+    return palette.error;
   }
 
   String _statusLabel(ServerStatus status) {
@@ -108,17 +109,13 @@ class _ServersMainPageState extends State<ServersMainPage> {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (isWarning) ...[
-            const Icon(
-              Icons.warning_amber_rounded,
-              size: 14,
-              color: AppColors.error,
-            ),
+            Icon(Icons.warning_amber_rounded, size: 14, color: palette.error),
             const SizedBox(width: 4),
           ],
           Flexible(
             child: DefaultTextStyle.merge(
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: isWarning ? AppColors.error : palette.textSecondary,
+                color: isWarning ? palette.error : palette.textSecondary,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -298,7 +295,7 @@ class _ServersMainPageState extends State<ServersMainPage> {
                       ? '***'
                       : server.url;
                   final statusColor = probing
-                      ? AppColors.info
+                      ? palette.info
                       : latency != null
                       ? _getLatencyColor(latency)
                       : _getStatusColor(context, status);
@@ -405,7 +402,7 @@ class _ServersMainPageState extends State<ServersMainPage> {
                                                 .textTheme
                                                 .labelMedium
                                                 ?.copyWith(
-                                                  color: AppColors.info,
+                                                  color: palette.info,
                                                   fontWeight: FontWeight.w600,
                                                 ),
                                           ),
@@ -559,7 +556,7 @@ class _ServersMainPageState extends State<ServersMainPage> {
     final palette = context.astralPalette;
     final textTheme = Theme.of(context).textTheme;
     final statusColor = probing
-        ? AppColors.info
+        ? palette.info
         : latency != null
         ? _getLatencyColor(latency)
         : _getStatusColor(context, status);
@@ -663,7 +660,7 @@ class _ServersMainPageState extends State<ServersMainPage> {
                               : '${latency == null ? '--' : '${latency}ms'}'
                                     ' · ${_statusLabel(status)}',
                           style: textTheme.labelSmall?.copyWith(
-                            color: probing ? AppColors.info : statusColor,
+                            color: probing ? palette.info : statusColor,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -745,7 +742,9 @@ class _ServersMainPageState extends State<ServersMainPage> {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            style: TextButton.styleFrom(
+              foregroundColor: context.astralPalette.error,
+            ),
             child: const Text('删除'),
           ),
         ],

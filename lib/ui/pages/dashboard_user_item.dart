@@ -1,5 +1,4 @@
 import 'package:astral_game/config/app_dimensions.dart';
-import 'package:astral_game/config/constants.dart';
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/models/enhanced_node_info.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
@@ -80,9 +79,10 @@ class _DashboardUserItemState extends State<DashboardUserItem> {
   }
 
   Color _latencyColor(double latencyMs) {
-    if (latencyMs < 100) return AppColors.online;
-    if (latencyMs < 300) return AppColors.warning;
-    return AppColors.error;
+    final palette = context.astralPalette;
+    if (latencyMs < 100) return palette.online;
+    if (latencyMs < 300) return palette.warning;
+    return palette.error;
   }
 
   Future<void> _copyIp(
@@ -229,10 +229,10 @@ class _UserSpeedLine extends StatelessWidget {
           if (loss != null && loss > 0)
             TextSpan(
               text: '   ·   丢包 ${loss.toStringAsFixed(1)}%',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w500,
-                color: AppColors.error,
+                color: context.astralPalette.error,
               ),
             ),
         ],
@@ -289,7 +289,7 @@ class _UserMetaLine extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      color: isDirect ? AppColors.online : AppColors.warning,
+                      color: isDirect ? palette.online : palette.warning,
                     ),
                   ),
                 if (versionNumber.isNotEmpty)
@@ -300,10 +300,10 @@ class _UserMetaLine extends StatelessWidget {
                 if (metrics.lossRate > 0)
                   TextSpan(
                     text: '   丢包 ${metrics.lossRate.toStringAsFixed(1)}%',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w500,
-                      color: AppColors.error,
+                      color: palette.error,
                     ),
                   ),
               ],
@@ -526,7 +526,7 @@ class _UserTileShell extends StatelessWidget {
       onExit: (_) => onHoverChanged(false),
       cursor: SystemMouseCursors.click,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
+        duration: AppDimensions.motionFast,
         curve: Curves.easeOut,
         margin: grouped
             ? EdgeInsets.zero
