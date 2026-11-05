@@ -28,7 +28,6 @@ import 'package:astral_game/data/services/windows_settings_service.dart';
 import 'package:astral_game/data/services/windows_time_sync_service.dart';
 import 'package:astral_game/data/services/bookmark_store.dart';
 import 'package:astral_game/data/services/bookmark_cover_store.dart';
-import 'package:astral_game/data/services/screen_state_service.dart';
 import 'package:astral_game/data/services/shell_navigation_service.dart';
 import 'package:astral_game/data/services/smart_dns_config_updater.dart';
 import 'package:astral_game/data/services/server_persistence_service.dart';
@@ -151,8 +150,6 @@ Future<void> setupDI() async {
   await settings.warmUpSystemUsername();
   getIt.registerSingleton<AppSettingsService>(settings);
 
-  getIt.registerSingleton<ScreenStateService>(ScreenStateService());
-  _registerDispose<ScreenStateService>((s) => s.dispose());
   getIt.registerSingleton<ShellNavigationService>(ShellNavigationService());
   getIt.registerSingleton<ShortcutService>(const ShortcutService());
 
@@ -213,9 +210,7 @@ Future<void> setupDI() async {
   getIt<VpnState>().setCustomRoutes(
     getIt<AppSettingsService>().getCustomVpnRoutes(),
   );
-  getIt.registerLazySingleton<EasyTierCoreEventBus>(
-    EasyTierCoreEventBus.new,
-  );
+  getIt.registerLazySingleton<EasyTierCoreEventBus>(EasyTierCoreEventBus.new);
   _registerDispose<EasyTierCoreEventBus>((s) => s.dispose(), async: true);
 
   getIt.registerLazySingleton<ShareCodeService>(() => ShareCodeService());

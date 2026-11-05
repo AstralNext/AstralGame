@@ -39,8 +39,7 @@ abstract final class AstralGameTheme {
     final palette = AppThemePalette.of(id);
     // 与通用版一致：按页底亮度决定 Brightness，避免深色主题仍走 light 默认紫容器色。
     final isDarkSurface = palette.background.computeLuminance() < 0.45;
-    final brightness =
-        isDarkSurface ? Brightness.dark : Brightness.light;
+    final brightness = isDarkSurface ? Brightness.dark : Brightness.light;
 
     final page = palette.background;
     final raised = palette.card;
@@ -132,31 +131,6 @@ abstract final class AstralGameTheme {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
         ),
-      ),
-      navigationBarTheme: NavigationBarThemeData(
-        height: 72,
-        elevation: 0,
-        surfaceTintColor: Colors.transparent,
-        backgroundColor: raised,
-        indicatorColor: palette.accent.withValues(alpha: 0.14),
-        labelTextStyle: WidgetStateProperty.resolveWith((states) {
-          final selected = states.contains(WidgetState.selected);
-          return TextStyle(
-            fontFamily: AppFonts.family,
-            fontFamilyFallback: AppFonts.fallback,
-            fontSize: 11,
-            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-            color: selected ? palette.accent : palette.textSecondary,
-            letterSpacing: 0.1,
-          );
-        }),
-        iconTheme: WidgetStateProperty.resolveWith((states) {
-          final selected = states.contains(WidgetState.selected);
-          return IconThemeData(
-            size: AppDimensions.iconSize,
-            color: selected ? palette.accent : palette.textTertiary,
-          );
-        }),
       ),
       iconTheme: IconThemeData(
         size: AppDimensions.iconSize,
@@ -267,15 +241,47 @@ abstract final class AstralGameTheme {
           letterSpacing: -0.5,
           color: palette.textPrimary,
         ),
+        displaySmall: TextStyle(
+          fontSize: 32,
+          fontWeight: FontWeight.w700,
+          height: 1.15,
+          letterSpacing: -0.5,
+          color: palette.textPrimary,
+        ),
+        headlineLarge: TextStyle(
+          fontSize: 28,
+          fontWeight: FontWeight.w700,
+          height: 1.2,
+          letterSpacing: -0.3,
+          color: palette.textPrimary,
+        ),
         headlineMedium: TextStyle(
           fontSize: 22,
           fontWeight: FontWeight.w600,
           letterSpacing: -0.2,
           color: palette.textPrimary,
         ),
+        headlineSmall: TextStyle(
+          fontSize: 24,
+          fontWeight: FontWeight.w700,
+          height: 1.25,
+          letterSpacing: -0.2,
+          color: palette.textPrimary,
+        ),
+        titleLarge: TextStyle(
+          fontSize: 22,
+          fontWeight: FontWeight.w800,
+          letterSpacing: -0.2,
+          color: palette.textPrimary,
+        ),
         titleMedium: TextStyle(
           fontSize: 16,
           fontWeight: FontWeight.w500,
+          color: palette.textPrimary,
+        ),
+        titleSmall: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
           color: palette.textPrimary,
         ),
         bodyLarge: TextStyle(
@@ -300,6 +306,18 @@ abstract final class AstralGameTheme {
           fontWeight: FontWeight.w500,
           letterSpacing: 0.3,
           color: palette.textSecondary,
+        ),
+        labelMedium: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.2,
+          color: palette.textSecondary,
+        ),
+        labelSmall: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w500,
+          letterSpacing: 0.2,
+          color: palette.textTertiary,
         ),
       ),
     );

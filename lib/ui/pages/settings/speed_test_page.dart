@@ -3,12 +3,12 @@ import 'dart:ui' as ui;
 
 import 'package:astral_game/data/models/speed_test_node.dart';
 import 'package:astral_game/data/services/isp_info_service.dart';
-import 'package:astral_game/data/services/screen_state_service.dart';
+import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/data/services/speed_test_service.dart';
 import 'package:astral_game/data/state/speed_test_state.dart';
 import 'package:astral_game/di.dart';
 import 'package:astral_game/ui/widgets/astral_card.dart';
-import 'package:astral_game/ui/widgets/empty_state_widget.dart';
+import 'package:astral_game/ui/widgets/empty_state.dart';
 import 'package:flutter/material.dart';
 import 'package:signals/signals_flutter.dart';
 
@@ -22,7 +22,6 @@ class SpeedTestPage extends StatefulWidget {
 class _SpeedTestPageState extends State<SpeedTestPage> {
   final SpeedTestState _state = getIt<SpeedTestState>();
   final IspInfoService _isp = getIt<IspInfoService>();
-  final ScreenStateService _screen = getIt<ScreenStateService>();
   EffectCleanup? _defaultsEffect;
 
   @override
@@ -52,7 +51,7 @@ class _SpeedTestPageState extends State<SpeedTestPage> {
       final loaded = _state.nodes.value;
       final loading = _state.loading.value;
       final error = _state.error.value;
-      final isNarrow = _screen.isNarrowSignal.value;
+      final isNarrow = MediaQuery.sizeOf(context).width < AppBreakpoints.narrow;
 
       return Scaffold(
         appBar: AppBar(
@@ -76,9 +75,9 @@ class _SpeedTestPageState extends State<SpeedTestPage> {
               message: message,
               onRetry: () => _state.loadNodes(forceRefresh: true),
             ),
-            (true, _, _) => const EmptyStateWidget(
+            (true, _, _) => const EmptyState(
               icon: Icons.speed_outlined,
-              message: '暂无测速节点',
+              title: '暂无测速节点',
               subtitle: '点右上角刷新重试',
             ),
             _ => isNarrow ? _narrowLayout() : _wideLayout(),
@@ -1247,9 +1246,9 @@ class _ErrorView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            EmptyStateWidget(
+            EmptyState(
               icon: Icons.speed_outlined,
-              message: '网络测速暂不可用',
+              title: '网络测速暂不可用',
               subtitle: message,
             ),
             const SizedBox(height: 16),

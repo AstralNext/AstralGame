@@ -115,12 +115,7 @@ class _BookmarksPageState extends State<BookmarksPage> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             PageHeader(
-              padding: EdgeInsetsDirectional.fromSTEB(
-                startPad,
-                12,
-                endPad,
-                8,
-              ),
+              padding: EdgeInsetsDirectional.fromSTEB(startPad, 12, endPad, 8),
               subtitle: q.isEmpty
                   ? '${all.length} 个房间'
                   : '找到 ${filtered.length} 个房间',
@@ -265,13 +260,11 @@ class _BookmarksPageState extends State<BookmarksPage> {
       slivers: [
         if (pinned.isNotEmpty) ...[
           SliverPadding(
-            padding: EdgeInsets.fromLTRB(startPadding, 12, 16, 0),
-            sliver: const SliverToBoxAdapter(
-              child: SectionHeader(title: '置顶'),
-            ),
+            padding: EdgeInsets.fromLTRB(startPadding, 12, endPadding, 0),
+            sliver: const SliverToBoxAdapter(child: SectionHeader(title: '置顶')),
           ),
           SliverPadding(
-            padding: EdgeInsets.fromLTRB(startPadding, 10, 16, 0),
+            padding: EdgeInsets.fromLTRB(startPadding, 10, endPadding, 0),
             sliver: SliverGrid(
               gridDelegate: gridDelegate,
               delegate: SliverChildBuilderDelegate(
@@ -283,13 +276,13 @@ class _BookmarksPageState extends State<BookmarksPage> {
         ],
         if (unpinned.isNotEmpty) ...[
           SliverPadding(
-            padding: EdgeInsets.fromLTRB(startPadding, 12, 16, 0),
+            padding: EdgeInsets.fromLTRB(startPadding, 12, endPadding, 0),
             sliver: SliverToBoxAdapter(
               child: SectionHeader(title: '全部收藏', count: unpinned.length),
             ),
           ),
           SliverPadding(
-            padding: EdgeInsets.fromLTRB(startPadding, 10, 16, 16),
+            padding: EdgeInsets.fromLTRB(startPadding, 10, endPadding, 16),
             sliver: SliverGrid(
               gridDelegate: gridDelegate,
               delegate: SliverChildBuilderDelegate(

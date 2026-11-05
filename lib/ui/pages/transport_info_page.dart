@@ -1,5 +1,6 @@
 import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/data/models/transport_mode.dart';
+import 'package:astral_game/ui/widgets/page_header.dart';
 import 'package:astral_game/ui/widgets/pear_transport_panel.dart';
 import 'package:astral_game/ui/widgets/steam_transport_panel.dart';
 import 'package:flutter/material.dart';
@@ -26,20 +27,34 @@ class TransportInfoPage extends StatelessWidget {
         ? AppDimensions.pagePaddingHMobile
         : AppDimensions.pagePaddingH;
 
-    return ListView(
-      controller: scrollController,
-      padding: EdgeInsetsDirectional.fromSTEB(
-        startPad,
-        AppDimensions.sectionGap,
-        endPad,
-        AppDimensions.listBottomWithNav(context),
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        switch (mode) {
-          TransportMode.steam => const SteamTransportPanel(),
-          TransportMode.pear => const PearTransportPanel(),
-          TransportMode.easytier => const SizedBox.shrink(),
-        },
+        PageHeader(
+          padding: EdgeInsetsDirectional.fromSTEB(startPad, 12, endPad, 8),
+          subtitle: '${mode.menuLabel} 组网状态',
+        ),
+        Expanded(
+          child: ListView(
+            controller: scrollController,
+            padding: EdgeInsetsDirectional.fromSTEB(
+              startPad,
+              4,
+              endPad,
+              // 窄屏为悬浮胶囊留出余量；宽屏没有底栏，只保留页面底部留白。
+              isNarrow
+                  ? AppDimensions.listBottomWithNav(context)
+                  : AppDimensions.pagePaddingBottom,
+            ),
+            children: [
+              switch (mode) {
+                TransportMode.steam => const SteamTransportPanel(),
+                TransportMode.pear => const PearTransportPanel(),
+                TransportMode.easytier => const SizedBox.shrink(),
+              },
+            ],
+          ),
+        ),
       ],
     );
   }

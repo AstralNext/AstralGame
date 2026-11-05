@@ -3,7 +3,6 @@ import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/models/game_catalog.dart';
 import 'package:astral_game/data/services/connection_service.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
-import 'package:astral_game/data/services/screen_state_service.dart';
 import 'package:astral_game/data/state/room_state.dart';
 import 'package:astral_game/data/state/settings_state.dart';
 import 'package:astral_game/di.dart';
@@ -18,13 +17,11 @@ class DashboardWideLayout extends StatelessWidget {
   const DashboardWideLayout({
     super.key,
     required this.nodeManagement,
-    required this.screenStateService,
     required this.roomState,
     required this.callbacks,
   });
 
   final NodeManagementService nodeManagement;
-  final ScreenStateService screenStateService;
   final RoomState roomState;
   final DashboardCallbacks callbacks;
 

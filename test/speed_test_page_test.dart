@@ -2,7 +2,6 @@ import 'package:astral_game/data/models/speed_test_node.dart';
 import 'package:astral_game/data/models/speed_test_result.dart';
 import 'package:astral_game/data/services/connectivity_status_service.dart';
 import 'package:astral_game/data/services/isp_info_service.dart';
-import 'package:astral_game/data/services/screen_state_service.dart';
 import 'package:astral_game/data/services/speed_test_service.dart';
 import 'package:astral_game/data/state/speed_test_state.dart';
 import 'package:astral_game/di.dart';
@@ -38,7 +37,6 @@ void main() {
     getIt.registerSingleton<IspInfoService>(
       IspInfoService(ConnectivityStatusService()),
     );
-    getIt.registerSingleton<ScreenStateService>(ScreenStateService());
   });
 
   tearDown(() => getIt.reset());
@@ -51,7 +49,6 @@ void main() {
       tester.view.physicalSize = size;
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
-      getIt<ScreenStateService>().updateScreenWidth(size.width);
 
       await tester.pumpWidget(const MaterialApp(home: SpeedTestPage()));
       await tester.pumpAndSettle();

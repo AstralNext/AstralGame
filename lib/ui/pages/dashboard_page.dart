@@ -6,7 +6,7 @@ import 'package:astral_game/data/models/game_catalog.dart';
 import 'package:astral_game/data/services/connection_service.dart';
 import 'package:astral_game/data/services/game_assist_rules_service.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
-import 'package:astral_game/data/services/screen_state_service.dart';
+
 import 'package:astral_game/data/services/share_code_service.dart';
 import 'package:astral_game/data/state/room_state.dart';
 import 'package:astral_game/config/app_dimensions.dart';
@@ -39,7 +39,7 @@ class DashboardPage extends StatefulWidget {
 class _DashboardPageState extends State<DashboardPage> {
   final NodeManagementService _nodeManagement = getIt<NodeManagementService>();
   final ConnectionService _connectionService = getIt<ConnectionService>();
-  final ScreenStateService _screenStateService = getIt<ScreenStateService>();
+
   final RoomState _roomState = getIt<RoomState>();
 
   Future<void> _handleShareRoom() async {
@@ -330,7 +330,7 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget build(BuildContext context) {
     return Watch((context) {
       _consumeForceEndNotice();
-      final isNarrow = _screenStateService.isNarrow;
+      final isNarrow = MediaQuery.sizeOf(context).width < AppBreakpoints.narrow;
       final callbacks = DashboardCallbacks(
         onCreateRoom: _handleCreateRoom,
         onJoinRoom: _handleJoinRoom,
@@ -355,7 +355,6 @@ class _DashboardPageState extends State<DashboardPage> {
               ),
               child: DashboardWideLayout(
                 nodeManagement: _nodeManagement,
-                screenStateService: _screenStateService,
                 roomState: _roomState,
                 callbacks: callbacks,
               ),

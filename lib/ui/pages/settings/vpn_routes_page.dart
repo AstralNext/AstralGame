@@ -3,7 +3,7 @@ import 'package:astral_game/data/services/app_settings_service.dart';
 import 'package:astral_game/data/state/vpn_state.dart';
 import 'package:astral_game/di.dart';
 import 'package:astral_game/ui/widgets/astral_card.dart';
-import 'package:astral_game/ui/widgets/empty_state_widget.dart';
+import 'package:astral_game/ui/widgets/empty_state.dart';
 import 'package:astral_game/utils/input_validator.dart';
 import 'package:flutter/material.dart';
 import 'package:signals/signals_flutter.dart';
@@ -13,7 +13,9 @@ class VpnRoutesPage extends StatelessWidget {
   const VpnRoutesPage({super.key});
 
   Future<void> _persist(VpnState vpn) async {
-    await getIt<AppSettingsService>().setCustomVpnRoutes(vpn.customRoutes.value);
+    await getIt<AppSettingsService>().setCustomVpnRoutes(
+      vpn.customRoutes.value,
+    );
   }
 
   Future<void> _editRoute(
@@ -115,26 +117,13 @@ class VpnRoutesPage extends StatelessWidget {
       body: Watch((context) {
         final routes = vpn.customRoutes.value;
         if (routes.isEmpty) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const EmptyStateWidget(
-                    icon: Icons.route_outlined,
-                    message: '尚未添加额外路由',
-                    subtitle: '默认仍包含虚拟网段、组播与广播',
-                  ),
-                  const SizedBox(height: 16),
-                  FilledButton.tonalIcon(
-                    onPressed: () => _editRoute(context),
-                    icon: const Icon(Icons.add),
-                    label: const Text('添加路由'),
-                  ),
-                ],
-              ),
-            ),
+          return EmptyState(
+            icon: Icons.route_outlined,
+            title: '尚未添加额外路由',
+            subtitle: '默认仍包含虚拟网段、组播与广播',
+            actionLabel: '添加路由',
+            actionIcon: Icons.add,
+            onAction: () => _editRoute(context),
           );
         }
         return ListView.separated(
@@ -160,11 +149,8 @@ class VpnRoutesPage extends StatelessWidget {
                     IconButton(
                       tooltip: '编辑',
                       icon: const Icon(Icons.edit_outlined),
-                      onPressed: () => _editRoute(
-                        context,
-                        index: index,
-                        initial: cidr,
-                      ),
+                      onPressed: () =>
+                          _editRoute(context, index: index, initial: cidr),
                     ),
                     IconButton(
                       tooltip: '删除',

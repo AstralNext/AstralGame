@@ -166,7 +166,7 @@ class DailySceneryCardState extends State<DailySceneryCard> {
 
   bool _isPhoneLayout() {
     if (!RuntimePlatform.isMobile) return false;
-    return MediaQuery.sizeOf(context).shortestSide < 600;
+    return MediaQuery.sizeOf(context).width < AppBreakpoints.narrow;
   }
 
   bool get _revealDownloadOnHover => RuntimePlatform.isDesktop;

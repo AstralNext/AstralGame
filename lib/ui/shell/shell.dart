@@ -12,7 +12,6 @@ import 'package:astral_game/data/services/firewall_service.dart';
 import 'package:astral_game/data/services/join_link_service.dart';
 import 'package:astral_game/data/services/network_optimize_service.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
-import 'package:astral_game/data/services/screen_state_service.dart';
 import 'package:astral_game/data/services/shell_navigation_service.dart';
 import 'package:astral_game/data/services/update_service.dart';
 import 'package:astral_game/data/state/bookmark_search_state.dart';
@@ -54,7 +53,6 @@ class Shell extends StatefulWidget {
 }
 
 class _ShellState extends State<Shell> with WindowListener, TrayListener {
-  late final ScreenStateService _screenStateService;
   late List<NavigationItem> _navigationItems;
 
   /// 当前导航项对应的联机模式；模式切换时重建服务器 Tab。
@@ -86,7 +84,6 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
   @override
   void initState() {
     super.initState();
-    _screenStateService = getIt<ScreenStateService>();
 
     _shellNavEffect = effect(() {
       final pending = getIt<ShellNavigationService>().pendingTabIndex.value;
@@ -520,7 +517,6 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
     final palette = context.astralPalette;
     final screenWidth = MediaQuery.sizeOf(context).width;
     final isCompact = screenWidth < AppBreakpoints.narrow;
-    _screenStateService.updateScreenWidth(screenWidth);
     // 手机端：收藏页才在悬浮底栏右侧留搜索位。
     final showBookmarkSearch =
         isCompact && _selectedIndex == _bookmarksTabIndex;

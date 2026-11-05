@@ -20,6 +20,7 @@ import 'package:astral_game/ui/widgets/confirm_dialog.dart';
 import 'package:astral_game/ui/widgets/edit_profile_dialog.dart';
 import 'package:astral_game/ui/widgets/fade_in_section.dart';
 import 'package:astral_game/ui/widgets/linux_capability_prompt.dart';
+import 'package:astral_game/ui/widgets/page_header.dart';
 import 'package:astral_game/ui/navigation/astral_page_route.dart';
 import 'package:astral_game/ui/widgets/theme_picker_sheet.dart';
 import 'package:astral_game/data/services/connection_service.dart';
@@ -120,15 +121,21 @@ class _SettingsMainPageState extends State<SettingsMainPage>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        PageHeader(
+          padding: EdgeInsetsDirectional.fromSTEB(startPad, 12, endPad, 8),
+          subtitle: '账号、外观与网络设置',
+        ),
         Expanded(
           child: ListView(
             controller: widget.scrollController,
             padding: EdgeInsetsDirectional.fromSTEB(
               startPad,
-              12,
+              4,
               endPad,
-              // 悬浮胶囊高度 + 系统底部安全区，避免最后一项被手势条/胶囊压住。
-              AppDimensions.listBottomWithNav(context),
+              // 窄屏为悬浮胶囊留出余量；宽屏没有底栏，只保留页面底部留白。
+              isNarrow
+                  ? AppDimensions.listBottomWithNav(context)
+                  : AppDimensions.pagePaddingBottom,
             ),
             children: [
               FadeInSection(
