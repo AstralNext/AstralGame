@@ -7,5 +7,6 @@
 | `msvcp140.dll` | MSVC C++ 运行时 |
 | `vcruntime140.dll` | MSVC 运行时 |
 | `vcruntime140_1.dll` | MSVC 运行时扩展 |
+| `steam_api64.dll` | Steam 直连（SDR 端口转发） |
 
 构建时复制到 `build/windows/.../Release/`。

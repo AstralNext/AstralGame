@@ -38,6 +38,8 @@ uuid = { version = "1", features = ["v4"] }
 x25519-dalek = "2"
 
 [target.'cfg(target_os = "windows")'.dependencies]
+steamworks = "0.13.1"
+wintun = "0.5.1"
 ipnetwork = "0.20"
 windows = { version = "0.52.0", features = [
     "Win32_NetworkManagement_WindowsFirewall",
@@ -63,6 +65,11 @@ windows = { version = "0.52.0", features = [
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
+
+# 本地补丁：上游 steamworks 0.13.1 没有暴露 SteamNetConnectionInfo_t.m_idPOPRelay，
+# 无法判断 SDR 连接走中继还是直连；vendor 副本补了 relay_pop() / pop_remote()。
+[patch.crates-io]
+steamworks = { path = "vendor/steamworks" }
 
 # 发行版瘦身：Rust 库是 Release 目录里最大的文件（默认配置下 30 MB+，大半是
 # 符号表和未合并的泛型代码）。不做 panic=abort——flutter_rust_bridge 依赖

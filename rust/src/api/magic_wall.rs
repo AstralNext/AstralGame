@@ -333,7 +333,7 @@ mod wfp_impl {
             protocol: Option<u8>,
             is_ipv6: bool,
         ) -> Result<u64> {
-            let mut data = create_filter(rule, layer_key, protocol, is_ipv6)?;
+            let data = create_filter(rule, layer_key, protocol, is_ipv6)?;
 
             let mut filter_id: u64 = 0;
             let result = unsafe {
@@ -367,6 +367,9 @@ mod wfp_impl {
         }
     }
 
+    /// 除 `filter` 外其余字段只用于持有 WFP 所需的堆内存/字符串生命周期，
+    /// 保证 `FwpmFilterAdd0` 调用期间指针有效，因此不读取它们。
+    #[allow(dead_code)]
     struct FilterData {
         filter: FWPM_FILTER0,
         conditions: Box<[FWPM_FILTER_CONDITION0]>,

@@ -150,7 +150,7 @@ fn find_wintun_adapters() -> Vec<String> {
                 }
             }
         }
-        cur = unsafe { adapter.Next };
+        cur = adapter.Next;
     }
     names
 }

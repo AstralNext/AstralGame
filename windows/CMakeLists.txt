@@ -89,7 +89,8 @@ if(PLUGIN_BUNDLED_LIBRARIES)
     COMPONENT Runtime)
 endif()
 
-# VPN / TUN 运行时 DLL（与 exe 同目录）；本地 flutter run / CI flutter build 均会 install。
+# VPN / TUN / Steam 运行时 DLL（与 exe 同目录）；本地 flutter run / CI flutter build 均会 install。
+# steam_api64.dll 来自 steamworks-sys 的 redistributable_bin/win64，Steam 直连模式必需。
 set(ASTRAL_DLL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../dlls")
 file(GLOB ASTRAL_RUNTIME_DLLS CONFIGURE_DEPENDS "${ASTRAL_DLL_DIR}/*.dll")
 if(NOT ASTRAL_RUNTIME_DLLS)

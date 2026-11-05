@@ -4333,11 +4333,13 @@ dependencies = [
  "serde",
  "serde_json",
  "socket2 0.5.10",
+ "steamworks",
  "tokio",
  "tokio-util",
  "tracing",
  "uuid",
  "windows 0.52.0",
+ "wintun",
  "x25519-dalek",
 ]
 
@@ -4817,6 +4819,22 @@ name = "stable_deref_trait"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
+
+[[package]]
+name = "steamworks"
+version = "0.13.1"
+dependencies = [
+ "bitflags 2.13.2",
+ "paste",
+ "steamworks-sys",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "steamworks-sys"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ae139f051204a4af015d4f0ed3a1f7a51020d03a44c7cf249168c543d88131e9"
 
 [[package]]
 name = "strsim"

@@ -6,3 +6,5 @@ pub mod magic_wall;
 pub mod forward;
 pub mod multicast;
 pub mod process;
+pub mod steam;
+pub mod pear;

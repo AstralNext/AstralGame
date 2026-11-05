@@ -1,0 +1,40 @@
+[package]
+name = "steamworks"
+version = "0.13.1"
+authors = ["Thinkofname"]
+description = "Provides rust friendly bindings to the steamworks sdk"
+license = "MIT / Apache-2.0"
+repository = "https://github.com/Noxime/steamworks-rs"
+documentation = "https://docs.rs/steamworks"
+keywords = ["steam", "gamedev"]
+categories = ["games"]
+edition = "2021"
+rust-version = "1.80.0"
+
+[features]
+default = []
+raw-bindings = []
+image = ["dep:image"]
+serde = ["dep:serde", "bitflags/serde"]
+
+[workspace]
+members = [
+    "./steamworks-sys",
+    "examples/chat-example",
+    "examples/workshop",
+    "examples/lobby",
+    "examples/networking-messages",
+    "examples/networking-sockets",
+    "examples/game-server",
+]
+
+[dependencies]
+steamworks-sys = { path = "./steamworks-sys", version = "0.13.0" }
+thiserror = "2.0"
+bitflags = "2.9"
+serde = { version = "1.0", features = ["derive"], optional = true }
+paste = "1.0.11"
+image = { version = "0.25.1", optional = true, default-features = false }
+
+[dev-dependencies]
+serial_test = "3.2"
