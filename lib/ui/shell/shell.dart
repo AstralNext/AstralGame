@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/models/active_room_session.dart';
+import 'package:astral_game/data/models/transport_mode.dart';
 import 'package:astral_game/data/services/app_settings_service.dart';
 import 'package:astral_game/data/services/connection_service.dart';
 import 'package:astral_game/data/services/firewall_service.dart';
@@ -36,6 +37,7 @@ import '../pages/bookmarks_page.dart';
 import '../pages/servers/server_dialog.dart';
 import '../pages/servers/servers_main_page.dart';
 import '../pages/settings/settings_main_page.dart';
+import '../pages/transport_info_page.dart';
 import '../widgets/navigation/bottom_nav.dart';
 import '../widgets/navigation/left_nav.dart';
 import '../widgets/navigation/navigation_item.dart';
@@ -53,7 +55,11 @@ class Shell extends StatefulWidget {
 
 class _ShellState extends State<Shell> with WindowListener, TrayListener {
   late final ScreenStateService _screenStateService;
-  late final List<NavigationItem> _navigationItems;
+  late List<NavigationItem> _navigationItems;
+
+  /// 当前导航项对应的联机模式；模式切换时重建服务器 Tab。
+  TransportMode _navTransportMode = TransportMode.easytier;
+  EffectCleanup? _transportModeEffect;
 
   /// 四个一级 Tab 各自的滚动控制器：重按当前 Tab 时回到顶部。
   late final List<ScrollController> _tabScrollControllers;
@@ -100,44 +106,14 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
       growable: false,
     );
 
-    _navigationItems = [
-      NavigationItem(
-        icon: Icons.sports_esports_outlined,
-        activeIcon: Icons.sports_esports,
-        label: '联机',
-        page: DashboardPage(
-          key: const PageStorageKey('dashboard'),
-          scrollController: _tabScrollControllers[0],
-        ),
-      ),
-      NavigationItem(
-        icon: Icons.dns_outlined,
-        activeIcon: Icons.dns,
-        label: '服务器',
-        page: ServersMainPage(
-          key: const PageStorageKey('servers'),
-          scrollController: _tabScrollControllers[1],
-        ),
-      ),
-      NavigationItem(
-        icon: Icons.bookmark_border_rounded,
-        activeIcon: Icons.bookmark_rounded,
-        label: '收藏',
-        page: BookmarksPage(
-          key: const PageStorageKey('bookmarks'),
-          scrollController: _tabScrollControllers[2],
-        ),
-      ),
-      NavigationItem(
-        icon: Icons.settings_outlined,
-        activeIcon: Icons.settings,
-        label: '设置',
-        page: SettingsMainPage(
-          key: const PageStorageKey('settings'),
-          scrollController: _tabScrollControllers[3],
-        ),
-      ),
-    ];
+    _navTransportMode = getIt<SettingsState>().transportMode.value;
+    _buildNavigationItems();
+    _transportModeEffect = effect(() {
+      final mode = getIt<SettingsState>().transportMode.value;
+      if (!mounted || mode == _navTransportMode) return;
+      _navTransportMode = mode;
+      setState(_buildNavigationItems);
+    });
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
@@ -146,6 +122,8 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
         await showEditProfileDialog(context, onboarding: true);
         if (!mounted) return;
       }
+      // Steam 模式：提前初始化 SteamAPI / SDR，把数秒的初始化移出「创建房间」点击。
+      unawaited(getIt<ConnectionService>().prewarmSteamTransport());
       // 自动进入设定好的收藏房间：先于更新检查发起，避免被网络检查拖住。
       unawaited(_autoEnterSelectedRoomIfNeeded());
       // 静默检查更新（业务时序统一封装在 UpdateService 内）
@@ -216,6 +194,7 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
   @override
   void dispose() {
     _shellNavEffect?.call();
+    _transportModeEffect?.call();
     for (final controller in _tabScrollControllers) {
       controller.dispose();
     }
@@ -368,6 +347,65 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
     }
   }
 
+  /// 依据联机模式重建一级 Tab。
+  ///
+  /// Steam / Pear 没有 EasyTier 服务器概念，服务器 Tab 直接换成对应驱动的
+  /// 运行时与房间信息页，避免同一条信息在设置页和服务器页重复展示。
+  void _buildNavigationItems() {
+    final mode = _navTransportMode;
+    final tunnel = mode.isTunnelTransport;
+    _navigationItems = [
+      NavigationItem(
+        icon: Icons.sports_esports_outlined,
+        activeIcon: Icons.sports_esports,
+        label: '联机',
+        page: DashboardPage(
+          key: const PageStorageKey('dashboard'),
+          scrollController: _tabScrollControllers[0],
+        ),
+      ),
+      NavigationItem(
+        icon: tunnel
+            ? (mode == TransportMode.steam
+                  ? Icons.cloud_outlined
+                  : Icons.hub_outlined)
+            : Icons.dns_outlined,
+        activeIcon: tunnel
+            ? (mode == TransportMode.steam ? Icons.cloud : Icons.hub)
+            : Icons.dns,
+        label: tunnel ? mode.menuLabel : '服务器',
+        page: tunnel
+            ? TransportInfoPage(
+                key: PageStorageKey('transport_${mode.storageValue}'),
+                mode: mode,
+                scrollController: _tabScrollControllers[1],
+              )
+            : ServersMainPage(
+                key: const PageStorageKey('servers'),
+                scrollController: _tabScrollControllers[1],
+              ),
+      ),
+      NavigationItem(
+        icon: Icons.bookmark_border_rounded,
+        activeIcon: Icons.bookmark_rounded,
+        label: '收藏',
+        page: BookmarksPage(
+          key: const PageStorageKey('bookmarks'),
+          scrollController: _tabScrollControllers[2],
+        ),
+      ),
+      NavigationItem(
+        icon: Icons.settings_outlined,
+        activeIcon: Icons.settings,
+        label: '设置',
+        page: SettingsMainPage(
+          key: const PageStorageKey('settings'),
+          scrollController: _tabScrollControllers[3],
+        ),
+      ),
+    ];
+  }
+
   void _handleDestinationSelected(int index) {
     if (index == _selectedIndex) {
       _handleTabReselect(index);
@@ -435,6 +473,10 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
       ];
     }
     if (_selectedIndex == _serversTabIndex) {
+      // Steam / Pear 模式下该 Tab 展示驱动信息，没有服务器可刷新或添加。
+      if (getIt<SettingsState>().transportMode.value.isTunnelTransport) {
+        return const [];
+      }
       final servers = getIt<ServerState>().servers.value;
       // 空态已有「添加服务器」CTA，不重复提供入口。
       if (servers.isEmpty) return const [];
@@ -635,17 +677,14 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
                 // 行动胶囊依赖服务器列表与探测状态，放在 Watch 里响应式更新。
                 child: Watch((navContext) {
                   // 读取 session 让联机状态点随进出房间响应式重建。
-                  final connected =
-                      getIt<RoomState>().session.value != null;
+                  final connected = getIt<RoomState>().session.value != null;
                   return BottomNav(
                     key: const ValueKey('bottom_nav'),
                     navigationItems: _navigationItems,
                     selectedIndex: _selectedIndex,
                     onSelected: _handleDestinationSelected,
                     trailingActions: _trailingActions(navContext),
-                    statusDots: connected
-                        ? const <int>{0}
-                        : const <int>{},
+                    statusDots: connected ? const <int>{0} : const <int>{},
                   );
                 }),
               )

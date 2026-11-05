@@ -5,6 +5,7 @@ import 'package:astral_game/config/network_constants.dart';
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/di.dart';
 import 'package:astral_game/data/models/bookmark.dart';
+import 'package:astral_game/data/models/transport_mode.dart';
 import 'package:astral_game/data/state/room_state.dart';
 import 'package:astral_game/data/state/settings_state.dart';
 import 'package:astral_game/data/state/update_state.dart';
@@ -21,6 +22,7 @@ import 'package:astral_game/ui/widgets/fade_in_section.dart';
 import 'package:astral_game/ui/widgets/linux_capability_prompt.dart';
 import 'package:astral_game/ui/navigation/astral_page_route.dart';
 import 'package:astral_game/ui/widgets/theme_picker_sheet.dart';
+import 'package:astral_game/data/services/connection_service.dart';
 import 'package:astral_game/data/services/firewall_service.dart';
 import 'package:astral_game/data/services/floating_overlay_service.dart';
 import 'package:astral_game/data/services/linux_capability_service.dart';
@@ -367,6 +369,26 @@ class _SettingsMainPageState extends State<SettingsMainPage>
     await overlay.show();
   }
 
+  /// 切换联机模式（EasyTier / Steam / Holepunch Pear）。
+  ///
+  /// 只影响下一次建房/进房：进行中的房间保持不变（连接中下拉本身已禁用）。
+  Future<void> _onTransportModeChanged(
+    SettingsState settingsState,
+    TransportMode mode,
+  ) async {
+    if (settingsState.transportMode.value == mode) return;
+    settingsState.transportMode.value = mode;
+    await settingsState.saveToPersistence();
+    // 切到 Steam 后立刻开始初始化，用户回到首页建房时不用再等 SteamAPI/SDR。
+    unawaited(getIt<ConnectionService>().prewarmSteamTransport());
+    if (!mounted) return;
+    showAppToast(context, switch (mode) {
+      TransportMode.easytier => '已切换到 EasyTier 组网：下次建房生效',
+      TransportMode.steam => '已切换到 Steam 组网：建房/进房改走 Steam 虚拟局域网，下次建房生效',
+      TransportMode.pear => '已切换到 Holepunch Pear 组网：经 HyperDHT 打洞/中继建网，下次建房生效',
+    });
+  }
+
   Widget _buildNetworkSection(SettingsState settingsState) {
     return Watch((context) {
       final roomState = getIt<RoomState>();
@@ -374,11 +396,42 @@ class _SettingsMainPageState extends State<SettingsMainPage>
       final virtualIp = settingsState.virtualIp.value;
       final virtualIpv6 = settingsState.virtualIpv6.value;
       final canEditNetwork = !roomState.isConnected.value;
+      // Steam / Pear 组网的虚拟 IP 由房主统一分配，EasyTier 的 DHCP / P2P 设置不适用。
+      final transportMode = settingsState.transportMode.value;
+      final tunnelMode = transportMode.isTunnelTransport;
       String changeableHint(String text) =>
           canEditNetwork ? '$text，更改后需重启房间生效' : '$text，更改后需重启房间生效；连接中不可修改';
       return AstralSettingsFormCard(
         title: '网络',
         rows: [
+          if (isTunnelTransportSupported)
+            (index, count) => AstralGroupedTile(
+              icon: Icons.cloud_queue_rounded,
+              label: '联机模式（网络驱动）',
+              subtitle: transportMode.description,
+              index: index,
+              count: count,
+              trailing: DropdownButtonHideUnderline(
+                child: DropdownButton<TransportMode>(
+                  value: transportMode,
+                  isDense: true,
+                  borderRadius: BorderRadius.circular(12),
+                  items: [
+                    for (final mode in TransportMode.values)
+                      DropdownMenuItem<TransportMode>(
+                        value: mode,
+                        child: Text(mode.menuLabel),
+                      ),
+                  ],
+                  onChanged: canEditNetwork
+                      ? (mode) {
+                          if (mode == null) return;
+                          _onTransportModeChanged(settingsState, mode);
+                        }
+                      : null,
+                ),
+              ),
+            ),
           if (RuntimePlatform.isWindows)
             (index, count) => Watch((context) {
               final firewall = getIt<FirewallService>();
@@ -397,17 +450,19 @@ class _SettingsMainPageState extends State<SettingsMainPage>
                 trailing: Switch.adaptive(value: disabled, onChanged: toggle),
               );
             }),
-          _switchRow(
-            icon: Icons.hub_outlined,
-            title: '禁用 P2P',
-            subtitle: () => changeableHint('仅通过中继通信'),
-            value: () => settingsState.disableP2p.value,
-            enabled: () => canEditNetwork,
-            onChanged: (v) {
-              settingsState.disableP2p.value = v;
-              settingsState.saveToPersistence();
-            },
-          ),
+          if (!tunnelMode) ...[
+            _switchRow(
+              icon: Icons.hub_outlined,
+              title: '禁用 P2P',
+              subtitle: () => changeableHint('仅通过中继通信'),
+              value: () => settingsState.disableP2p.value,
+              enabled: () => canEditNetwork,
+              onChanged: (v) {
+                settingsState.disableP2p.value = v;
+                settingsState.saveToPersistence();
+              },
+            ),
+          ],
           (index, count) => AstralGroupedTile(
             icon: Icons.speed_outlined,
             label: '网络测速',
@@ -443,43 +498,45 @@ class _SettingsMainPageState extends State<SettingsMainPage>
                 ),
               );
             }),
-          _switchRow(
-            icon: Icons.settings_ethernet_outlined,
-            title: '自动分配虚拟IP',
-            subtitle: () => changeableHint('关闭后可手动设置虚拟 IP'),
-            value: () => settingsState.isDhcp.value,
-            enabled: () => canEditNetwork,
-            onChanged: (value) {
-              settingsState.isDhcp.value = value;
-              settingsState.isDhcpv6.value = value;
-              settingsState.saveToPersistence();
-            },
-          ),
-          if (!isDhcp) ...[
-            (index, count) => AstralGroupedTile(
-              icon: Icons.lan_outlined,
-              label: '虚拟IPv4地址',
-              subtitle: virtualIp.isEmpty ? '未设置，点击填写' : virtualIp,
-              index: index,
-              count: count,
-              onTap: () => _editVirtualIp(settingsState),
-              trailing: FilledButton.tonal(
-                onPressed: () => _editVirtualIp(settingsState),
-                child: const Text('编辑'),
-              ),
+          if (!tunnelMode) ...[
+            _switchRow(
+              icon: Icons.settings_ethernet_outlined,
+              title: '自动分配虚拟IP',
+              subtitle: () => changeableHint('关闭后可手动设置虚拟 IP'),
+              value: () => settingsState.isDhcp.value,
+              enabled: () => canEditNetwork,
+              onChanged: (value) {
+                settingsState.isDhcp.value = value;
+                settingsState.isDhcpv6.value = value;
+                settingsState.saveToPersistence();
+              },
             ),
-            (index, count) => AstralGroupedTile(
-              icon: Icons.public_outlined,
-              label: '虚拟IPv6地址',
-              subtitle: virtualIpv6.isEmpty ? '未设置，点击填写' : virtualIpv6,
-              index: index,
-              count: count,
-              onTap: () => _editVirtualIpv6(settingsState),
-              trailing: FilledButton.tonal(
-                onPressed: () => _editVirtualIpv6(settingsState),
-                child: const Text('编辑'),
+            if (!isDhcp) ...[
+              (index, count) => AstralGroupedTile(
+                icon: Icons.lan_outlined,
+                label: '虚拟IPv4地址',
+                subtitle: virtualIp.isEmpty ? '未设置，点击填写' : virtualIp,
+                index: index,
+                count: count,
+                onTap: () => _editVirtualIp(settingsState),
+                trailing: FilledButton.tonal(
+                  onPressed: () => _editVirtualIp(settingsState),
+                  child: const Text('编辑'),
+                ),
               ),
-            ),
+              (index, count) => AstralGroupedTile(
+                icon: Icons.public_outlined,
+                label: '虚拟IPv6地址',
+                subtitle: virtualIpv6.isEmpty ? '未设置，点击填写' : virtualIpv6,
+                index: index,
+                count: count,
+                onTap: () => _editVirtualIpv6(settingsState),
+                trailing: FilledButton.tonal(
+                  onPressed: () => _editVirtualIpv6(settingsState),
+                  child: const Text('编辑'),
+                ),
+              ),
+            ],
           ],
           if (_isAndroid)
             (index, count) => AstralGroupedTile(
