@@ -814,9 +814,9 @@ const RoomInvitePayloadRecordSchema = Schema(
       name: r'gameName',
       type: IsarType.string,
     ),
-    r'hostPearKey': PropertySchema(
+    r'hostLegacyKey': PropertySchema(
       id: 3,
-      name: r'hostPearKey',
+      name: r'hostLegacyKey',
       type: IsarType.string,
     ),
     r'hostSteamId': PropertySchema(
@@ -870,7 +870,7 @@ int _roomInvitePayloadRecordEstimateSize(
   bytesCount += 3 + object.gameId.length * 3;
   bytesCount += 3 + object.gameName.length * 3;
   {
-    final value = object.hostPearKey;
+    final value = object.hostLegacyKey;
     if (value != null) {
       bytesCount += 3 + value.length * 3;
     }
@@ -908,7 +908,7 @@ void _roomInvitePayloadRecordSerialize(
   writer.writeString(offsets[0], object.displayName);
   writer.writeString(offsets[1], object.gameId);
   writer.writeString(offsets[2], object.gameName);
-  writer.writeString(offsets[3], object.hostPearKey);
+  writer.writeString(offsets[3], object.hostLegacyKey);
   writer.writeString(offsets[4], object.hostSteamId);
   writer.writeString(offsets[5], object.networkName);
   writer.writeString(offsets[6], object.networkSecret);
@@ -932,7 +932,7 @@ RoomInvitePayloadRecord _roomInvitePayloadRecordDeserialize(
   object.displayName = reader.readStringOrNull(offsets[0]);
   object.gameId = reader.readString(offsets[1]);
   object.gameName = reader.readString(offsets[2]);
-  object.hostPearKey = reader.readStringOrNull(offsets[3]);
+  object.hostLegacyKey = reader.readStringOrNull(offsets[3]);
   object.hostSteamId = reader.readStringOrNull(offsets[4]);
   object.networkName = reader.readString(offsets[5]);
   object.networkSecret = reader.readString(offsets[6]);
@@ -1569,10 +1569,10 @@ extension RoomInvitePayloadRecordQueryFilter
     RoomInvitePayloadRecord,
     QAfterFilterCondition
   >
-  hostPearKeyIsNull() {
+  hostLegacyKeyIsNull() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(
-        const FilterCondition.isNull(property: r'hostPearKey'),
+        const FilterCondition.isNull(property: r'hostLegacyKey'),
       );
     });
   }
@@ -1582,10 +1582,10 @@ extension RoomInvitePayloadRecordQueryFilter
     RoomInvitePayloadRecord,
     QAfterFilterCondition
   >
-  hostPearKeyIsNotNull() {
+  hostLegacyKeyIsNotNull() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(
-        const FilterCondition.isNotNull(property: r'hostPearKey'),
+        const FilterCondition.isNotNull(property: r'hostLegacyKey'),
       );
     });
   }
@@ -1595,11 +1595,11 @@ extension RoomInvitePayloadRecordQueryFilter
     RoomInvitePayloadRecord,
     QAfterFilterCondition
   >
-  hostPearKeyEqualTo(String? value, {bool caseSensitive = true}) {
+  hostLegacyKeyEqualTo(String? value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(
         FilterCondition.equalTo(
-          property: r'hostPearKey',
+          property: r'hostLegacyKey',
           value: value,
           caseSensitive: caseSensitive,
         ),
@@ -1612,7 +1612,7 @@ extension RoomInvitePayloadRecordQueryFilter
     RoomInvitePayloadRecord,
     QAfterFilterCondition
   >
-  hostPearKeyGreaterThan(
+  hostLegacyKeyGreaterThan(
     String? value, {
     bool include = false,
     bool caseSensitive = true,
@@ -1621,7 +1621,7 @@ extension RoomInvitePayloadRecordQueryFilter
       return query.addFilterCondition(
         FilterCondition.greaterThan(
           include: include,
-          property: r'hostPearKey',
+          property: r'hostLegacyKey',
           value: value,
           caseSensitive: caseSensitive,
         ),
@@ -1634,7 +1634,7 @@ extension RoomInvitePayloadRecordQueryFilter
     RoomInvitePayloadRecord,
     QAfterFilterCondition
   >
-  hostPearKeyLessThan(
+  hostLegacyKeyLessThan(
     String? value, {
     bool include = false,
     bool caseSensitive = true,
@@ -1643,7 +1643,7 @@ extension RoomInvitePayloadRecordQueryFilter
       return query.addFilterCondition(
         FilterCondition.lessThan(
           include: include,
-          property: r'hostPearKey',
+          property: r'hostLegacyKey',
           value: value,
           caseSensitive: caseSensitive,
         ),
@@ -1656,7 +1656,7 @@ extension RoomInvitePayloadRecordQueryFilter
     RoomInvitePayloadRecord,
     QAfterFilterCondition
   >
-  hostPearKeyBetween(
+  hostLegacyKeyBetween(
     String? lower,
     String? upper, {
     bool includeLower = true,
@@ -1666,7 +1666,7 @@ extension RoomInvitePayloadRecordQueryFilter
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(
         FilterCondition.between(
-          property: r'hostPearKey',
+          property: r'hostLegacyKey',
           lower: lower,
           includeLower: includeLower,
           upper: upper,
@@ -1682,11 +1682,11 @@ extension RoomInvitePayloadRecordQueryFilter
     RoomInvitePayloadRecord,
     QAfterFilterCondition
   >
-  hostPearKeyStartsWith(String value, {bool caseSensitive = true}) {
+  hostLegacyKeyStartsWith(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(
         FilterCondition.startsWith(
-          property: r'hostPearKey',
+          property: r'hostLegacyKey',
           value: value,
           caseSensitive: caseSensitive,
         ),
@@ -1699,11 +1699,11 @@ extension RoomInvitePayloadRecordQueryFilter
     RoomInvitePayloadRecord,
     QAfterFilterCondition
   >
-  hostPearKeyEndsWith(String value, {bool caseSensitive = true}) {
+  hostLegacyKeyEndsWith(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(
         FilterCondition.endsWith(
-          property: r'hostPearKey',
+          property: r'hostLegacyKey',
           value: value,
           caseSensitive: caseSensitive,
         ),
@@ -1716,11 +1716,11 @@ extension RoomInvitePayloadRecordQueryFilter
     RoomInvitePayloadRecord,
     QAfterFilterCondition
   >
-  hostPearKeyContains(String value, {bool caseSensitive = true}) {
+  hostLegacyKeyContains(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(
         FilterCondition.contains(
-          property: r'hostPearKey',
+          property: r'hostLegacyKey',
           value: value,
           caseSensitive: caseSensitive,
         ),
@@ -1733,11 +1733,11 @@ extension RoomInvitePayloadRecordQueryFilter
     RoomInvitePayloadRecord,
     QAfterFilterCondition
   >
-  hostPearKeyMatches(String pattern, {bool caseSensitive = true}) {
+  hostLegacyKeyMatches(String pattern, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(
         FilterCondition.matches(
-          property: r'hostPearKey',
+          property: r'hostLegacyKey',
           wildcard: pattern,
           caseSensitive: caseSensitive,
         ),
@@ -1750,10 +1750,10 @@ extension RoomInvitePayloadRecordQueryFilter
     RoomInvitePayloadRecord,
     QAfterFilterCondition
   >
-  hostPearKeyIsEmpty() {
+  hostLegacyKeyIsEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(
-        FilterCondition.equalTo(property: r'hostPearKey', value: ''),
+        FilterCondition.equalTo(property: r'hostLegacyKey', value: ''),
       );
     });
   }
@@ -1763,10 +1763,10 @@ extension RoomInvitePayloadRecordQueryFilter
     RoomInvitePayloadRecord,
     QAfterFilterCondition
   >
-  hostPearKeyIsNotEmpty() {
+  hostLegacyKeyIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(
-        FilterCondition.greaterThan(property: r'hostPearKey', value: ''),
+        FilterCondition.greaterThan(property: r'hostLegacyKey', value: ''),
       );
     });
   }

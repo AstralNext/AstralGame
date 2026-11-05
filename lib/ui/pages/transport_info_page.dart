@@ -1,7 +1,6 @@
 import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/data/models/transport_mode.dart';
 import 'package:astral_game/ui/widgets/page_header.dart';
-import 'package:astral_game/ui/widgets/pear_transport_panel.dart';
 import 'package:astral_game/ui/widgets/steam_transport_panel.dart';
 import 'package:flutter/material.dart';
 
@@ -49,7 +48,6 @@ class TransportInfoPage extends StatelessWidget {
             children: [
               switch (mode) {
                 TransportMode.steam => const SteamTransportPanel(),
-                TransportMode.pear => const PearTransportPanel(),
                 TransportMode.easytier => const SizedBox.shrink(),
               },
             ],

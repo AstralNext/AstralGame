@@ -381,7 +381,7 @@ class _SettingsMainPageState extends State<SettingsMainPage>
     await overlay.show();
   }
 
-  /// 切换联机模式（EasyTier / Steam / Holepunch Pear）。
+  /// 切换联机模式（EasyTier / Steam）。
   ///
   /// 只影响下一次建房/进房：进行中的房间保持不变（连接中下拉本身已禁用）。
   Future<void> _onTransportModeChanged(
@@ -397,7 +397,6 @@ class _SettingsMainPageState extends State<SettingsMainPage>
     showAppToast(context, switch (mode) {
       TransportMode.easytier => '已切换到 EasyTier 组网：下次建房生效',
       TransportMode.steam => '已切换到 Steam 组网：建房/进房改走 Steam 虚拟局域网，下次建房生效',
-      TransportMode.pear => '已切换到 Holepunch Pear 组网：经 HyperDHT 打洞/中继建网，下次建房生效',
     });
   }
 
@@ -408,7 +407,7 @@ class _SettingsMainPageState extends State<SettingsMainPage>
       final virtualIp = settingsState.virtualIp.value;
       final virtualIpv6 = settingsState.virtualIpv6.value;
       final canEditNetwork = !roomState.isConnected.value;
-      // Steam / Pear 组网的虚拟 IP 由房主统一分配，EasyTier 的 DHCP / P2P 设置不适用。
+      // Steam 组网的虚拟 IP 由房主统一分配，EasyTier 的 DHCP / P2P 设置不适用。
       final transportMode = settingsState.transportMode.value;
       final tunnelMode = transportMode.isTunnelTransport;
       String changeableHint(String text) =>

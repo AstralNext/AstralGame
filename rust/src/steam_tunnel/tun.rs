@@ -48,7 +48,7 @@ pub fn open(ip: Ipv4Addr, mtu: usize) -> Result<TunRoom, String> {
 
 /// 以指定网卡名 / GUID 打开虚拟网卡。
 ///
-/// 不同组网驱动各用一块网卡，避免 Steam / Pear 切换时互相复用同一适配器。
+/// 组网驱动使用独立网卡，避免与 EasyTier 复用同一适配器。
 pub fn open_named(
     ip: Ipv4Addr,
     mtu: usize,

@@ -9,7 +9,6 @@ import 'api/magic_wall.dart';
 import 'api/multicast.dart';
 import 'api/nt.dart';
 import 'api/p2p.dart';
-import 'api/pear.dart';
 import 'api/process.dart';
 import 'api/steam.dart';
 import 'dart:async';
@@ -73,7 +72,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => -697470894;
+  int get rustContentHash => 2026150445;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -234,54 +233,6 @@ abstract class RustLibApi extends BaseApi {
   });
 
   Future<int> crateApiP2PMyPeerId({required String instanceId});
-
-  Future<AppCallResultC> crateApiPearPearAppCall({
-    required int dstPeerId,
-    required String channel,
-    required BigInt requestId,
-    required List<int> payload,
-    required int flags,
-    required int timeoutMs,
-  });
-
-  Future<bool> crateApiPearPearAppCallReply({
-    required BigInt token,
-    required int status,
-    required String errorMsg,
-    required List<int> payload,
-  });
-
-  Future<void> crateApiPearPearAppNotify({
-    required int dstPeerId,
-    required String channel,
-    required List<int> payload,
-  });
-
-  Future<int> crateApiPearPearMyPeerId();
-
-  Future<PlatformInt64> crateApiPearPearPeerPing({
-    required int dstPeerId,
-    required int timeoutMs,
-  });
-
-  Future<PearRoomInfo> crateApiPearPearRoomInfo();
-
-  Future<PearRoomInfo> crateApiPearPearRoomInfoDefault();
-
-  Future<PearStatusInfo> crateApiPearPearStart({
-    required bool host,
-    required String hostKey,
-    required String joinToken,
-    required String nickname,
-  });
-
-  Future<PearStatusInfo> crateApiPearPearStatus();
-
-  Future<PearStatusInfo> crateApiPearPearStatusInfoDefault();
-
-  Future<void> crateApiPearPearStop();
-
-  Stream<AppInboundEventC> crateApiPearPearSubscribeAppInbound();
 
   Future<PlatformInt64> crateApiP2PPeerPing({
     required String instanceId,
@@ -1773,399 +1724,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: 'my_peer_id', argNames: ['instanceId']);
 
   @override
-  Future<AppCallResultC> crateApiPearPearAppCall({
-    required int dstPeerId,
-    required String channel,
-    required BigInt requestId,
-    required List<int> payload,
-    required int flags,
-    required int timeoutMs,
-  }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_u_32(dstPeerId, serializer);
-          sse_encode_String(channel, serializer);
-          sse_encode_u_64(requestId, serializer);
-          sse_encode_list_prim_u_8_loose(payload, serializer);
-          sse_encode_u_32(flags, serializer);
-          sse_encode_i_32(timeoutMs, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 41,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_app_call_result_c,
-          decodeErrorData: sse_decode_String,
-        ),
-        constMeta: kCrateApiPearPearAppCallConstMeta,
-        argValues: [dstPeerId, channel, requestId, payload, flags, timeoutMs],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kCrateApiPearPearAppCallConstMeta => const TaskConstMeta(
-    debugName: 'pear_app_call',
-    argNames: [
-      'dstPeerId',
-      'channel',
-      'requestId',
-      'payload',
-      'flags',
-      'timeoutMs',
-    ],
-  );
-
-  @override
-  Future<bool> crateApiPearPearAppCallReply({
-    required BigInt token,
-    required int status,
-    required String errorMsg,
-    required List<int> payload,
-  }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_u_64(token, serializer);
-          sse_encode_i_32(status, serializer);
-          sse_encode_String(errorMsg, serializer);
-          sse_encode_list_prim_u_8_loose(payload, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 42,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_bool,
-          decodeErrorData: sse_decode_String,
-        ),
-        constMeta: kCrateApiPearPearAppCallReplyConstMeta,
-        argValues: [token, status, errorMsg, payload],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kCrateApiPearPearAppCallReplyConstMeta =>
-      const TaskConstMeta(
-        debugName: 'pear_app_call_reply',
-        argNames: ['token', 'status', 'errorMsg', 'payload'],
-      );
-
-  @override
-  Future<void> crateApiPearPearAppNotify({
-    required int dstPeerId,
-    required String channel,
-    required List<int> payload,
-  }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_u_32(dstPeerId, serializer);
-          sse_encode_String(channel, serializer);
-          sse_encode_list_prim_u_8_loose(payload, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 43,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_unit,
-          decodeErrorData: sse_decode_String,
-        ),
-        constMeta: kCrateApiPearPearAppNotifyConstMeta,
-        argValues: [dstPeerId, channel, payload],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kCrateApiPearPearAppNotifyConstMeta => const TaskConstMeta(
-    debugName: 'pear_app_notify',
-    argNames: ['dstPeerId', 'channel', 'payload'],
-  );
-
-  @override
-  Future<int> crateApiPearPearMyPeerId() {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 44,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_u_32,
-          decodeErrorData: null,
-        ),
-        constMeta: kCrateApiPearPearMyPeerIdConstMeta,
-        argValues: [],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kCrateApiPearPearMyPeerIdConstMeta =>
-      const TaskConstMeta(debugName: 'pear_my_peer_id', argNames: []);
-
-  @override
-  Future<PlatformInt64> crateApiPearPearPeerPing({
-    required int dstPeerId,
-    required int timeoutMs,
-  }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_u_32(dstPeerId, serializer);
-          sse_encode_i_32(timeoutMs, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 45,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_i_64,
-          decodeErrorData: sse_decode_String,
-        ),
-        constMeta: kCrateApiPearPearPeerPingConstMeta,
-        argValues: [dstPeerId, timeoutMs],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kCrateApiPearPearPeerPingConstMeta => const TaskConstMeta(
-    debugName: 'pear_peer_ping',
-    argNames: ['dstPeerId', 'timeoutMs'],
-  );
-
-  @override
-  Future<PearRoomInfo> crateApiPearPearRoomInfo() {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 46,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_pear_room_info,
-          decodeErrorData: null,
-        ),
-        constMeta: kCrateApiPearPearRoomInfoConstMeta,
-        argValues: [],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kCrateApiPearPearRoomInfoConstMeta =>
-      const TaskConstMeta(debugName: 'pear_room_info', argNames: []);
-
-  @override
-  Future<PearRoomInfo> crateApiPearPearRoomInfoDefault() {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 47,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_pear_room_info,
-          decodeErrorData: null,
-        ),
-        constMeta: kCrateApiPearPearRoomInfoDefaultConstMeta,
-        argValues: [],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kCrateApiPearPearRoomInfoDefaultConstMeta =>
-      const TaskConstMeta(debugName: 'pear_room_info_default', argNames: []);
-
-  @override
-  Future<PearStatusInfo> crateApiPearPearStart({
-    required bool host,
-    required String hostKey,
-    required String joinToken,
-    required String nickname,
-  }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_bool(host, serializer);
-          sse_encode_String(hostKey, serializer);
-          sse_encode_String(joinToken, serializer);
-          sse_encode_String(nickname, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 48,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_pear_status_info,
-          decodeErrorData: sse_decode_String,
-        ),
-        constMeta: kCrateApiPearPearStartConstMeta,
-        argValues: [host, hostKey, joinToken, nickname],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kCrateApiPearPearStartConstMeta => const TaskConstMeta(
-    debugName: 'pear_start',
-    argNames: ['host', 'hostKey', 'joinToken', 'nickname'],
-  );
-
-  @override
-  Future<PearStatusInfo> crateApiPearPearStatus() {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 49,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_pear_status_info,
-          decodeErrorData: null,
-        ),
-        constMeta: kCrateApiPearPearStatusConstMeta,
-        argValues: [],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kCrateApiPearPearStatusConstMeta =>
-      const TaskConstMeta(debugName: 'pear_status', argNames: []);
-
-  @override
-  Future<PearStatusInfo> crateApiPearPearStatusInfoDefault() {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 50,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_pear_status_info,
-          decodeErrorData: null,
-        ),
-        constMeta: kCrateApiPearPearStatusInfoDefaultConstMeta,
-        argValues: [],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kCrateApiPearPearStatusInfoDefaultConstMeta =>
-      const TaskConstMeta(debugName: 'pear_status_info_default', argNames: []);
-
-  @override
-  Future<void> crateApiPearPearStop() {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 51,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_unit,
-          decodeErrorData: sse_decode_String,
-        ),
-        constMeta: kCrateApiPearPearStopConstMeta,
-        argValues: [],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kCrateApiPearPearStopConstMeta =>
-      const TaskConstMeta(debugName: 'pear_stop', argNames: []);
-
-  @override
-  Stream<AppInboundEventC> crateApiPearPearSubscribeAppInbound() {
-    final sink = RustStreamSink<AppInboundEventC>();
-    unawaited(
-      handler.executeNormal(
-        NormalTask(
-          callFfi: (port_) {
-            final serializer = SseSerializer(generalizedFrbRustBinding);
-            sse_encode_StreamSink_app_inbound_event_c_Sse(sink, serializer);
-            pdeCallFfi(
-              generalizedFrbRustBinding,
-              serializer,
-              funcId: 52,
-              port: port_,
-            );
-          },
-          codec: SseCodec(
-            decodeSuccessData: sse_decode_unit,
-            decodeErrorData: sse_decode_String,
-          ),
-          constMeta: kCrateApiPearPearSubscribeAppInboundConstMeta,
-          argValues: [sink],
-          apiImpl: this,
-        ),
-      ),
-    );
-    return sink.stream;
-  }
-
-  TaskConstMeta get kCrateApiPearPearSubscribeAppInboundConstMeta =>
-      const TaskConstMeta(
-        debugName: 'pear_subscribe_app_inbound',
-        argNames: ['sink'],
-      );
-
-  @override
   Future<PlatformInt64> crateApiP2PPeerPing({
     required String instanceId,
     required int dstPeerId,
@@ -2181,7 +1739,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 53,
+            funcId: 41,
             port: port_,
           );
         },
@@ -2210,7 +1768,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 54,
+            funcId: 42,
             port: port_,
           );
         },
@@ -2238,7 +1796,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 55,
+            funcId: 43,
             port: port_,
           );
         },
@@ -2273,7 +1831,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 56,
+            funcId: 44,
             port: port_,
           );
         },
@@ -2308,7 +1866,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 57,
+            funcId: 45,
             port: port_,
           );
         },
@@ -2345,7 +1903,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 58,
+            funcId: 46,
             port: port_,
           );
         },
@@ -2379,7 +1937,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 59,
+            funcId: 47,
             port: port_,
           );
         },
@@ -2408,7 +1966,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 60,
+            funcId: 48,
             port: port_,
           );
         },
@@ -2440,7 +1998,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 61,
+            funcId: 49,
             port: port_,
           );
         },
@@ -2477,7 +2035,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 62,
+            funcId: 50,
             port: port_,
           );
         },
@@ -2520,7 +2078,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 63,
+            funcId: 51,
             port: port_,
           );
         },
@@ -2565,7 +2123,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 64,
+            funcId: 52,
             port: port_,
           );
         },
@@ -2602,7 +2160,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 65,
+            funcId: 53,
             port: port_,
           );
         },
@@ -2632,7 +2190,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 66,
+            funcId: 54,
             port: port_,
           );
         },
@@ -2664,7 +2222,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 67,
+            funcId: 55,
             port: port_,
           );
         },
@@ -2693,7 +2251,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 68,
+            funcId: 56,
             port: port_,
           );
         },
@@ -2720,7 +2278,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 69,
+            funcId: 57,
             port: port_,
           );
         },
@@ -2756,7 +2314,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 70,
+            funcId: 58,
             port: port_,
           );
         },
@@ -2785,7 +2343,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 71,
+            funcId: 59,
             port: port_,
           );
         },
@@ -2812,7 +2370,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 72,
+            funcId: 60,
             port: port_,
           );
         },
@@ -2839,7 +2397,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 73,
+            funcId: 61,
             port: port_,
           );
         },
@@ -2869,7 +2427,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             pdeCallFfi(
               generalizedFrbRustBinding,
               serializer,
-              funcId: 74,
+              funcId: 62,
               port: port_,
             );
           },
@@ -2904,7 +2462,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             pdeCallFfi(
               generalizedFrbRustBinding,
               serializer,
-              funcId: 75,
+              funcId: 63,
               port: port_,
             );
           },
@@ -2936,7 +2494,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 76,
+            funcId: 64,
             port: port_,
           );
         },
@@ -2963,7 +2521,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 77,
+            funcId: 65,
             port: port_,
           );
         },
@@ -2993,7 +2551,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 78,
+            funcId: 66,
             port: port_,
           );
         },
@@ -3024,7 +2582,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 79,
+            funcId: 67,
             port: port_,
           );
         },
@@ -3054,7 +2612,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 80,
+            funcId: 68,
             port: port_,
           );
         },
@@ -3082,7 +2640,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 81,
+            funcId: 69,
             port: port_,
           );
         },
@@ -3118,7 +2676,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             pdeCallFfi(
               generalizedFrbRustBinding,
               serializer,
-              funcId: 82,
+              funcId: 70,
               port: port_,
             );
           },
@@ -3153,7 +2711,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             pdeCallFfi(
               generalizedFrbRustBinding,
               serializer,
-              funcId: 83,
+              funcId: 71,
               port: port_,
             );
           },
@@ -3185,7 +2743,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 84,
+            funcId: 72,
             port: port_,
           );
         },
@@ -3618,12 +3176,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  List<PearMemberInfo> dco_decode_list_pear_member_info(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return (raw as List<dynamic>).map(dco_decode_pear_member_info).toList();
-  }
-
-  @protected
   List<int> dco_decode_list_prim_u_16_loose(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as List<int>;
@@ -3714,62 +3266,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   PlatformInt64? dco_decode_opt_box_autoadd_i_64(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_i_64(raw);
-  }
-
-  @protected
-  PearMemberInfo dco_decode_pear_member_info(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    final arr = raw as List<dynamic>;
-    if (arr.length != 10)
-      throw Exception('unexpected arr length: expect 10 but see ${arr.length}');
-    return PearMemberInfo(
-      peerId: dco_decode_u_32(arr[0]),
-      pearKey: dco_decode_String(arr[1]),
-      nickname: dco_decode_String(arr[2]),
-      virtualIp: dco_decode_String(arr[3]),
-      latencyMs: dco_decode_u_32(arr[4]),
-      online: dco_decode_bool(arr[5]),
-      isHost: dco_decode_bool(arr[6]),
-      isSelf: dco_decode_bool(arr[7]),
-      bytesIn: dco_decode_u_64(arr[8]),
-      bytesOut: dco_decode_u_64(arr[9]),
-    );
-  }
-
-  @protected
-  PearRoomInfo dco_decode_pear_room_info(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    final arr = raw as List<dynamic>;
-    if (arr.length != 7)
-      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
-    return PearRoomInfo(
-      active: dco_decode_bool(arr[0]),
-      isHost: dco_decode_bool(arr[1]),
-      virtualIp: dco_decode_String(arr[2]),
-      network: dco_decode_String(arr[3]),
-      memberCount: dco_decode_u_32(arr[4]),
-      selfPeerId: dco_decode_u_32(arr[5]),
-      members: dco_decode_list_pear_member_info(arr[6]),
-    );
-  }
-
-  @protected
-  PearStatusInfo dco_decode_pear_status_info(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    final arr = raw as List<dynamic>;
-    if (arr.length != 9)
-      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
-    return PearStatusInfo(
-      ok: dco_decode_bool(arr[0]),
-      ready: dco_decode_bool(arr[1]),
-      hostKey: dco_decode_String(arr[2]),
-      nickname: dco_decode_String(arr[3]),
-      roomActive: dco_decode_bool(arr[4]),
-      isHost: dco_decode_bool(arr[5]),
-      virtualIp: dco_decode_String(arr[6]),
-      memberCount: dco_decode_u_32(arr[7]),
-      message: dco_decode_String(arr[8]),
-    );
   }
 
   @protected
@@ -4387,20 +3883,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  List<PearMemberInfo> sse_decode_list_pear_member_info(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-
-    final len_ = sse_decode_i_32(deserializer);
-    final ans_ = <PearMemberInfo>[];
-    for (var idx_ = 0; idx_ < len_; ++idx_) {
-      ans_.add(sse_decode_pear_member_info(deserializer));
-    }
-    return ans_;
-  }
-
-  @protected
   List<int> sse_decode_list_prim_u_16_loose(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     final len_ = sse_decode_i_32(deserializer);
@@ -4525,79 +4007,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     } else {
       return null;
     }
-  }
-
-  @protected
-  PearMemberInfo sse_decode_pear_member_info(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    final var_peerId = sse_decode_u_32(deserializer);
-    final var_pearKey = sse_decode_String(deserializer);
-    final var_nickname = sse_decode_String(deserializer);
-    final var_virtualIp = sse_decode_String(deserializer);
-    final var_latencyMs = sse_decode_u_32(deserializer);
-    final var_online = sse_decode_bool(deserializer);
-    final var_isHost = sse_decode_bool(deserializer);
-    final var_isSelf = sse_decode_bool(deserializer);
-    final var_bytesIn = sse_decode_u_64(deserializer);
-    final var_bytesOut = sse_decode_u_64(deserializer);
-    return PearMemberInfo(
-      peerId: var_peerId,
-      pearKey: var_pearKey,
-      nickname: var_nickname,
-      virtualIp: var_virtualIp,
-      latencyMs: var_latencyMs,
-      online: var_online,
-      isHost: var_isHost,
-      isSelf: var_isSelf,
-      bytesIn: var_bytesIn,
-      bytesOut: var_bytesOut,
-    );
-  }
-
-  @protected
-  PearRoomInfo sse_decode_pear_room_info(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    final var_active = sse_decode_bool(deserializer);
-    final var_isHost = sse_decode_bool(deserializer);
-    final var_virtualIp = sse_decode_String(deserializer);
-    final var_network = sse_decode_String(deserializer);
-    final var_memberCount = sse_decode_u_32(deserializer);
-    final var_selfPeerId = sse_decode_u_32(deserializer);
-    final var_members = sse_decode_list_pear_member_info(deserializer);
-    return PearRoomInfo(
-      active: var_active,
-      isHost: var_isHost,
-      virtualIp: var_virtualIp,
-      network: var_network,
-      memberCount: var_memberCount,
-      selfPeerId: var_selfPeerId,
-      members: var_members,
-    );
-  }
-
-  @protected
-  PearStatusInfo sse_decode_pear_status_info(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    final var_ok = sse_decode_bool(deserializer);
-    final var_ready = sse_decode_bool(deserializer);
-    final var_hostKey = sse_decode_String(deserializer);
-    final var_nickname = sse_decode_String(deserializer);
-    final var_roomActive = sse_decode_bool(deserializer);
-    final var_isHost = sse_decode_bool(deserializer);
-    final var_virtualIp = sse_decode_String(deserializer);
-    final var_memberCount = sse_decode_u_32(deserializer);
-    final var_message = sse_decode_String(deserializer);
-    return PearStatusInfo(
-      ok: var_ok,
-      ready: var_ready,
-      hostKey: var_hostKey,
-      nickname: var_nickname,
-      roomActive: var_roomActive,
-      isHost: var_isHost,
-      virtualIp: var_virtualIp,
-      memberCount: var_memberCount,
-      message: var_message,
-    );
   }
 
   @protected
@@ -5213,18 +4622,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_list_pear_member_info(
-    List<PearMemberInfo> self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_i_32(self.length, serializer);
-    for (final item in self) {
-      sse_encode_pear_member_info(item, serializer);
-    }
-  }
-
-  @protected
   void sse_encode_list_prim_u_16_loose(
     List<int> self,
     SseSerializer serializer,
@@ -5343,53 +4740,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     if (self != null) {
       sse_encode_box_autoadd_i_64(self, serializer);
     }
-  }
-
-  @protected
-  void sse_encode_pear_member_info(
-    PearMemberInfo self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_u_32(self.peerId, serializer);
-    sse_encode_String(self.pearKey, serializer);
-    sse_encode_String(self.nickname, serializer);
-    sse_encode_String(self.virtualIp, serializer);
-    sse_encode_u_32(self.latencyMs, serializer);
-    sse_encode_bool(self.online, serializer);
-    sse_encode_bool(self.isHost, serializer);
-    sse_encode_bool(self.isSelf, serializer);
-    sse_encode_u_64(self.bytesIn, serializer);
-    sse_encode_u_64(self.bytesOut, serializer);
-  }
-
-  @protected
-  void sse_encode_pear_room_info(PearRoomInfo self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_bool(self.active, serializer);
-    sse_encode_bool(self.isHost, serializer);
-    sse_encode_String(self.virtualIp, serializer);
-    sse_encode_String(self.network, serializer);
-    sse_encode_u_32(self.memberCount, serializer);
-    sse_encode_u_32(self.selfPeerId, serializer);
-    sse_encode_list_pear_member_info(self.members, serializer);
-  }
-
-  @protected
-  void sse_encode_pear_status_info(
-    PearStatusInfo self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_bool(self.ok, serializer);
-    sse_encode_bool(self.ready, serializer);
-    sse_encode_String(self.hostKey, serializer);
-    sse_encode_String(self.nickname, serializer);
-    sse_encode_bool(self.roomActive, serializer);
-    sse_encode_bool(self.isHost, serializer);
-    sse_encode_String(self.virtualIp, serializer);
-    sse_encode_u_32(self.memberCount, serializer);
-    sse_encode_String(self.message, serializer);
   }
 
   @protected

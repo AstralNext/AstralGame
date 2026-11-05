@@ -346,7 +346,7 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
 
   /// 依据联机模式重建一级 Tab。
   ///
-  /// Steam / Pear 没有 EasyTier 服务器概念，服务器 Tab 直接换成对应驱动的
+  /// Steam 没有 EasyTier 服务器概念，服务器 Tab 直接换成对应驱动的
   /// 运行时与房间信息页，避免同一条信息在设置页和服务器页重复展示。
   void _buildNavigationItems() {
     final mode = _navTransportMode;
@@ -470,7 +470,7 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
       ];
     }
     if (_selectedIndex == _serversTabIndex) {
-      // Steam / Pear 模式下该 Tab 展示驱动信息，没有服务器可刷新或添加。
+      // Steam 模式下该 Tab 展示驱动信息，没有服务器可刷新或添加。
       if (getIt<SettingsState>().transportMode.value.isTunnelTransport) {
         return const [];
       }

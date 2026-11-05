@@ -19,7 +19,6 @@ _RoomInvitePayload _$RoomInvitePayloadFromJson(Map<String, dynamic> json) =>
       displayName: json['display_name'] as String?,
       transport: json['transport'] as String? ?? 'easytier',
       hostSteamId: json['host_steam_id'] as String?,
-      hostPearKey: json['host_pear_key'] as String?,
     );
 
 Map<String, dynamic> _$RoomInvitePayloadToJson(_RoomInvitePayload instance) =>
@@ -33,5 +32,4 @@ Map<String, dynamic> _$RoomInvitePayloadToJson(_RoomInvitePayload instance) =>
       'display_name': instance.displayName,
       'transport': instance.transport,
       'host_steam_id': instance.hostSteamId,
-      'host_pear_key': instance.hostPearKey,
     };

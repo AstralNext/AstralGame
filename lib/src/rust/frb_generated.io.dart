@@ -9,7 +9,6 @@ import 'api/magic_wall.dart';
 import 'api/multicast.dart';
 import 'api/nt.dart';
 import 'api/p2p.dart';
-import 'api/pear.dart';
 import 'api/process.dart';
 import 'api/steam.dart';
 import 'dart:async';
@@ -205,9 +204,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<NodeHopStats> dco_decode_list_node_hop_stats(dynamic raw);
 
   @protected
-  List<PearMemberInfo> dco_decode_list_pear_member_info(dynamic raw);
-
-  @protected
   List<int> dco_decode_list_prim_u_16_loose(dynamic raw);
 
   @protected
@@ -236,15 +232,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   PlatformInt64? dco_decode_opt_box_autoadd_i_64(dynamic raw);
-
-  @protected
-  PearMemberInfo dco_decode_pear_member_info(dynamic raw);
-
-  @protected
-  PearRoomInfo dco_decode_pear_room_info(dynamic raw);
-
-  @protected
-  PearStatusInfo dco_decode_pear_status_info(dynamic raw);
 
   @protected
   (BigInt, BigInt, BigInt) dco_decode_record_usize_u_64_u_64(dynamic raw);
@@ -459,11 +446,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
-  List<PearMemberInfo> sse_decode_list_pear_member_info(
-    SseDeserializer deserializer,
-  );
-
-  @protected
   List<int> sse_decode_list_prim_u_16_loose(SseDeserializer deserializer);
 
   @protected
@@ -494,15 +476,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   PlatformInt64? sse_decode_opt_box_autoadd_i_64(SseDeserializer deserializer);
-
-  @protected
-  PearMemberInfo sse_decode_pear_member_info(SseDeserializer deserializer);
-
-  @protected
-  PearRoomInfo sse_decode_pear_room_info(SseDeserializer deserializer);
-
-  @protected
-  PearStatusInfo sse_decode_pear_status_info(SseDeserializer deserializer);
 
   @protected
   (BigInt, BigInt, BigInt) sse_decode_record_usize_u_64_u_64(
@@ -776,12 +749,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
-  void sse_encode_list_pear_member_info(
-    List<PearMemberInfo> self,
-    SseSerializer serializer,
-  );
-
-  @protected
   void sse_encode_list_prim_u_16_loose(
     List<int> self,
     SseSerializer serializer,
@@ -826,21 +793,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_i_64(
     PlatformInt64? self,
-    SseSerializer serializer,
-  );
-
-  @protected
-  void sse_encode_pear_member_info(
-    PearMemberInfo self,
-    SseSerializer serializer,
-  );
-
-  @protected
-  void sse_encode_pear_room_info(PearRoomInfo self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_pear_status_info(
-    PearStatusInfo self,
     SseSerializer serializer,
   );
 

@@ -11,37 +11,32 @@ part of 'active_room_session.dart';
 
 // dart format off
 T _$identity<T>(T value) => value;
-
 /// @nodoc
 mixin _$RoomInvitePayload {
 
- int get v;@JsonKey(name: 'game_id') String get gameId;@JsonKey(name: 'game_name') String get gameName;@JsonKey(name: 'network_name') String get networkName;@JsonKey(name: 'network_secret') String get networkSecret; List<PeerEndpoint> get peers;@JsonKey(name: 'display_name') String? get displayName;/// 传输方式：`easytier`（EasyTier 组网，默认）/ `steam`（SDR 虚拟局域网组网）
-/// / `pear`（Holepunch HyperDHT 组网）。
+ int get v;@JsonKey(name: 'game_id') String get gameId;@JsonKey(name: 'game_name') String get gameName;@JsonKey(name: 'network_name') String get networkName;@JsonKey(name: 'network_secret') String get networkSecret; List<PeerEndpoint> get peers;@JsonKey(name: 'display_name') String? get displayName;/// 传输方式：`easytier`（EasyTier 组网，默认）/ `steam`（SDR 虚拟局域网组网）。
 @JsonKey(name: 'transport') String get transport;/// Steam 模式下房主的 SteamID（客机据此建立 P2P 连接）。
-@JsonKey(name: 'host_steam_id') String? get hostSteamId;/// Pear 模式下房主的 HyperDHT 公钥（十六进制，客机据此建立打洞连接）。
-@JsonKey(name: 'host_pear_key') String? get hostPearKey;
+@JsonKey(name: 'host_steam_id') String? get hostSteamId;
 /// Create a copy of RoomInvitePayload
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
 @pragma('vm:prefer-inline')
 $RoomInvitePayloadCopyWith<RoomInvitePayload> get copyWith => _$RoomInvitePayloadCopyWithImpl<RoomInvitePayload>(this as RoomInvitePayload, _$identity);
 
-  /// Serializes this RoomInvitePayload to a JSON map.
-  Map<String, dynamic> toJson();
 
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is RoomInvitePayload&&(identical(other.v, v) || other.v == v)&&(identical(other.gameId, gameId) || other.gameId == gameId)&&(identical(other.gameName, gameName) || other.gameName == gameName)&&(identical(other.networkName, networkName) || other.networkName == networkName)&&(identical(other.networkSecret, networkSecret) || other.networkSecret == networkSecret)&&const DeepCollectionEquality().equals(other.peers, peers)&&(identical(other.displayName, displayName) || other.displayName == displayName)&&(identical(other.transport, transport) || other.transport == transport)&&(identical(other.hostSteamId, hostSteamId) || other.hostSteamId == hostSteamId)&&(identical(other.hostPearKey, hostPearKey) || other.hostPearKey == hostPearKey));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is RoomInvitePayload&&(identical(other.v, v) || other.v == v)&&(identical(other.gameId, gameId) || other.gameId == gameId)&&(identical(other.gameName, gameName) || other.gameName == gameName)&&(identical(other.networkName, networkName) || other.networkName == networkName)&&(identical(other.networkSecret, networkSecret) || other.networkSecret == networkSecret)&&const DeepCollectionEquality().equals(other.peers, peers)&&(identical(other.displayName, displayName) || other.displayName == displayName)&&(identical(other.transport, transport) || other.transport == transport)&&(identical(other.hostSteamId, hostSteamId) || other.hostSteamId == hostSteamId));
 }
 
-@JsonKey(includeFromJson: false, includeToJson: false)
+
 @override
-int get hashCode => Object.hash(runtimeType,v,gameId,gameName,networkName,networkSecret,const DeepCollectionEquality().hash(peers),displayName,transport,hostSteamId,hostPearKey);
+int get hashCode => Object.hash(runtimeType,v,gameId,gameName,networkName,networkSecret,const DeepCollectionEquality().hash(peers),displayName,transport,hostSteamId);
 
 @override
 String toString() {
-  return 'RoomInvitePayload(v: $v, gameId: $gameId, gameName: $gameName, networkName: $networkName, networkSecret: $networkSecret, peers: $peers, displayName: $displayName, transport: $transport, hostSteamId: $hostSteamId, hostPearKey: $hostPearKey)';
+  return 'RoomInvitePayload(v: $v, gameId: $gameId, gameName: $gameName, networkName: $networkName, networkSecret: $networkSecret, peers: $peers, displayName: $displayName, transport: $transport, hostSteamId: $hostSteamId)';
 }
 
 
@@ -52,7 +47,7 @@ abstract mixin class $RoomInvitePayloadCopyWith<$Res>  {
   factory $RoomInvitePayloadCopyWith(RoomInvitePayload value, $Res Function(RoomInvitePayload) _then) = _$RoomInvitePayloadCopyWithImpl;
 @useResult
 $Res call({
- int v,@JsonKey(name: 'game_id') String gameId,@JsonKey(name: 'game_name') String gameName,@JsonKey(name: 'network_name') String networkName,@JsonKey(name: 'network_secret') String networkSecret, List<PeerEndpoint> peers,@JsonKey(name: 'display_name') String? displayName,@JsonKey(name: 'transport') String transport,@JsonKey(name: 'host_steam_id') String? hostSteamId,@JsonKey(name: 'host_pear_key') String? hostPearKey
+ int v,@JsonKey(name: 'game_id') String gameId,@JsonKey(name: 'game_name') String gameName,@JsonKey(name: 'network_name') String networkName,@JsonKey(name: 'network_secret') String networkSecret, List<PeerEndpoint> peers,@JsonKey(name: 'display_name') String? displayName,@JsonKey(name: 'transport') String transport,@JsonKey(name: 'host_steam_id') String? hostSteamId
 });
 
 
@@ -69,7 +64,7 @@ class _$RoomInvitePayloadCopyWithImpl<$Res>
 
 /// Create a copy of RoomInvitePayload
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? v = null,Object? gameId = null,Object? gameName = null,Object? networkName = null,Object? networkSecret = null,Object? peers = null,Object? displayName = freezed,Object? transport = null,Object? hostSteamId = freezed,Object? hostPearKey = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? v = null,Object? gameId = null,Object? gameName = null,Object? networkName = null,Object? networkSecret = null,Object? peers = null,Object? displayName = freezed,Object? transport = null,Object? hostSteamId = freezed,}) {
   return _then(_self.copyWith(
 v: null == v ? _self.v : v // ignore: cast_nullable_to_non_nullable
 as int,gameId: null == gameId ? _self.gameId : gameId // ignore: cast_nullable_to_non_nullable
@@ -80,7 +75,6 @@ as String,peers: null == peers ? _self.peers : peers // ignore: cast_nullable_to
 as List<PeerEndpoint>,displayName: freezed == displayName ? _self.displayName : displayName // ignore: cast_nullable_to_non_nullable
 as String?,transport: null == transport ? _self.transport : transport // ignore: cast_nullable_to_non_nullable
 as String,hostSteamId: freezed == hostSteamId ? _self.hostSteamId : hostSteamId // ignore: cast_nullable_to_non_nullable
-as String?,hostPearKey: freezed == hostPearKey ? _self.hostPearKey : hostPearKey // ignore: cast_nullable_to_non_nullable
 as String?,
   ));
 }
@@ -166,10 +160,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int v, @JsonKey(name: 'game_id')  String gameId, @JsonKey(name: 'game_name')  String gameName, @JsonKey(name: 'network_name')  String networkName, @JsonKey(name: 'network_secret')  String networkSecret,  List<PeerEndpoint> peers, @JsonKey(name: 'display_name')  String? displayName, @JsonKey(name: 'transport')  String transport, @JsonKey(name: 'host_steam_id')  String? hostSteamId, @JsonKey(name: 'host_pear_key')  String? hostPearKey)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int v, @JsonKey(name: 'game_id')  String gameId, @JsonKey(name: 'game_name')  String gameName, @JsonKey(name: 'network_name')  String networkName, @JsonKey(name: 'network_secret')  String networkSecret,  List<PeerEndpoint> peers, @JsonKey(name: 'display_name')  String? displayName, @JsonKey(name: 'transport')  String transport, @JsonKey(name: 'host_steam_id')  String? hostSteamId)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _RoomInvitePayload() when $default != null:
-return $default(_that.v,_that.gameId,_that.gameName,_that.networkName,_that.networkSecret,_that.peers,_that.displayName,_that.transport,_that.hostSteamId,_that.hostPearKey);case _:
+return $default(_that.v,_that.gameId,_that.gameName,_that.networkName,_that.networkSecret,_that.peers,_that.displayName,_that.transport,_that.hostSteamId);case _:
   return orElse();
 
 }
@@ -187,10 +181,10 @@ return $default(_that.v,_that.gameId,_that.gameName,_that.networkName,_that.netw
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int v, @JsonKey(name: 'game_id')  String gameId, @JsonKey(name: 'game_name')  String gameName, @JsonKey(name: 'network_name')  String networkName, @JsonKey(name: 'network_secret')  String networkSecret,  List<PeerEndpoint> peers, @JsonKey(name: 'display_name')  String? displayName, @JsonKey(name: 'transport')  String transport, @JsonKey(name: 'host_steam_id')  String? hostSteamId, @JsonKey(name: 'host_pear_key')  String? hostPearKey)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int v, @JsonKey(name: 'game_id')  String gameId, @JsonKey(name: 'game_name')  String gameName, @JsonKey(name: 'network_name')  String networkName, @JsonKey(name: 'network_secret')  String networkSecret,  List<PeerEndpoint> peers, @JsonKey(name: 'display_name')  String? displayName, @JsonKey(name: 'transport')  String transport, @JsonKey(name: 'host_steam_id')  String? hostSteamId)  $default,) {final _that = this;
 switch (_that) {
 case _RoomInvitePayload():
-return $default(_that.v,_that.gameId,_that.gameName,_that.networkName,_that.networkSecret,_that.peers,_that.displayName,_that.transport,_that.hostSteamId,_that.hostPearKey);case _:
+return $default(_that.v,_that.gameId,_that.gameName,_that.networkName,_that.networkSecret,_that.peers,_that.displayName,_that.transport,_that.hostSteamId);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -207,10 +201,10 @@ return $default(_that.v,_that.gameId,_that.gameName,_that.networkName,_that.netw
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int v, @JsonKey(name: 'game_id')  String gameId, @JsonKey(name: 'game_name')  String gameName, @JsonKey(name: 'network_name')  String networkName, @JsonKey(name: 'network_secret')  String networkSecret,  List<PeerEndpoint> peers, @JsonKey(name: 'display_name')  String? displayName, @JsonKey(name: 'transport')  String transport, @JsonKey(name: 'host_steam_id')  String? hostSteamId, @JsonKey(name: 'host_pear_key')  String? hostPearKey)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int v, @JsonKey(name: 'game_id')  String gameId, @JsonKey(name: 'game_name')  String gameName, @JsonKey(name: 'network_name')  String networkName, @JsonKey(name: 'network_secret')  String networkSecret,  List<PeerEndpoint> peers, @JsonKey(name: 'display_name')  String? displayName, @JsonKey(name: 'transport')  String transport, @JsonKey(name: 'host_steam_id')  String? hostSteamId)?  $default,) {final _that = this;
 switch (_that) {
 case _RoomInvitePayload() when $default != null:
-return $default(_that.v,_that.gameId,_that.gameName,_that.networkName,_that.networkSecret,_that.peers,_that.displayName,_that.transport,_that.hostSteamId,_that.hostPearKey);case _:
+return $default(_that.v,_that.gameId,_that.gameName,_that.networkName,_that.networkSecret,_that.peers,_that.displayName,_that.transport,_that.hostSteamId);case _:
   return null;
 
 }
@@ -222,8 +216,8 @@ return $default(_that.v,_that.gameId,_that.gameName,_that.networkName,_that.netw
 
 @JsonSerializable(explicitToJson: true)
 class _RoomInvitePayload extends RoomInvitePayload {
-  const _RoomInvitePayload({this.v = 1, @JsonKey(name: 'game_id') required this.gameId, @JsonKey(name: 'game_name') required this.gameName, @JsonKey(name: 'network_name') required this.networkName, @JsonKey(name: 'network_secret') required this.networkSecret, required final  List<PeerEndpoint> peers, @JsonKey(name: 'display_name') this.displayName, @JsonKey(name: 'transport') this.transport = 'easytier', @JsonKey(name: 'host_steam_id') this.hostSteamId, @JsonKey(name: 'host_pear_key') this.hostPearKey}): _peers = peers,super._();
-  factory _RoomInvitePayload.fromJson(Map<String, dynamic> json) => _$RoomInvitePayloadFromJson(json);
+  const _RoomInvitePayload({this.v = 1, @JsonKey(name: 'game_id') required this.gameId, @JsonKey(name: 'game_name') required this.gameName, @JsonKey(name: 'network_name') required this.networkName, @JsonKey(name: 'network_secret') required this.networkSecret, required final  List<PeerEndpoint> peers, @JsonKey(name: 'display_name') this.displayName, @JsonKey(name: 'transport') this.transport = 'easytier', @JsonKey(name: 'host_steam_id') this.hostSteamId}): _peers = peers,super._();
+  
 
 @override@JsonKey() final  int v;
 @override@JsonKey(name: 'game_id') final  String gameId;
@@ -238,13 +232,10 @@ class _RoomInvitePayload extends RoomInvitePayload {
 }
 
 @override@JsonKey(name: 'display_name') final  String? displayName;
-/// 传输方式：`easytier`（EasyTier 组网，默认）/ `steam`（SDR 虚拟局域网组网）
-/// / `pear`（Holepunch HyperDHT 组网）。
+/// 传输方式：`easytier`（EasyTier 组网，默认）/ `steam`（SDR 虚拟局域网组网）。
 @override@JsonKey(name: 'transport') final  String transport;
 /// Steam 模式下房主的 SteamID（客机据此建立 P2P 连接）。
 @override@JsonKey(name: 'host_steam_id') final  String? hostSteamId;
-/// Pear 模式下房主的 HyperDHT 公钥（十六进制，客机据此建立打洞连接）。
-@override@JsonKey(name: 'host_pear_key') final  String? hostPearKey;
 
 /// Create a copy of RoomInvitePayload
 /// with the given fields replaced by the non-null parameter values.
@@ -252,23 +243,20 @@ class _RoomInvitePayload extends RoomInvitePayload {
 @pragma('vm:prefer-inline')
 _$RoomInvitePayloadCopyWith<_RoomInvitePayload> get copyWith => __$RoomInvitePayloadCopyWithImpl<_RoomInvitePayload>(this, _$identity);
 
-@override
-Map<String, dynamic> toJson() {
-  return _$RoomInvitePayloadToJson(this, );
-}
+
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _RoomInvitePayload&&(identical(other.v, v) || other.v == v)&&(identical(other.gameId, gameId) || other.gameId == gameId)&&(identical(other.gameName, gameName) || other.gameName == gameName)&&(identical(other.networkName, networkName) || other.networkName == networkName)&&(identical(other.networkSecret, networkSecret) || other.networkSecret == networkSecret)&&const DeepCollectionEquality().equals(other._peers, _peers)&&(identical(other.displayName, displayName) || other.displayName == displayName)&&(identical(other.transport, transport) || other.transport == transport)&&(identical(other.hostSteamId, hostSteamId) || other.hostSteamId == hostSteamId)&&(identical(other.hostPearKey, hostPearKey) || other.hostPearKey == hostPearKey));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _RoomInvitePayload&&(identical(other.v, v) || other.v == v)&&(identical(other.gameId, gameId) || other.gameId == gameId)&&(identical(other.gameName, gameName) || other.gameName == gameName)&&(identical(other.networkName, networkName) || other.networkName == networkName)&&(identical(other.networkSecret, networkSecret) || other.networkSecret == networkSecret)&&const DeepCollectionEquality().equals(other._peers, _peers)&&(identical(other.displayName, displayName) || other.displayName == displayName)&&(identical(other.transport, transport) || other.transport == transport)&&(identical(other.hostSteamId, hostSteamId) || other.hostSteamId == hostSteamId));
 }
 
-@JsonKey(includeFromJson: false, includeToJson: false)
+
 @override
-int get hashCode => Object.hash(runtimeType,v,gameId,gameName,networkName,networkSecret,const DeepCollectionEquality().hash(_peers),displayName,transport,hostSteamId,hostPearKey);
+int get hashCode => Object.hash(runtimeType,v,gameId,gameName,networkName,networkSecret,const DeepCollectionEquality().hash(_peers),displayName,transport,hostSteamId);
 
 @override
 String toString() {
-  return 'RoomInvitePayload(v: $v, gameId: $gameId, gameName: $gameName, networkName: $networkName, networkSecret: $networkSecret, peers: $peers, displayName: $displayName, transport: $transport, hostSteamId: $hostSteamId, hostPearKey: $hostPearKey)';
+  return 'RoomInvitePayload(v: $v, gameId: $gameId, gameName: $gameName, networkName: $networkName, networkSecret: $networkSecret, peers: $peers, displayName: $displayName, transport: $transport, hostSteamId: $hostSteamId)';
 }
 
 
@@ -279,7 +267,7 @@ abstract mixin class _$RoomInvitePayloadCopyWith<$Res> implements $RoomInvitePay
   factory _$RoomInvitePayloadCopyWith(_RoomInvitePayload value, $Res Function(_RoomInvitePayload) _then) = __$RoomInvitePayloadCopyWithImpl;
 @override @useResult
 $Res call({
- int v,@JsonKey(name: 'game_id') String gameId,@JsonKey(name: 'game_name') String gameName,@JsonKey(name: 'network_name') String networkName,@JsonKey(name: 'network_secret') String networkSecret, List<PeerEndpoint> peers,@JsonKey(name: 'display_name') String? displayName,@JsonKey(name: 'transport') String transport,@JsonKey(name: 'host_steam_id') String? hostSteamId,@JsonKey(name: 'host_pear_key') String? hostPearKey
+ int v,@JsonKey(name: 'game_id') String gameId,@JsonKey(name: 'game_name') String gameName,@JsonKey(name: 'network_name') String networkName,@JsonKey(name: 'network_secret') String networkSecret, List<PeerEndpoint> peers,@JsonKey(name: 'display_name') String? displayName,@JsonKey(name: 'transport') String transport,@JsonKey(name: 'host_steam_id') String? hostSteamId
 });
 
 
@@ -296,7 +284,7 @@ class __$RoomInvitePayloadCopyWithImpl<$Res>
 
 /// Create a copy of RoomInvitePayload
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? v = null,Object? gameId = null,Object? gameName = null,Object? networkName = null,Object? networkSecret = null,Object? peers = null,Object? displayName = freezed,Object? transport = null,Object? hostSteamId = freezed,Object? hostPearKey = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? v = null,Object? gameId = null,Object? gameName = null,Object? networkName = null,Object? networkSecret = null,Object? peers = null,Object? displayName = freezed,Object? transport = null,Object? hostSteamId = freezed,}) {
   return _then(_RoomInvitePayload(
 v: null == v ? _self.v : v // ignore: cast_nullable_to_non_nullable
 as int,gameId: null == gameId ? _self.gameId : gameId // ignore: cast_nullable_to_non_nullable
@@ -307,7 +295,6 @@ as String,peers: null == peers ? _self._peers : peers // ignore: cast_nullable_t
 as List<PeerEndpoint>,displayName: freezed == displayName ? _self.displayName : displayName // ignore: cast_nullable_to_non_nullable
 as String?,transport: null == transport ? _self.transport : transport // ignore: cast_nullable_to_non_nullable
 as String,hostSteamId: freezed == hostSteamId ? _self.hostSteamId : hostSteamId // ignore: cast_nullable_to_non_nullable
-as String?,hostPearKey: freezed == hostPearKey ? _self.hostPearKey : hostPearKey // ignore: cast_nullable_to_non_nullable
 as String?,
   ));
 }
@@ -318,9 +305,8 @@ as String?,
 /// @nodoc
 mixin _$ActiveRoomSession {
 
- bool get isHost; String get gameId; String get gameName; String get networkName; String get networkSecret; String get displayName; String? get shortCode; List<PeerEndpoint> get peers;/// 传输方式：`easytier`（默认）/ `steam` / `pear`。
- String get transport; String? get hostSteamId;/// Pear 模式下房主的 HyperDHT 公钥（十六进制）。
- String? get hostPearKey;
+ bool get isHost; String get gameId; String get gameName; String get networkName; String get networkSecret; String get displayName; String? get shortCode; List<PeerEndpoint> get peers;/// 传输方式：`easytier`（默认）/ `steam`。
+ String get transport; String? get hostSteamId;
 /// Create a copy of ActiveRoomSession
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -331,16 +317,16 @@ $ActiveRoomSessionCopyWith<ActiveRoomSession> get copyWith => _$ActiveRoomSessio
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is ActiveRoomSession&&(identical(other.isHost, isHost) || other.isHost == isHost)&&(identical(other.gameId, gameId) || other.gameId == gameId)&&(identical(other.gameName, gameName) || other.gameName == gameName)&&(identical(other.networkName, networkName) || other.networkName == networkName)&&(identical(other.networkSecret, networkSecret) || other.networkSecret == networkSecret)&&(identical(other.displayName, displayName) || other.displayName == displayName)&&(identical(other.shortCode, shortCode) || other.shortCode == shortCode)&&const DeepCollectionEquality().equals(other.peers, peers)&&(identical(other.transport, transport) || other.transport == transport)&&(identical(other.hostSteamId, hostSteamId) || other.hostSteamId == hostSteamId)&&(identical(other.hostPearKey, hostPearKey) || other.hostPearKey == hostPearKey));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ActiveRoomSession&&(identical(other.isHost, isHost) || other.isHost == isHost)&&(identical(other.gameId, gameId) || other.gameId == gameId)&&(identical(other.gameName, gameName) || other.gameName == gameName)&&(identical(other.networkName, networkName) || other.networkName == networkName)&&(identical(other.networkSecret, networkSecret) || other.networkSecret == networkSecret)&&(identical(other.displayName, displayName) || other.displayName == displayName)&&(identical(other.shortCode, shortCode) || other.shortCode == shortCode)&&const DeepCollectionEquality().equals(other.peers, peers)&&(identical(other.transport, transport) || other.transport == transport)&&(identical(other.hostSteamId, hostSteamId) || other.hostSteamId == hostSteamId));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,isHost,gameId,gameName,networkName,networkSecret,displayName,shortCode,const DeepCollectionEquality().hash(peers),transport,hostSteamId,hostPearKey);
+int get hashCode => Object.hash(runtimeType,isHost,gameId,gameName,networkName,networkSecret,displayName,shortCode,const DeepCollectionEquality().hash(peers),transport,hostSteamId);
 
 @override
 String toString() {
-  return 'ActiveRoomSession(isHost: $isHost, gameId: $gameId, gameName: $gameName, networkName: $networkName, networkSecret: $networkSecret, displayName: $displayName, shortCode: $shortCode, peers: $peers, transport: $transport, hostSteamId: $hostSteamId, hostPearKey: $hostPearKey)';
+  return 'ActiveRoomSession(isHost: $isHost, gameId: $gameId, gameName: $gameName, networkName: $networkName, networkSecret: $networkSecret, displayName: $displayName, shortCode: $shortCode, peers: $peers, transport: $transport, hostSteamId: $hostSteamId)';
 }
 
 
@@ -351,7 +337,7 @@ abstract mixin class $ActiveRoomSessionCopyWith<$Res>  {
   factory $ActiveRoomSessionCopyWith(ActiveRoomSession value, $Res Function(ActiveRoomSession) _then) = _$ActiveRoomSessionCopyWithImpl;
 @useResult
 $Res call({
- bool isHost, String gameId, String gameName, String networkName, String networkSecret, String displayName, String? shortCode, List<PeerEndpoint> peers, String transport, String? hostSteamId, String? hostPearKey
+ bool isHost, String gameId, String gameName, String networkName, String networkSecret, String displayName, String? shortCode, List<PeerEndpoint> peers, String transport, String? hostSteamId
 });
 
 
@@ -368,7 +354,7 @@ class _$ActiveRoomSessionCopyWithImpl<$Res>
 
 /// Create a copy of ActiveRoomSession
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? isHost = null,Object? gameId = null,Object? gameName = null,Object? networkName = null,Object? networkSecret = null,Object? displayName = null,Object? shortCode = freezed,Object? peers = null,Object? transport = null,Object? hostSteamId = freezed,Object? hostPearKey = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? isHost = null,Object? gameId = null,Object? gameName = null,Object? networkName = null,Object? networkSecret = null,Object? displayName = null,Object? shortCode = freezed,Object? peers = null,Object? transport = null,Object? hostSteamId = freezed,}) {
   return _then(_self.copyWith(
 isHost: null == isHost ? _self.isHost : isHost // ignore: cast_nullable_to_non_nullable
 as bool,gameId: null == gameId ? _self.gameId : gameId // ignore: cast_nullable_to_non_nullable
@@ -380,7 +366,6 @@ as String,shortCode: freezed == shortCode ? _self.shortCode : shortCode // ignor
 as String?,peers: null == peers ? _self.peers : peers // ignore: cast_nullable_to_non_nullable
 as List<PeerEndpoint>,transport: null == transport ? _self.transport : transport // ignore: cast_nullable_to_non_nullable
 as String,hostSteamId: freezed == hostSteamId ? _self.hostSteamId : hostSteamId // ignore: cast_nullable_to_non_nullable
-as String?,hostPearKey: freezed == hostPearKey ? _self.hostPearKey : hostPearKey // ignore: cast_nullable_to_non_nullable
 as String?,
   ));
 }
@@ -466,10 +451,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( bool isHost,  String gameId,  String gameName,  String networkName,  String networkSecret,  String displayName,  String? shortCode,  List<PeerEndpoint> peers,  String transport,  String? hostSteamId,  String? hostPearKey)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( bool isHost,  String gameId,  String gameName,  String networkName,  String networkSecret,  String displayName,  String? shortCode,  List<PeerEndpoint> peers,  String transport,  String? hostSteamId)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _ActiveRoomSession() when $default != null:
-return $default(_that.isHost,_that.gameId,_that.gameName,_that.networkName,_that.networkSecret,_that.displayName,_that.shortCode,_that.peers,_that.transport,_that.hostSteamId,_that.hostPearKey);case _:
+return $default(_that.isHost,_that.gameId,_that.gameName,_that.networkName,_that.networkSecret,_that.displayName,_that.shortCode,_that.peers,_that.transport,_that.hostSteamId);case _:
   return orElse();
 
 }
@@ -487,10 +472,10 @@ return $default(_that.isHost,_that.gameId,_that.gameName,_that.networkName,_that
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( bool isHost,  String gameId,  String gameName,  String networkName,  String networkSecret,  String displayName,  String? shortCode,  List<PeerEndpoint> peers,  String transport,  String? hostSteamId,  String? hostPearKey)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( bool isHost,  String gameId,  String gameName,  String networkName,  String networkSecret,  String displayName,  String? shortCode,  List<PeerEndpoint> peers,  String transport,  String? hostSteamId)  $default,) {final _that = this;
 switch (_that) {
 case _ActiveRoomSession():
-return $default(_that.isHost,_that.gameId,_that.gameName,_that.networkName,_that.networkSecret,_that.displayName,_that.shortCode,_that.peers,_that.transport,_that.hostSteamId,_that.hostPearKey);case _:
+return $default(_that.isHost,_that.gameId,_that.gameName,_that.networkName,_that.networkSecret,_that.displayName,_that.shortCode,_that.peers,_that.transport,_that.hostSteamId);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -507,10 +492,10 @@ return $default(_that.isHost,_that.gameId,_that.gameName,_that.networkName,_that
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( bool isHost,  String gameId,  String gameName,  String networkName,  String networkSecret,  String displayName,  String? shortCode,  List<PeerEndpoint> peers,  String transport,  String? hostSteamId,  String? hostPearKey)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( bool isHost,  String gameId,  String gameName,  String networkName,  String networkSecret,  String displayName,  String? shortCode,  List<PeerEndpoint> peers,  String transport,  String? hostSteamId)?  $default,) {final _that = this;
 switch (_that) {
 case _ActiveRoomSession() when $default != null:
-return $default(_that.isHost,_that.gameId,_that.gameName,_that.networkName,_that.networkSecret,_that.displayName,_that.shortCode,_that.peers,_that.transport,_that.hostSteamId,_that.hostPearKey);case _:
+return $default(_that.isHost,_that.gameId,_that.gameName,_that.networkName,_that.networkSecret,_that.displayName,_that.shortCode,_that.peers,_that.transport,_that.hostSteamId);case _:
   return null;
 
 }
@@ -522,7 +507,7 @@ return $default(_that.isHost,_that.gameId,_that.gameName,_that.networkName,_that
 
 
 class _ActiveRoomSession extends ActiveRoomSession {
-  const _ActiveRoomSession({required this.isHost, required this.gameId, required this.gameName, required this.networkName, required this.networkSecret, required this.displayName, this.shortCode, required final  List<PeerEndpoint> peers, this.transport = 'easytier', this.hostSteamId, this.hostPearKey}): _peers = peers,super._();
+  const _ActiveRoomSession({required this.isHost, required this.gameId, required this.gameName, required this.networkName, required this.networkSecret, required this.displayName, this.shortCode, required final  List<PeerEndpoint> peers, this.transport = 'easytier', this.hostSteamId}): _peers = peers,super._();
   
 
 @override final  bool isHost;
@@ -539,11 +524,9 @@ class _ActiveRoomSession extends ActiveRoomSession {
   return EqualUnmodifiableListView(_peers);
 }
 
-/// 传输方式：`easytier`（默认）/ `steam` / `pear`。
+/// 传输方式：`easytier`（默认）/ `steam`。
 @override@JsonKey() final  String transport;
 @override final  String? hostSteamId;
-/// Pear 模式下房主的 HyperDHT 公钥（十六进制）。
-@override final  String? hostPearKey;
 
 /// Create a copy of ActiveRoomSession
 /// with the given fields replaced by the non-null parameter values.
@@ -555,16 +538,16 @@ _$ActiveRoomSessionCopyWith<_ActiveRoomSession> get copyWith => __$ActiveRoomSes
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ActiveRoomSession&&(identical(other.isHost, isHost) || other.isHost == isHost)&&(identical(other.gameId, gameId) || other.gameId == gameId)&&(identical(other.gameName, gameName) || other.gameName == gameName)&&(identical(other.networkName, networkName) || other.networkName == networkName)&&(identical(other.networkSecret, networkSecret) || other.networkSecret == networkSecret)&&(identical(other.displayName, displayName) || other.displayName == displayName)&&(identical(other.shortCode, shortCode) || other.shortCode == shortCode)&&const DeepCollectionEquality().equals(other._peers, _peers)&&(identical(other.transport, transport) || other.transport == transport)&&(identical(other.hostSteamId, hostSteamId) || other.hostSteamId == hostSteamId)&&(identical(other.hostPearKey, hostPearKey) || other.hostPearKey == hostPearKey));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ActiveRoomSession&&(identical(other.isHost, isHost) || other.isHost == isHost)&&(identical(other.gameId, gameId) || other.gameId == gameId)&&(identical(other.gameName, gameName) || other.gameName == gameName)&&(identical(other.networkName, networkName) || other.networkName == networkName)&&(identical(other.networkSecret, networkSecret) || other.networkSecret == networkSecret)&&(identical(other.displayName, displayName) || other.displayName == displayName)&&(identical(other.shortCode, shortCode) || other.shortCode == shortCode)&&const DeepCollectionEquality().equals(other._peers, _peers)&&(identical(other.transport, transport) || other.transport == transport)&&(identical(other.hostSteamId, hostSteamId) || other.hostSteamId == hostSteamId));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,isHost,gameId,gameName,networkName,networkSecret,displayName,shortCode,const DeepCollectionEquality().hash(_peers),transport,hostSteamId,hostPearKey);
+int get hashCode => Object.hash(runtimeType,isHost,gameId,gameName,networkName,networkSecret,displayName,shortCode,const DeepCollectionEquality().hash(_peers),transport,hostSteamId);
 
 @override
 String toString() {
-  return 'ActiveRoomSession(isHost: $isHost, gameId: $gameId, gameName: $gameName, networkName: $networkName, networkSecret: $networkSecret, displayName: $displayName, shortCode: $shortCode, peers: $peers, transport: $transport, hostSteamId: $hostSteamId, hostPearKey: $hostPearKey)';
+  return 'ActiveRoomSession(isHost: $isHost, gameId: $gameId, gameName: $gameName, networkName: $networkName, networkSecret: $networkSecret, displayName: $displayName, shortCode: $shortCode, peers: $peers, transport: $transport, hostSteamId: $hostSteamId)';
 }
 
 
@@ -575,7 +558,7 @@ abstract mixin class _$ActiveRoomSessionCopyWith<$Res> implements $ActiveRoomSes
   factory _$ActiveRoomSessionCopyWith(_ActiveRoomSession value, $Res Function(_ActiveRoomSession) _then) = __$ActiveRoomSessionCopyWithImpl;
 @override @useResult
 $Res call({
- bool isHost, String gameId, String gameName, String networkName, String networkSecret, String displayName, String? shortCode, List<PeerEndpoint> peers, String transport, String? hostSteamId, String? hostPearKey
+ bool isHost, String gameId, String gameName, String networkName, String networkSecret, String displayName, String? shortCode, List<PeerEndpoint> peers, String transport, String? hostSteamId
 });
 
 
@@ -592,7 +575,7 @@ class __$ActiveRoomSessionCopyWithImpl<$Res>
 
 /// Create a copy of ActiveRoomSession
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? isHost = null,Object? gameId = null,Object? gameName = null,Object? networkName = null,Object? networkSecret = null,Object? displayName = null,Object? shortCode = freezed,Object? peers = null,Object? transport = null,Object? hostSteamId = freezed,Object? hostPearKey = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? isHost = null,Object? gameId = null,Object? gameName = null,Object? networkName = null,Object? networkSecret = null,Object? displayName = null,Object? shortCode = freezed,Object? peers = null,Object? transport = null,Object? hostSteamId = freezed,}) {
   return _then(_ActiveRoomSession(
 isHost: null == isHost ? _self.isHost : isHost // ignore: cast_nullable_to_non_nullable
 as bool,gameId: null == gameId ? _self.gameId : gameId // ignore: cast_nullable_to_non_nullable
@@ -604,7 +587,6 @@ as String,shortCode: freezed == shortCode ? _self.shortCode : shortCode // ignor
 as String?,peers: null == peers ? _self._peers : peers // ignore: cast_nullable_to_non_nullable
 as List<PeerEndpoint>,transport: null == transport ? _self.transport : transport // ignore: cast_nullable_to_non_nullable
 as String,hostSteamId: freezed == hostSteamId ? _self.hostSteamId : hostSteamId // ignore: cast_nullable_to_non_nullable
-as String?,hostPearKey: freezed == hostPearKey ? _self.hostPearKey : hostPearKey // ignore: cast_nullable_to_non_nullable
 as String?,
   ));
 }

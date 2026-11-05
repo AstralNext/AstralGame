@@ -28,7 +28,7 @@ class AppSettingsService {
   static const String _keyVirtualIp = 'virtual_ip';
   static const String _keyVirtualIpv6 = 'virtual_ipv6';
 
-  /// 联机模式：`easytier`（默认）/ `steam` / `pear`。
+  /// 联机模式：`easytier`（默认）/ `steam`。
   static const String _keyTransportMode = 'transport_mode';
 
   final SharedPreferences _prefs;

@@ -4,7 +4,6 @@ import 'dart:typed_data';
 import 'package:astral_game/utils/logger.dart';
 import 'package:astral_game/src/rust/api/p2p.dart';
 import 'package:astral_game/src/rust/api/steam.dart' as rust_steam;
-import 'package:astral_game/src/rust/api/pear.dart' as rust_pear;
 
 import 'peer_rpc_codec.dart';
 import 'peer_rpc_exception.dart';
@@ -20,8 +19,7 @@ typedef NotificationListener =
 
 /// 替代旧 `NodeNetServer` 的 peer-RPC 路由器。
 ///
-/// 后端有三种：EasyTier 实例（按 instanceId）、Steam 组网房间或
-/// Holepunch Pear 组网房间（都没有 instanceId）。
+/// 后端有两种：EasyTier 实例（按 instanceId）与 Steam 组网房间（没有 instanceId）。
 class PeerRpcRouter {
   PeerRpcRouter();
 
@@ -32,12 +30,11 @@ class PeerRpcRouter {
   StreamSubscription<AppInboundEventC>? _inboundSub;
   String? _instanceId;
   bool _steam = false;
-  bool _pear = false;
 
   /// 是否打印每个入站事件的概览。频繁场景下默认关闭，避免刷屏。
   static const bool _accessLog = false;
 
-  bool get isRunning => _steam || _pear || _instanceId != null;
+  bool get isRunning => _steam || _instanceId != null;
   String? get instanceId => _instanceId;
   int get methodsCount => _methods.length;
 
@@ -63,7 +60,6 @@ class PeerRpcRouter {
     await stop();
     _instanceId = instanceId;
     _steam = false;
-    _pear = false;
     _wire(subscribeAppInbound(instanceId: instanceId), 'instance=$instanceId');
     appLogger.d(
       '[PeerRpcRouter] 已启动 instance=$instanceId methods=$methodsCount',
@@ -75,19 +71,8 @@ class PeerRpcRouter {
     await stop();
     _instanceId = null;
     _steam = true;
-    _pear = false;
     _wire(rust_steam.steamSubscribeAppInbound(), 'steam');
     appLogger.d('[PeerRpcRouter] 已启动 steam methods=$methodsCount');
-  }
-
-  /// 绑定到 Holepunch Pear 组网房间并开始监听入站事件。
-  Future<void> startPear() async {
-    await stop();
-    _instanceId = null;
-    _steam = false;
-    _pear = true;
-    _wire(rust_pear.pearSubscribeAppInbound(), 'pear');
-    appLogger.d('[PeerRpcRouter] 已启动 pear methods=$methodsCount');
   }
 
   void _wire(Stream<AppInboundEventC> stream, String label) {
@@ -104,7 +89,6 @@ class PeerRpcRouter {
         if (isRunning) {
           _instanceId = null;
           _steam = false;
-          _pear = false;
           _inboundSub = null;
           appLogger.d('[PeerRpcRouter] 入站流已关闭 $label');
         }
@@ -115,15 +99,10 @@ class PeerRpcRouter {
   /// 停止监听并清理状态。
   Future<void> stop() async {
     final sub = _inboundSub;
-    final label = _steam
-        ? 'steam'
-        : _pear
-        ? 'pear'
-        : _instanceId;
+    final label = _steam ? 'steam' : _instanceId;
     _inboundSub = null;
     _instanceId = null;
     _steam = false;
-    _pear = false;
     await sub?.cancel();
     if (label != null) {
       appLogger.d('[PeerRpcRouter] 已停止 $label');
@@ -250,13 +229,6 @@ class PeerRpcRouter {
     final id = _instanceId;
     if (_steam) {
       await rust_steam.steamAppCallReply(
-        token: token,
-        status: status,
-        errorMsg: errorMsg,
-        payload: payload,
-      );
-    } else if (_pear) {
-      await rust_pear.pearAppCallReply(
         token: token,
         status: status,
         errorMsg: errorMsg,

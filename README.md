@@ -56,12 +56,10 @@ sudo pacman -U https://github.com/AstralNext/AstralGame/releases/latest/download
 
 ## 从源码构建
 
-需要 Flutter 3.47.2（或更高 stable）、Rust stable、Visual Studio 2022（含 C++ 桌面工具链）；Windows 的 Pear 组网侧车还需要 Node.js 20+。
+需要 Flutter 3.47.2（或更高 stable）、Rust stable、Visual Studio 2022（含 C++ 桌面工具链）。
 
 ```bash
 flutter pub get
-# Pear 侧车依赖按锁文件安装，node_modules 不入库（构建时由 windows/runner 的 CMake 复制到 data/pear）
-npm ci --prefix pear
 flutter build windows --release
 ```
 

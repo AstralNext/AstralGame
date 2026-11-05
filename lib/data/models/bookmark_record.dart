@@ -34,15 +34,18 @@ class RoomInvitePayloadRecord {
   String? displayName;
   List<PeerEndpointRecord> peers = [];
 
-  /// 传输方式（`easytier` / `steam` / `pear`）。旧记录读出来是空串，
-  /// 由 [toBookmark] 归一化为 `easytier`。
+  /// 传输方式（`easytier` / `steam`）。旧记录读出来可能是空串或已移除的模式，
+  /// 由 [toBookmark] 统一归一化。
   String transport = '';
 
   /// Steam 组网的房主 SteamID。
   String? hostSteamId;
 
-  /// Pear 组网的房主 HyperDHT 公钥。
-  String? hostPearKey;
+  /// 旧版 Isar 属性槽位占位。
+  ///
+  /// 删除字段会让后续属性的 id 前移，老数据库里的 transport / peers 等字段
+  /// 会整体错位。保留一个同位置的废弃字符串槽位，保证其余属性 id 稳定。
+  String? hostLegacyKey;
 }
 
 /// [PeerEndpoint] 的 Isar 内嵌副本。
@@ -61,7 +64,6 @@ BookmarkRecord toRecord(Bookmark b) {
     ..displayName = b.payload.displayName
     ..transport = b.payload.transport
     ..hostSteamId = b.payload.hostSteamId
-    ..hostPearKey = b.payload.hostPearKey
     ..peers = [
       for (final e in b.payload.peers) PeerEndpointRecord()..uri = e.uri,
     ];
@@ -85,11 +87,8 @@ Bookmark toBookmark(BookmarkRecord r) => Bookmark(
         networkSecret: r.payload.networkSecret,
         peers: [for (final e in r.payload.peers) PeerEndpoint(uri: e.uri)],
         displayName: r.payload.displayName,
-        transport: r.payload.transport.trim().isEmpty
-            ? 'easytier'
-            : r.payload.transport,
+        transport: normalizeTransportValue(r.payload.transport),
         hostSteamId: r.payload.hostSteamId,
-        hostPearKey: r.payload.hostPearKey,
       ),
       savedAt: r.savedAt,
       lastUsedAt: r.lastUsedAt,
