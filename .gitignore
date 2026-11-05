@@ -42,6 +42,9 @@ app.*.map.json
 # Local game-rules overlay for debugging (never commit)
 /gamerules/
 
+# Pear sidecar dependencies (installed with `npm ci --prefix pear`; never commit)
+/pear/node_modules/
+
 # Android release signing (never commit)
 /android/key.properties
 /android/*.jks

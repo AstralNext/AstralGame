@@ -30,6 +30,7 @@ on:
       - 'windows/**'
       - 'assets/**'
       - 'dlls/**'
+      - 'pear/**'
       - 'installer/**'
       - 'tools/raft_astral_net/**'
       - 'tools/valheim_astral_net/**'
@@ -218,6 +219,13 @@ jobs:
       - name: 📚 Get dependencies
         # Rust 核心（rust/ + rust_builder/）已内化到本仓，依赖全部按 pubspec/lock 锁定解析。
         run: flutter pub get
+        shell: bash
+
+      - name: 🥜 Install Pear sidecar dependencies
+        # node_modules 不入库：Windows runner 的 CMake 会把 pear/ 整目录复制到 data/pear，
+        # 内置 Bare 运行时来自这里的 bare-runtime-win32-x64 optionalDependency。
+        if: matrix.flutter_platform == 'windows'
+        run: npm ci --prefix pear
         shell: bash
 
       # 只缓存 crates 源码（registry/git），不缓存 cargokit/target 编译产物。

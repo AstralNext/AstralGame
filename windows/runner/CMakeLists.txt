@@ -44,3 +44,13 @@ target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 # Run the Flutter tool portions of the build. This must not be removed.
 add_dependencies(${BINARY_NAME} flutter_assemble)
+
+# 把 Pear 侧车与内置的 Holepunch Bare 运行时复制到输出目录（data/pear），
+# Rust 的 pear_tunnel 会优先在程序目录的 data/pear 里查找。
+add_custom_target(bundle_pear ALL
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../pear"
+    "$<TARGET_FILE_DIR:${BINARY_NAME}>/data/pear"
+  COMMENT "Bundling Pear runtime (Bare + hyperdht)"
+)
+add_dependencies(bundle_pear flutter_assemble)
