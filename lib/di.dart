@@ -14,7 +14,6 @@ import 'package:astral_game/data/services/alcy_wallpaper_service.dart';
 import 'package:astral_game/data/services/network_optimize_service.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
 import 'package:astral_game/data/services/peer_rpc/methods/game_methods.dart';
-import 'package:astral_game/data/services/peer_rpc/methods/message_methods.dart';
 import 'package:astral_game/data/services/peer_rpc/methods/node_methods.dart';
 import 'package:astral_game/data/services/peer_rpc/methods/user_methods.dart';
 import 'package:astral_game/data/services/peer_rpc/peer_rpc_client.dart';
@@ -406,7 +405,6 @@ Future<void> _initPeerRpcRouter() async {
     ).methods,
   );
   router.registerAll(NodeMethods(nodeManagement).methods);
-  router.registerAll(MessageMethods().methods);
   router.registerAll(GameMethods(getIt<OpenGamesService>()).methods);
 
   appLogger.d(

@@ -814,24 +814,39 @@ const RoomInvitePayloadRecordSchema = Schema(
       name: r'gameName',
       type: IsarType.string,
     ),
-    r'networkName': PropertySchema(
+    r'hostPearKey': PropertySchema(
       id: 3,
+      name: r'hostPearKey',
+      type: IsarType.string,
+    ),
+    r'hostSteamId': PropertySchema(
+      id: 4,
+      name: r'hostSteamId',
+      type: IsarType.string,
+    ),
+    r'networkName': PropertySchema(
+      id: 5,
       name: r'networkName',
       type: IsarType.string,
     ),
     r'networkSecret': PropertySchema(
-      id: 4,
+      id: 6,
       name: r'networkSecret',
       type: IsarType.string,
     ),
     r'peers': PropertySchema(
-      id: 5,
+      id: 7,
       name: r'peers',
       type: IsarType.objectList,
 
       target: r'PeerEndpointRecord',
     ),
-    r'v': PropertySchema(id: 6, name: r'v', type: IsarType.long),
+    r'transport': PropertySchema(
+      id: 8,
+      name: r'transport',
+      type: IsarType.string,
+    ),
+    r'v': PropertySchema(id: 9, name: r'v', type: IsarType.long),
   },
 
   estimateSize: _roomInvitePayloadRecordEstimateSize,
@@ -854,6 +869,18 @@ int _roomInvitePayloadRecordEstimateSize(
   }
   bytesCount += 3 + object.gameId.length * 3;
   bytesCount += 3 + object.gameName.length * 3;
+  {
+    final value = object.hostPearKey;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
+  {
+    final value = object.hostSteamId;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
   bytesCount += 3 + object.networkName.length * 3;
   bytesCount += 3 + object.networkSecret.length * 3;
   bytesCount += 3 + object.peers.length * 3;
@@ -868,6 +895,7 @@ int _roomInvitePayloadRecordEstimateSize(
       );
     }
   }
+  bytesCount += 3 + object.transport.length * 3;
   return bytesCount;
 }
 
@@ -880,15 +908,18 @@ void _roomInvitePayloadRecordSerialize(
   writer.writeString(offsets[0], object.displayName);
   writer.writeString(offsets[1], object.gameId);
   writer.writeString(offsets[2], object.gameName);
-  writer.writeString(offsets[3], object.networkName);
-  writer.writeString(offsets[4], object.networkSecret);
+  writer.writeString(offsets[3], object.hostPearKey);
+  writer.writeString(offsets[4], object.hostSteamId);
+  writer.writeString(offsets[5], object.networkName);
+  writer.writeString(offsets[6], object.networkSecret);
   writer.writeObjectList<PeerEndpointRecord>(
-    offsets[5],
+    offsets[7],
     allOffsets,
     PeerEndpointRecordSchema.serialize,
     object.peers,
   );
-  writer.writeLong(offsets[6], object.v);
+  writer.writeString(offsets[8], object.transport);
+  writer.writeLong(offsets[9], object.v);
 }
 
 RoomInvitePayloadRecord _roomInvitePayloadRecordDeserialize(
@@ -901,17 +932,20 @@ RoomInvitePayloadRecord _roomInvitePayloadRecordDeserialize(
   object.displayName = reader.readStringOrNull(offsets[0]);
   object.gameId = reader.readString(offsets[1]);
   object.gameName = reader.readString(offsets[2]);
-  object.networkName = reader.readString(offsets[3]);
-  object.networkSecret = reader.readString(offsets[4]);
+  object.hostPearKey = reader.readStringOrNull(offsets[3]);
+  object.hostSteamId = reader.readStringOrNull(offsets[4]);
+  object.networkName = reader.readString(offsets[5]);
+  object.networkSecret = reader.readString(offsets[6]);
   object.peers =
       reader.readObjectList<PeerEndpointRecord>(
-        offsets[5],
+        offsets[7],
         PeerEndpointRecordSchema.deserialize,
         allOffsets,
         PeerEndpointRecord(),
       ) ??
       [];
-  object.v = reader.readLong(offsets[6]);
+  object.transport = reader.readString(offsets[8]);
+  object.v = reader.readLong(offsets[9]);
   return object;
 }
 
@@ -929,10 +963,14 @@ P _roomInvitePayloadRecordDeserializeProp<P>(
     case 2:
       return (reader.readString(offset)) as P;
     case 3:
-      return (reader.readString(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 4:
-      return (reader.readString(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 5:
+      return (reader.readString(offset)) as P;
+    case 6:
+      return (reader.readString(offset)) as P;
+    case 7:
       return (reader.readObjectList<PeerEndpointRecord>(
                 offset,
                 PeerEndpointRecordSchema.deserialize,
@@ -941,7 +979,9 @@ P _roomInvitePayloadRecordDeserializeProp<P>(
               ) ??
               [])
           as P;
-    case 6:
+    case 8:
+      return (reader.readString(offset)) as P;
+    case 9:
       return (reader.readLong(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -1529,6 +1569,420 @@ extension RoomInvitePayloadRecordQueryFilter
     RoomInvitePayloadRecord,
     QAfterFilterCondition
   >
+  hostPearKeyIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNull(property: r'hostPearKey'),
+      );
+    });
+  }
+
+  QueryBuilder<
+    RoomInvitePayloadRecord,
+    RoomInvitePayloadRecord,
+    QAfterFilterCondition
+  >
+  hostPearKeyIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNotNull(property: r'hostPearKey'),
+      );
+    });
+  }
+
+  QueryBuilder<
+    RoomInvitePayloadRecord,
+    RoomInvitePayloadRecord,
+    QAfterFilterCondition
+  >
+  hostPearKeyEqualTo(String? value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(
+          property: r'hostPearKey',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<
+    RoomInvitePayloadRecord,
+    RoomInvitePayloadRecord,
+    QAfterFilterCondition
+  >
+  hostPearKeyGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'hostPearKey',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<
+    RoomInvitePayloadRecord,
+    RoomInvitePayloadRecord,
+    QAfterFilterCondition
+  >
+  hostPearKeyLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'hostPearKey',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<
+    RoomInvitePayloadRecord,
+    RoomInvitePayloadRecord,
+    QAfterFilterCondition
+  >
+  hostPearKeyBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'hostPearKey',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<
+    RoomInvitePayloadRecord,
+    RoomInvitePayloadRecord,
+    QAfterFilterCondition
+  >
+  hostPearKeyStartsWith(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.startsWith(
+          property: r'hostPearKey',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<
+    RoomInvitePayloadRecord,
+    RoomInvitePayloadRecord,
+    QAfterFilterCondition
+  >
+  hostPearKeyEndsWith(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.endsWith(
+          property: r'hostPearKey',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<
+    RoomInvitePayloadRecord,
+    RoomInvitePayloadRecord,
+    QAfterFilterCondition
+  >
+  hostPearKeyContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.contains(
+          property: r'hostPearKey',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<
+    RoomInvitePayloadRecord,
+    RoomInvitePayloadRecord,
+    QAfterFilterCondition
+  >
+  hostPearKeyMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.matches(
+          property: r'hostPearKey',
+          wildcard: pattern,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<
+    RoomInvitePayloadRecord,
+    RoomInvitePayloadRecord,
+    QAfterFilterCondition
+  >
+  hostPearKeyIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'hostPearKey', value: ''),
+      );
+    });
+  }
+
+  QueryBuilder<
+    RoomInvitePayloadRecord,
+    RoomInvitePayloadRecord,
+    QAfterFilterCondition
+  >
+  hostPearKeyIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(property: r'hostPearKey', value: ''),
+      );
+    });
+  }
+
+  QueryBuilder<
+    RoomInvitePayloadRecord,
+    RoomInvitePayloadRecord,
+    QAfterFilterCondition
+  >
+  hostSteamIdIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNull(property: r'hostSteamId'),
+      );
+    });
+  }
+
+  QueryBuilder<
+    RoomInvitePayloadRecord,
+    RoomInvitePayloadRecord,
+    QAfterFilterCondition
+  >
+  hostSteamIdIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        const FilterCondition.isNotNull(property: r'hostSteamId'),
+      );
+    });
+  }
+
+  QueryBuilder<
+    RoomInvitePayloadRecord,
+    RoomInvitePayloadRecord,
+    QAfterFilterCondition
+  >
+  hostSteamIdEqualTo(String? value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(
+          property: r'hostSteamId',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<
+    RoomInvitePayloadRecord,
+    RoomInvitePayloadRecord,
+    QAfterFilterCondition
+  >
+  hostSteamIdGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'hostSteamId',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<
+    RoomInvitePayloadRecord,
+    RoomInvitePayloadRecord,
+    QAfterFilterCondition
+  >
+  hostSteamIdLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'hostSteamId',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<
+    RoomInvitePayloadRecord,
+    RoomInvitePayloadRecord,
+    QAfterFilterCondition
+  >
+  hostSteamIdBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'hostSteamId',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<
+    RoomInvitePayloadRecord,
+    RoomInvitePayloadRecord,
+    QAfterFilterCondition
+  >
+  hostSteamIdStartsWith(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.startsWith(
+          property: r'hostSteamId',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<
+    RoomInvitePayloadRecord,
+    RoomInvitePayloadRecord,
+    QAfterFilterCondition
+  >
+  hostSteamIdEndsWith(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.endsWith(
+          property: r'hostSteamId',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<
+    RoomInvitePayloadRecord,
+    RoomInvitePayloadRecord,
+    QAfterFilterCondition
+  >
+  hostSteamIdContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.contains(
+          property: r'hostSteamId',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<
+    RoomInvitePayloadRecord,
+    RoomInvitePayloadRecord,
+    QAfterFilterCondition
+  >
+  hostSteamIdMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.matches(
+          property: r'hostSteamId',
+          wildcard: pattern,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<
+    RoomInvitePayloadRecord,
+    RoomInvitePayloadRecord,
+    QAfterFilterCondition
+  >
+  hostSteamIdIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'hostSteamId', value: ''),
+      );
+    });
+  }
+
+  QueryBuilder<
+    RoomInvitePayloadRecord,
+    RoomInvitePayloadRecord,
+    QAfterFilterCondition
+  >
+  hostSteamIdIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(property: r'hostSteamId', value: ''),
+      );
+    });
+  }
+
+  QueryBuilder<
+    RoomInvitePayloadRecord,
+    RoomInvitePayloadRecord,
+    QAfterFilterCondition
+  >
   networkNameEqualTo(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(
@@ -1959,6 +2413,187 @@ extension RoomInvitePayloadRecordQueryFilter
         includeLower,
         upper,
         includeUpper,
+      );
+    });
+  }
+
+  QueryBuilder<
+    RoomInvitePayloadRecord,
+    RoomInvitePayloadRecord,
+    QAfterFilterCondition
+  >
+  transportEqualTo(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(
+          property: r'transport',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<
+    RoomInvitePayloadRecord,
+    RoomInvitePayloadRecord,
+    QAfterFilterCondition
+  >
+  transportGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'transport',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<
+    RoomInvitePayloadRecord,
+    RoomInvitePayloadRecord,
+    QAfterFilterCondition
+  >
+  transportLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'transport',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<
+    RoomInvitePayloadRecord,
+    RoomInvitePayloadRecord,
+    QAfterFilterCondition
+  >
+  transportBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'transport',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<
+    RoomInvitePayloadRecord,
+    RoomInvitePayloadRecord,
+    QAfterFilterCondition
+  >
+  transportStartsWith(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.startsWith(
+          property: r'transport',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<
+    RoomInvitePayloadRecord,
+    RoomInvitePayloadRecord,
+    QAfterFilterCondition
+  >
+  transportEndsWith(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.endsWith(
+          property: r'transport',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<
+    RoomInvitePayloadRecord,
+    RoomInvitePayloadRecord,
+    QAfterFilterCondition
+  >
+  transportContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.contains(
+          property: r'transport',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<
+    RoomInvitePayloadRecord,
+    RoomInvitePayloadRecord,
+    QAfterFilterCondition
+  >
+  transportMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.matches(
+          property: r'transport',
+          wildcard: pattern,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<
+    RoomInvitePayloadRecord,
+    RoomInvitePayloadRecord,
+    QAfterFilterCondition
+  >
+  transportIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'transport', value: ''),
+      );
+    });
+  }
+
+  QueryBuilder<
+    RoomInvitePayloadRecord,
+    RoomInvitePayloadRecord,
+    QAfterFilterCondition
+  >
+  transportIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(property: r'transport', value: ''),
       );
     });
   }

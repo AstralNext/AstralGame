@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:astral_game/utils/hidden_process.dart';
 import 'package:astral_game/utils/logger.dart';
 import 'package:astral_game/utils/runtime_platform.dart';
 import 'package:path/path.dart' as p;
@@ -21,7 +22,7 @@ class NetworkOptimizeService {
       return;
     }
     try {
-      final result = await Process.run(
+      final result = await runHidden(
         exe,
         const ['status'],
       );
@@ -41,7 +42,7 @@ class NetworkOptimizeService {
       if (exe == null) {
         throw StateError('找不到 auto_dns_binder.exe');
       }
-      final result = await Process.run(
+      final result = await runHidden(
         exe,
         [enable ? 'install' : 'uninstall'],
       );

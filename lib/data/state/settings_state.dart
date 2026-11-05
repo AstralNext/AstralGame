@@ -1,4 +1,5 @@
 import 'package:astral_game/config/app_theme_id.dart';
+import 'package:astral_game/data/models/transport_mode.dart';
 import 'package:astral_game/data/services/app_settings_service.dart';
 import 'package:astral_game/data/services/home_widget_theme_sync.dart';
 import 'package:astral_game/utils/runtime_platform.dart';
@@ -31,6 +32,9 @@ class SettingsState {
   /// 网络：手动填写的固定虚拟 IPv6（仅 isDhcpv6=false 时生效）。默认留空，由用户填写后记忆。
   final virtualIpv6 = signal('');
 
+  /// 联机模式：EasyTier 组网 / Steam 组网（SDR 虚拟局域网，Windows 实验性）。
+  final transportMode = signal(TransportMode.easytier);
+
   /// Windows：开机启动后直接驻留托盘。
   final startToTray = signal(false);
 
@@ -50,6 +54,7 @@ class SettingsState {
     isDhcpv6.value = _settings.getIsDhcpv6();
     virtualIp.value = _settings.getVirtualIp();
     virtualIpv6.value = _settings.getVirtualIpv6();
+    transportMode.value = _settings.getTransportMode();
     startToTray.value = _settings.getStartToTray();
     autoEnterRoom.value = _settings.getAutoEnterRoom();
     autoEnterBookmarkId.value = _settings.getAutoEnterBookmarkId();
@@ -69,6 +74,7 @@ class SettingsState {
       _settings.setIsDhcpv6(isDhcpv6.value),
       _settings.setVirtualIp(virtualIp.value),
       _settings.setVirtualIpv6(virtualIpv6.value),
+      _settings.setTransportMode(transportMode.value),
       _settings.setStartToTray(startToTray.value),
       _settings.setAutoEnterRoom(autoEnterRoom.value),
       _settings.setAutoEnterBookmarkId(autoEnterBookmarkId.value),

@@ -5,6 +5,7 @@ import 'package:astral_game/data/models/game_assist_rules.dart';
 import 'package:astral_game/data/services/game_assist_rules_service.dart';
 import 'package:astral_game/data/services/windows_game_process.dart';
 import 'package:astral_game/data/services/windows_process_watch.dart';
+import 'package:astral_game/utils/hidden_process.dart';
 import 'package:astral_game/utils/logger.dart';
 import 'package:astral_game/utils/runtime_platform.dart';
 import 'package:path/path.dart' as p;
@@ -124,7 +125,7 @@ class GameInjectService {
         return;
       }
       appLogger.i('[GameInject] 注入 $exe pid=$pid');
-      final result = await Process.run(
+      final result = await runHidden(
         injector,
         [
           '--pid',

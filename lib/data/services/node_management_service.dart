@@ -10,6 +10,8 @@ import 'package:astral_game/utils/logger.dart';
 import 'package:astral_game/utils/runtime_platform.dart';
 import 'package:astral_game/config/constants.dart';
 import 'package:astral_game/src/rust/api/p2p.dart';
+import 'package:astral_game/src/rust/api/steam.dart' as rust_steam;
+import 'package:astral_game/src/rust/api/pear.dart' as rust_pear;
 
 import '../models/enhanced_node_info.dart';
 import '../models/local_self_nodes.dart';
@@ -74,6 +76,18 @@ class NodeManagementService {
   Timer? _pollingTimer;
   int _pollTick = 0;
 
+  /// Steam 组网房间的伪实例 ID（Rust 侧没有 EasyTier instance）。
+  static const String steamInstanceId = '__steam__';
+
+  /// Holepunch Pear 组网房间的伪实例 ID（Rust 侧没有 EasyTier instance）。
+  static const String pearInstanceId = '__pear__';
+
+  /// 当前是否运行在 Steam 组网模式下。
+  bool _steamMode = false;
+
+  /// 当前是否运行在 Holepunch Pear 组网模式下。
+  bool _pearMode = false;
+
   /// 已连接但尚未拿到虚拟 IP 时，节流告警，避免每秒刷屏。
   DateTime? _noIpSince;
   DateTime? _lastNoIpWarnAt;
@@ -129,8 +143,27 @@ class NodeManagementService {
         .toList();
   }
 
-  /// 启动节点管理
+  /// 启动节点管理（EasyTier 实例）
   void start(String instanceId) {
+    _beginRun(instanceId);
+    appLogger.i('[NodeManagementService] 已启动，实例ID: $instanceId');
+  }
+
+  /// 启动节点管理（Steam 组网房间，没有 EasyTier 实例）
+  void startSteam() {
+    _beginRun(steamInstanceId, steam: true);
+    appLogger.i('[NodeManagementService] 已启动（Steam 组网）');
+  }
+
+  /// 启动节点管理（Holepunch Pear 组网房间，没有 EasyTier 实例）
+  void startPear() {
+    _beginRun(pearInstanceId, pear: true);
+    appLogger.i('[NodeManagementService] 已启动（Pear 组网）');
+  }
+
+  void _beginRun(String instanceId, {bool steam = false, bool pear = false}) {
+    _steamMode = steam;
+    _pearMode = pear;
     _myPeerId = null;
     _noIpSince = DateTime.now();
     _lastNoIpWarnAt = null;
@@ -155,7 +188,6 @@ class NodeManagementService {
     // 不再把「列表能不能显示自己」卡在 myPeerId RPC 上。
     _startPolling(instanceId);
     unawaited(_refreshMyPeerIdThenCollapse(instanceId));
-    appLogger.i('[NodeManagementService] 已启动，实例ID: $instanceId');
   }
 
   Future<void> _refreshMyPeerIdThenCollapse(String instanceId) async {
@@ -194,6 +226,8 @@ class NodeManagementService {
     _firewallRefreshTimer?.cancel();
     _firewallRefreshTimer = null;
     currentInstanceId.value = null;
+    _steamMode = false;
+    _pearMode = false;
     _myPeerId = null;
     userNodes.value = [];
     // 清掉上一个实例的快照，避免下一次连接的健康检查读到过期节点。
@@ -208,7 +242,11 @@ class NodeManagementService {
 
   Future<void> _refreshMyPeerId(String instanceId) async {
     try {
-      final id = await myPeerId(instanceId: instanceId);
+      final int id = _steamMode
+          ? await rust_steam.steamMyPeerId()
+          : _pearMode
+          ? await rust_pear.pearMyPeerId()
+          : await myPeerId(instanceId: instanceId);
       // 防止 stop() 之后才返回时把状态污染回去。
       if (currentInstanceId.value == instanceId) {
         _myPeerId = id;
@@ -321,13 +359,17 @@ class NodeManagementService {
     _pollInFlight = true;
     try {
       if (currentInstanceId.value != instanceId) return;
-      final status = await getNetworkStatus(instanceId: instanceId);
-      _updateNetworkStatusSignal(status);
+      final rawNodes = _steamMode
+          ? await _steamNodes()
+          : _pearMode
+          ? await _pearNodes()
+          : (await getNetworkStatus(instanceId: instanceId)).nodes;
+      _updateNetworkStatusSignalFromNodes(rawNodes);
 
       final prevUsers = userNodes.value;
       final normalized = _buildNormalizedNodes(
         prev: prevUsers,
-        rawNodes: status.nodes,
+        rawNodes: rawNodes,
       );
       final collapsed = _collapseAndEnsureSelf(
         normalized,
@@ -345,8 +387,7 @@ class NodeManagementService {
       _trackMissingVirtualIp(myIp, published);
 
       if (_verbosePollLogs) {
-        final total = (status.totalNodes).toInt();
-        _verboseLogPublishedNodes(published, totalRaw: total);
+        _verboseLogPublishedNodes(published, totalRaw: rawNodes.length);
       }
 
       // 拉取对端资料（昵称/头像/客户端环境）：节流，避免每秒打一遍 RPC。
@@ -366,17 +407,90 @@ class NodeManagementService {
 
   /// 仅在 Rust 侧快照确有变化时更新 [`networkStatus`] signal，避免其它监听者
   /// 无意义每秒重建。
-  void _updateNetworkStatusSignal(dynamic status) {
-    final nsTotal = status.totalNodes;
+  void _updateNetworkStatusSignalFromNodes(List<KVNodeInfo> nodes) {
     final nextNetworkStatus = KVNetworkStatus(
-      totalNodes: nsTotal is BigInt ? nsTotal : BigInt.from(nsTotal),
-      nodes: List<KVNodeInfo>.from(status.nodes as List),
+      totalNodes: BigInt.from(nodes.length),
+      nodes: List<KVNodeInfo>.from(nodes),
     );
     final prevNs = networkStatus.value;
     if (prevNs == null || prevNs != nextNetworkStatus) {
       networkStatus.value = nextNetworkStatus;
     }
   }
+
+  /// 把 Steam 房间成员映射成与 EasyTier 一致的节点结构。
+  Future<List<KVNodeInfo>> _steamNodes() async {
+    final room = await rust_steam.steamRoomInfo();
+    if (!room.active) return const <KVNodeInfo>[];
+    _adoptSelfPeerId(room.selfPeerId);
+    return <KVNodeInfo>[
+      for (final m in room.members)
+        KVNodeInfo(
+          peerId: m.peerId,
+          hostname: m.nickname.isEmpty
+              ? 'Steam-${m.steamId}'
+              : m.nickname,
+          ipv4: m.virtualIp,
+          ipv6: '',
+          latencyMs: m.latencyMs.toDouble(),
+          nat: '',
+          // Steam/Pear 引擎只提供延迟与流量，没有丢包/跳数/连接明细，
+          // 这里留空而不是编造数值；UI 对空值会隐藏对应行。
+          hops: const <NodeHopStats>[],
+          lossRate: 0,
+          connections: const <KVNodeConnectionStats>[],
+          tunnelProto: 'steam',
+          connType: m.online
+              ? (m.viaRelay ? 'Steam 中继' : 'Steam 直连')
+              : '离线',
+          rxBytes: m.bytesIn,
+          txBytes: m.bytesOut,
+          version: '',
+          // 用 Steam 连接的真实路径：中继 2 跳，直连 1 跳。
+          cost: m.viaRelay ? 2 : 1,
+          remoteStaticPubkeyB64: m.steamId,
+          isCredentialPeer: false,
+        ),
+    ];
+  }
+
+  /// 把 Pear 房间成员映射成与 EasyTier 一致的节点结构。
+  Future<List<KVNodeInfo>> _pearNodes() async {
+    final room = await rust_pear.pearRoomInfo();
+    if (!room.active) return const <KVNodeInfo>[];
+    _adoptSelfPeerId(room.selfPeerId);
+    return <KVNodeInfo>[
+      for (final m in room.members)
+        KVNodeInfo(
+          peerId: m.peerId,
+          hostname: m.nickname.isEmpty ? 'Pear-${_shortKey(m.pearKey)}' : m.nickname,
+          ipv4: m.virtualIp,
+          ipv6: '',
+          latencyMs: m.latencyMs.toDouble(),
+          nat: '',
+          // 同 Steam：没有丢包/跳数/连接明细数据源，留空交由 UI 隐藏。
+          hops: const <NodeHopStats>[],
+          lossRate: 0,
+          connections: const <KVNodeConnectionStats>[],
+          tunnelProto: 'pear',
+          // HyperDHT 不对外暴露链路是否经过中继，这里只描述确定的事实：
+          // 房主是星型中心，其余成员的数据都经房主转发。
+          connType: m.online
+              ? (m.isHost ? 'Pear DHT' : 'Pear DHT · 经房主转发')
+              : '离线',
+          rxBytes: m.bytesIn,
+          txBytes: m.bytesOut,
+          version: '',
+          // 星型拓扑：房主 1 跳，成员 2 跳（经房主转发）。
+          cost: m.isHost ? 1 : 2,
+          remoteStaticPubkeyB64: m.pearKey,
+          isCredentialPeer: false,
+        ),
+    ];
+  }
+
+  static String _shortKey(String key) =>
+      key.length <= 12 ? key : '${key.substring(0, 12)}…';
 
   /// 把 EasyTier 返回的原始节点列表转成规范化 [`EnhancedNodeInfo`] Map，
   /// 去重、过滤公共服务器、合并旧的 metadata 与头像、对本机条目本地填充。
@@ -487,6 +601,18 @@ class NodeManagementService {
     appLogger.d(
       '[NodeManagementService] poll users(total=${published.length}, rawTotal=$totalRaw) [$nodesPreview]',
     );
+  }
+
+  /// 从 Steam/Pear 房间快照同步本机 peer_id。
+  ///
+  /// `room.selfPeerId` 与成员列表同源，比首次异步 `*MyPeerId()` 更可靠：
+  /// 即使那一次调用失败或返回 0，也不会把本机当成远端成员（出现两行自己）。
+  void _adoptSelfPeerId(int selfPeerId) {
+    if (selfPeerId == 0 || selfPeerId == _myPeerId) return;
+    _myPeerId = selfPeerId;
+    if (_verbosePollLogs) {
+      appLogger.d('[NodeManagementService] 采用房间 selfPeerId=$selfPeerId');
+    }
   }
 
   /// 判断给定 peer_id 是否对应"本机"（合成哨兵或真实本机）。

@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:astral_game/utils/hidden_process.dart';
 import 'package:astral_game/utils/logger.dart';
 import 'package:astral_game/utils/runtime_platform.dart';
 
@@ -60,7 +61,7 @@ Future<void> _ensureAliyunNtp() async {
 }
 
 Future<ProcessResult> _run(String exe, List<String> args) {
-  return Process.run(exe, args);
+  return runHidden(exe, args);
 }
 
 /// `reg query` 单行：`NtpServer    REG_SZ    time.windows.com,0x9`

@@ -33,6 +33,16 @@ class RoomInvitePayloadRecord {
   String networkSecret = '';
   String? displayName;
   List<PeerEndpointRecord> peers = [];
+
+  /// 传输方式（`easytier` / `steam` / `pear`）。旧记录读出来是空串，
+  /// 由 [toBookmark] 归一化为 `easytier`。
+  String transport = '';
+
+  /// Steam 组网的房主 SteamID。
+  String? hostSteamId;
+
+  /// Pear 组网的房主 HyperDHT 公钥。
+  String? hostPearKey;
 }
 
 /// [PeerEndpoint] 的 Isar 内嵌副本。
@@ -49,6 +59,9 @@ BookmarkRecord toRecord(Bookmark b) {
     ..networkName = b.payload.networkName
     ..networkSecret = b.payload.networkSecret
     ..displayName = b.payload.displayName
+    ..transport = b.payload.transport
+    ..hostSteamId = b.payload.hostSteamId
+    ..hostPearKey = b.payload.hostPearKey
     ..peers = [
       for (final e in b.payload.peers) PeerEndpointRecord()..uri = e.uri,
     ];
@@ -72,6 +85,11 @@ Bookmark toBookmark(BookmarkRecord r) => Bookmark(
         networkSecret: r.payload.networkSecret,
         peers: [for (final e in r.payload.peers) PeerEndpoint(uri: e.uri)],
         displayName: r.payload.displayName,
+        transport: r.payload.transport.trim().isEmpty
+            ? 'easytier'
+            : r.payload.transport,
+        hostSteamId: r.payload.hostSteamId,
+        hostPearKey: r.payload.hostPearKey,
       ),
       savedAt: r.savedAt,
       lastUsedAt: r.lastUsedAt,

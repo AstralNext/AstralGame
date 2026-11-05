@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:astral_game/data/models/active_room_session.dart';
 import 'package:astral_game/data/models/speed_test_snapshot.dart';
+import 'package:astral_game/data/models/transport_mode.dart';
 import 'package:astral_game/utils/avatar_hash.dart';
 import 'package:astral_game/utils/logger.dart';
 import 'package:device_info_plus/device_info_plus.dart';
@@ -26,6 +27,9 @@ class AppSettingsService {
   static const String _keyIsDhcpv6 = 'is_dhcpv6';
   static const String _keyVirtualIp = 'virtual_ip';
   static const String _keyVirtualIpv6 = 'virtual_ipv6';
+
+  /// 联机模式：`easytier`（默认）/ `steam` / `pear`。
+  static const String _keyTransportMode = 'transport_mode';
 
   final SharedPreferences _prefs;
   final Directory? _supportDir;
@@ -234,6 +238,12 @@ class AppSettingsService {
   String getVirtualIpv6() => _prefs.getString(_keyVirtualIpv6) ?? '';
   Future<void> setVirtualIpv6(String value) async =>
       await _prefs.setString(_keyVirtualIpv6, value);
+
+  /// 联机模式（EasyTier 组网 / Steam 组网）。
+  TransportMode getTransportMode() =>
+      transportModeFromStorage(_prefs.getString(_keyTransportMode));
+  Future<void> setTransportMode(TransportMode mode) async =>
+      await _prefs.setString(_keyTransportMode, mode.storageValue);
 
   // ---- 壁纸 ----
 

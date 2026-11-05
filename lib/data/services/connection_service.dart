@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:astral_game/data/models/active_room_session.dart';
 import 'package:astral_game/data/models/game_assist_rules.dart';
 import 'package:astral_game/data/models/server_mod.dart';
+import 'package:astral_game/data/models/transport_mode.dart';
 import 'package:astral_game/data/services/app_settings_service.dart';
 import 'package:astral_game/data/services/easytier_core_event_bus.dart';
 import 'package:astral_game/data/services/game_assist_rules_service.dart';
@@ -12,10 +13,12 @@ import 'package:astral_game/data/services/game_inject_service.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
 import 'package:astral_game/data/services/open_games_service.dart';
 import 'package:astral_game/data/services/p2p_config_service.dart';
+import 'package:astral_game/data/services/pear_transport_service.dart';
 import 'package:astral_game/data/services/peer_rpc/peer_rpc_client.dart';
 import 'package:astral_game/data/services/peer_rpc/peer_rpc_router.dart';
 import 'package:astral_game/data/services/room_assist_service.dart';
 import 'package:astral_game/data/services/share_code_service.dart';
+import 'package:astral_game/data/services/steam_transport_service.dart';
 import 'package:astral_game/data/services/vpn_manager.dart';
 import 'package:astral_game/data/state/room_state.dart';
 import 'package:astral_game/utils/logger.dart';
@@ -57,6 +60,35 @@ class ConnectionService {
   final PeerRpcClient _peerRpc;
   final PeerRpcRouter _peerRpcRouter;
   final EasyTierCoreEventBus _coreEvents;
+
+  /// Steam 组网（SDR 虚拟局域网）传输实现；EasyTier 模式不启用。
+  final SteamTransportService _steam = SteamTransportService();
+
+  /// Holepunch Pear（HyperDHT 打洞 / 中继）组网传输实现。
+  final PearTransportService _pear = PearTransportService();
+
+  /// 当前设置是否要求走 Steam 组网（仅 Windows 桌面端支持）。
+  bool get _steamModeActive =>
+      RuntimePlatform.isWindows &&
+      _appSettings.getTransportMode() == TransportMode.steam;
+
+  /// 当前设置是否要求走 Pear 组网（仅 Windows 桌面端支持）。
+  bool get _pearModeActive =>
+      RuntimePlatform.isWindows &&
+      _appSettings.getTransportMode() == TransportMode.pear;
+
+  /// 预热 Steam 客户端与 SDR 中继。
+  ///
+  /// `SteamAPI_Init` 与 SDR 就绪通常要数秒；在切换模式 / 应用启动时先跑起来，
+  /// 点「创建房间」时 `waitReady` 基本能立刻返回，不用在对话框关掉后干等。
+  Future<void> prewarmSteamTransport() async {
+    if (!_steamModeActive) return;
+    try {
+      await _steam.status();
+    } catch (e) {
+      appLogger.w('[ConnectionService] Steam 预热失败: $e');
+    }
+  }
 
   /// 桌面端虚拟网卡（Wintun / Linux tun）创建超时。
   ///
@@ -150,6 +182,20 @@ class ConnectionService {
     String? displayName,
   }) async {
     lastOfflineInvite = null;
+    if (_steamModeActive) {
+      return _createSteamRoom(
+        gameId: gameId,
+        gameName: gameName,
+        displayName: displayName,
+      );
+    }
+    if (_pearModeActive) {
+      return _createPearRoom(
+        gameId: gameId,
+        gameName: gameName,
+        displayName: displayName,
+      );
+    }
     final hostPeers = _p2pConfig.enabledPeers();
     if (hostPeers.isEmpty) {
       throw StateError('请先在服务器列表中启用至少一个服务器，再创建房间');
@@ -217,6 +263,281 @@ class ConnectionService {
         isLinking.value = false;
       }
     }
+  }
+
+  /// Steam 组网建房：wintun 虚拟网卡 + Steam SDR 星型局域网（房主转发）。
+  Future<ActiveRoomSession> _createSteamRoom({
+    required String gameId,
+    required String gameName,
+    String? displayName,
+  }) async {
+    final status = await _steam.waitReady();
+    if (!status.ok) throw StateError(status.message);
+    if (status.steamId.isEmpty) {
+      throw StateError('未获取到 SteamID：请先启动并登录 Steam 客户端。');
+    }
+
+    final networkName = 'ag_${_randomId(10)}';
+    final secret = _p2pConfig.generateRoomCode(length: 16);
+    final label = (displayName == null || displayName.trim().isEmpty)
+        ? gameName
+        : displayName.trim();
+
+    try {
+      await _steam.startHost(
+        joinToken: secret,
+        nickname: status.persona,
+      );
+      _peerRpc.bindSteam();
+      await _peerRpcRouter.startSteam();
+      _nodeManagement.startSteam();
+    } catch (e) {
+      await _unbindPeerRpc();
+      _nodeManagement.stop();
+      await _steam.stop();
+      rethrow;
+    }
+    await _startGameAssist(gameId: gameId, isHost: true);
+
+    final payload = RoomInvitePayload(
+      gameId: gameId,
+      gameName: gameName,
+      networkName: networkName,
+      networkSecret: secret,
+      peers: const <PeerEndpoint>[],
+      displayName: label,
+      transport: 'steam',
+      hostSteamId: status.steamId,
+    );
+    lastOfflineInvite = encodeOfflineInvite(payload);
+
+    String? shortCode;
+    try {
+      final created = await _shareCodes.createOrReuse(payload);
+      shortCode = created.code;
+    } catch (e) {
+      appLogger.w('[ConnectionService] Steam 房间短码不可用，改用离线邀请: $e');
+    }
+
+    final session = ActiveRoomSession(
+      isHost: true,
+      gameId: gameId,
+      gameName: gameName,
+      networkName: networkName,
+      networkSecret: secret,
+      displayName: label,
+      shortCode: shortCode,
+      peers: const <PeerEndpoint>[],
+      transport: 'steam',
+      hostSteamId: status.steamId,
+    );
+    _roomState.setSession(session);
+    _roomState.setConnected(true, clearSession: false);
+    await _appSettings.setLastRoomPayload(payload);
+    appLogger.i(
+      '[ConnectionService] Steam 组网房间已建立: $gameName vip=${status.virtualIp}',
+    );
+    return session;
+  }
+
+  /// Pear 组网建房：wintun 虚拟网卡 + HyperDHT 星型局域网（房主转发）。
+  Future<ActiveRoomSession> _createPearRoom({
+    required String gameId,
+    required String gameName,
+    String? displayName,
+  }) async {
+    final networkName = 'ag_${_randomId(10)}';
+    final secret = _p2pConfig.generateRoomCode(length: 16);
+    final label = (displayName == null || displayName.trim().isEmpty)
+        ? gameName
+        : displayName.trim();
+    final nickname = _appSettings.getUsername().trim();
+
+    var hostKey = '';
+    try {
+      final started = await _pear.startHost(
+        joinToken: secret,
+        nickname: nickname.isEmpty ? label : nickname,
+      );
+      hostKey = started.hostKey.trim();
+      if (hostKey.isEmpty) {
+        throw StateError('Pear 房主公钥获取失败，请重试。');
+      }
+      _peerRpc.bindPear();
+      await _peerRpcRouter.startPear();
+      _nodeManagement.startPear();
+    } catch (e) {
+      await _unbindPeerRpc();
+      _nodeManagement.stop();
+      await _pear.stop();
+      rethrow;
+    }
+    await _startGameAssist(gameId: gameId, isHost: true);
+
+    final payload = RoomInvitePayload(
+      gameId: gameId,
+      gameName: gameName,
+      networkName: networkName,
+      networkSecret: secret,
+      peers: const <PeerEndpoint>[],
+      displayName: label,
+      transport: 'pear',
+      hostPearKey: hostKey,
+    );
+    lastOfflineInvite = encodeOfflineInvite(payload);
+
+    String? shortCode;
+    try {
+      final created = await _shareCodes.createOrReuse(payload);
+      shortCode = created.code;
+    } catch (e) {
+      appLogger.w('[ConnectionService] Pear 房间短码不可用，改用离线邀请: $e');
+    }
+
+    final session = ActiveRoomSession(
+      isHost: true,
+      gameId: gameId,
+      gameName: gameName,
+      networkName: networkName,
+      networkSecret: secret,
+      displayName: label,
+      shortCode: shortCode,
+      peers: const <PeerEndpoint>[],
+      transport: 'pear',
+      hostPearKey: hostKey,
+    );
+    _roomState.setSession(session);
+    _roomState.setConnected(true, clearSession: false);
+    await _appSettings.setLastRoomPayload(payload);
+    appLogger.i(
+      '[ConnectionService] Pear 组网房间已建立: $gameName key=$hostKey',
+    );
+    return session;
+  }
+
+  /// Pear 组网加入：按房主公钥连入，加入同一虚拟局域网。
+  Future<ActiveRoomSession> _joinPearRoom(
+    RoomInvitePayload payload, {
+    String? shortCode,
+  }) async {
+    if (!RuntimePlatform.isWindows) {
+      throw StateError('Pear 组网目前仅支持 Windows 桌面端。');
+    }
+    if (!_pearModeActive) {
+      throw StateError(
+        '该房间使用 Pear 组网模式，请先到「设置 → 网络 → 联机模式」'
+        '切换为「Holepunch Pear 组网」后重试。',
+      );
+    }
+    final hostKey = payload.hostPearKey?.trim() ?? '';
+    if (hostKey.isEmpty) {
+      throw StateError('邀请缺少 Pear 房主公钥，请让房主用新版重新分享。');
+    }
+    if (payload.networkSecret.isEmpty) {
+      throw StateError('邀请缺少房间口令，请让房主重新分享。');
+    }
+    final nickname = _appSettings.getUsername().trim();
+
+    try {
+      await _pear.startGuest(
+        hostKey: hostKey,
+        joinToken: payload.networkSecret,
+        nickname: nickname.isEmpty ? '玩家' : nickname,
+      );
+      _peerRpc.bindPear();
+      await _peerRpcRouter.startPear();
+      _nodeManagement.startPear();
+    } catch (e) {
+      await _unbindPeerRpc();
+      _nodeManagement.stop();
+      await _pear.stop();
+      rethrow;
+    }
+
+    final session = ActiveRoomSession(
+      isHost: false,
+      gameId: payload.gameId,
+      gameName: payload.gameName.isEmpty ? '房间' : payload.gameName,
+      networkName: payload.networkName,
+      networkSecret: payload.networkSecret,
+      displayName: payload.displayName?.isNotEmpty == true
+          ? payload.displayName!
+          : (payload.gameName.isEmpty ? payload.networkName : payload.gameName),
+      shortCode: shortCode,
+      peers: payload.peers,
+      transport: 'pear',
+      hostPearKey: hostKey,
+    );
+    _roomState.setSession(session);
+    _roomState.setConnected(true, clearSession: false);
+    _armGuestPresenceWatch();
+    await _startGameAssist(gameId: payload.gameId, isHost: false);
+    appLogger.i('[ConnectionService] 已加入 Pear 组网房间: host=$hostKey');
+    return session;
+  }
+
+  /// Steam 组网加入：连到房主 SteamID，加入同一虚拟局域网。
+  Future<ActiveRoomSession> _joinSteamRoom(
+    RoomInvitePayload payload, {
+    String? shortCode,
+  }) async {
+    if (!RuntimePlatform.isWindows) {
+      throw StateError('Steam 组网目前仅支持 Windows 桌面端。');
+    }
+    if (!_steamModeActive) {
+      throw StateError('该房间使用 Steam 组网模式，请先到「设置 → 网络 → 联机模式」切换为「Steam 组网」后重试。');
+    }
+    final hostId = payload.hostSteamId?.trim() ?? '';
+    if (hostId.isEmpty) {
+      throw StateError('邀请缺少房主 SteamID，请让房主用新版重新分享。');
+    }
+    if (payload.networkSecret.isEmpty) {
+      throw StateError('邀请缺少房间口令，请让房主重新分享。');
+    }
+
+    // 邀请里只需要房主 SteamID 与房间口令，虚拟 IP 由房主分配。
+    final status = await _steam.waitReady();
+    if (!status.ok) throw StateError(status.message);
+
+    try {
+      await _steam.startGuest(
+        hostSteamId: hostId,
+        joinToken: payload.networkSecret,
+        nickname: status.persona,
+      );
+      _peerRpc.bindSteam();
+      await _peerRpcRouter.startSteam();
+      _nodeManagement.startSteam();
+    } catch (e) {
+      await _unbindPeerRpc();
+      _nodeManagement.stop();
+      await _steam.stop();
+      rethrow;
+    }
+
+    final session = ActiveRoomSession(
+      isHost: false,
+      gameId: payload.gameId,
+      gameName: payload.gameName.isEmpty ? '房间' : payload.gameName,
+      networkName: payload.networkName,
+      networkSecret: payload.networkSecret,
+      displayName: payload.displayName?.isNotEmpty == true
+          ? payload.displayName!
+          : (payload.gameName.isEmpty ? payload.networkName : payload.gameName),
+      shortCode: shortCode,
+      peers: payload.peers,
+      transport: 'steam',
+      hostSteamId: hostId,
+    );
+    _roomState.setSession(session);
+    _roomState.setConnected(true, clearSession: false);
+    _armGuestPresenceWatch();
+    await _startGameAssist(gameId: payload.gameId, isHost: false);
+    appLogger.i(
+      '[ConnectionService] 已加入 Steam 组网房间: host=$hostId '
+      'vip=${status.virtualIp}',
+    );
+    return session;
   }
 
   /// 解析邀请输入（短码/离线）并返回完整 payload，**不真正加入房间**。
@@ -294,6 +615,9 @@ class ConnectionService {
       networkSecret: session.networkSecret,
       peers: session.peers,
       displayName: session.displayName,
+      transport: session.transport,
+      hostSteamId: session.hostSteamId,
+      hostPearKey: session.hostPearKey,
     );
   }
 
@@ -301,6 +625,12 @@ class ConnectionService {
     RoomInvitePayload payload, {
     String? shortCode,
   }) async {
+    if (payload.isSteamTransport) {
+      return _joinSteamRoom(payload, shortCode: shortCode);
+    }
+    if (payload.isPearTransport) {
+      return _joinPearRoom(payload, shortCode: shortCode);
+    }
     final invitePeers = joinableInvitePeers(payload);
 
     final session = ActiveRoomSession(
@@ -373,8 +703,13 @@ class ConnectionService {
     final session = _roomState.session.value;
     if (session == null || !session.isHost) return null;
     if (session.networkSecret.isEmpty) return null;
-    final hostPeers = _p2pConfig.enabledPeers();
-    if (hostPeers.isEmpty) return null;
+    final isTunnel =
+        session.isSteamTransport || session.isPearTransport;
+    // Steam / Pear 组网没有服务器列表，进房只靠房主连接信息。
+    final hostPeers = isTunnel
+        ? const <PeerEndpoint>[]
+        : _p2pConfig.enabledPeers();
+    if (!isTunnel && hostPeers.isEmpty) return null;
     final payload = RoomInvitePayload(
       gameId: session.gameId,
       gameName: session.gameName,
@@ -382,6 +717,9 @@ class ConnectionService {
       networkSecret: session.networkSecret,
       peers: hostPeers,
       displayName: session.displayName,
+      transport: session.transport,
+      hostSteamId: session.hostSteamId,
+      hostPearKey: session.hostPearKey,
     );
     return encodeOfflineInvite(payload);
   }
@@ -638,6 +976,23 @@ class ConnectionService {
     if (abortLink) {
       _link.abort();
     }
+    final session = _roomState.session.value;
+    if (session?.isSteamTransport == true) {
+      await _unbindPeerRpc();
+      try {
+        await _steam.stop();
+      } catch (e) {
+        appLogger.w('[ConnectionService] 关闭 Steam 组网失败: $e');
+      }
+    }
+    if (session?.isPearTransport == true) {
+      await _unbindPeerRpc();
+      try {
+        await _pear.stop();
+      } catch (e) {
+        appLogger.w('[ConnectionService] 关闭 Pear 组网失败: $e');
+      }
+    }
     await _roomAssist.stopAll();
     await _gameInject.stop();
     await _openGames.stop();
@@ -650,7 +1005,10 @@ class ConnectionService {
     if (RuntimePlatform.isAndroid) {
       await _vpnManager.stop();
     }
-    if (instanceId != null) {
+    // Steam / Pear 组网没有 EasyTier 实例，伪 instanceId 不能传给 Rust。
+    if (instanceId != null &&
+        instanceId != NodeManagementService.steamInstanceId &&
+        instanceId != NodeManagementService.pearInstanceId) {
       try {
         await closeInstance(instanceId: instanceId);
       } catch (e, st) {
@@ -701,6 +1059,27 @@ class ConnectionService {
     _guestPresenceDispose?.call();
     _guestPresenceDispose = null;
     _hostMissingSince = null;
+  }
+
+  /// Steam / Pear 分支不经过 [_connectAndStartServices]，这里补齐与具体传输
+  /// 无关的游戏辅助：Mono 注入与「开放游戏」列表。魔法墙仍只在 EasyTier 模式
+  /// 启用（Steam / Pear 靠虚拟网卡泛洪做局域网发现，不做物理网卡旁路）。
+  ///
+  /// 辅助能力失败不应连带拆掉已经建立的房间，因此逐项吞掉异常并记日志。
+  Future<void> _startGameAssist({
+    required String gameId,
+    required bool isHost,
+  }) async {
+    try {
+      await _gameInject.startForRoom(gameId: gameId);
+    } catch (e) {
+      appLogger.w('[ConnectionService] 游戏注入启动失败: $e', error: e);
+    }
+    try {
+      await _openGames.startForRoom(isHost: isHost, gameId: gameId);
+    } catch (e) {
+      appLogger.w('[ConnectionService] 开放游戏列表启动失败: $e', error: e);
+    }
   }
 
   /// 等待 EasyTier 实例真正进入 Running，超时返回 false。
@@ -763,7 +1142,8 @@ class ConnectionService {
         if (error != null) {
           return (
             ready: false,
-            reason: '虚拟网卡（TUN）创建失败：$error。'
+            reason:
+                '虚拟网卡（TUN）创建失败：$error。'
                 '请检查网络权限后重试（Windows 请以管理员身份运行，'
                 'Linux 请确认已授予网络能力）。',
           );
@@ -779,7 +1159,8 @@ class ConnectionService {
         if (!DateTime.now().isBefore(deadline)) {
           return (
             ready: false,
-            reason: '虚拟网卡（TUN）在 ${timeout.inSeconds} 秒内未能创建成功，'
+            reason:
+                '虚拟网卡（TUN）在 ${timeout.inSeconds} 秒内未能创建成功，'
                 '请检查网络权限后重试（Windows 请以管理员身份运行，'
                 'Linux 请确认已授予网络能力）。',
           );
@@ -837,10 +1218,12 @@ class ConnectionService {
         if (isAborted()) return null;
         if (linked) return null;
         final status = _nodeManagement.networkStatus.value;
-        final hasRemoteNode = status != null &&
+        final hasRemoteNode =
+            status != null &&
             (status.totalNodes > BigInt.one ||
                 status.nodes.any(
-                  (n) => n.peerId != 0 && !_nodeManagement.isLocalPeer(n.peerId),
+                  (n) =>
+                      n.peerId != 0 && !_nodeManagement.isLocalPeer(n.peerId),
                 ));
         if (hasRemoteNode) return null;
         if (!DateTime.now().isBefore(deadline)) {

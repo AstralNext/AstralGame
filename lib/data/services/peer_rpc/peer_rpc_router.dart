@@ -3,6 +3,8 @@ import 'dart:typed_data';
 
 import 'package:astral_game/utils/logger.dart';
 import 'package:astral_game/src/rust/api/p2p.dart';
+import 'package:astral_game/src/rust/api/steam.dart' as rust_steam;
+import 'package:astral_game/src/rust/api/pear.dart' as rust_pear;
 
 import 'peer_rpc_codec.dart';
 import 'peer_rpc_exception.dart';
@@ -17,6 +19,9 @@ typedef NotificationListener =
     void Function(String channel, dynamic params, int fromPeerId);
 
 /// 替代旧 `NodeNetServer` 的 peer-RPC 路由器。
+///
+/// 后端有三种：EasyTier 实例（按 instanceId）、Steam 组网房间或
+/// Holepunch Pear 组网房间（都没有 instanceId）。
 class PeerRpcRouter {
   PeerRpcRouter();
 
@@ -26,11 +31,13 @@ class PeerRpcRouter {
   // ignore: cancel_subscriptions
   StreamSubscription<AppInboundEventC>? _inboundSub;
   String? _instanceId;
+  bool _steam = false;
+  bool _pear = false;
 
   /// 是否打印每个入站事件的概览。频繁场景下默认关闭，避免刷屏。
   static const bool _accessLog = false;
 
-  bool get isRunning => _instanceId != null;
+  bool get isRunning => _steam || _pear || _instanceId != null;
   String? get instanceId => _instanceId;
   int get methodsCount => _methods.length;
 
@@ -53,44 +60,73 @@ class PeerRpcRouter {
 
   /// 绑定到指定的 EasyTier instance 并开始监听入站事件。
   Future<void> start(String instanceId) async {
-    if (_instanceId != null) {
-      await stop();
-    }
+    await stop();
     _instanceId = instanceId;
+    _steam = false;
+    _pear = false;
+    _wire(subscribeAppInbound(instanceId: instanceId), 'instance=$instanceId');
+    appLogger.d(
+      '[PeerRpcRouter] 已启动 instance=$instanceId methods=$methodsCount',
+    );
+  }
 
-    final stream = subscribeAppInbound(instanceId: instanceId);
+  /// 绑定到 Steam 组网房间并开始监听入站事件。
+  Future<void> startSteam() async {
+    await stop();
+    _instanceId = null;
+    _steam = true;
+    _pear = false;
+    _wire(rust_steam.steamSubscribeAppInbound(), 'steam');
+    appLogger.d('[PeerRpcRouter] 已启动 steam methods=$methodsCount');
+  }
+
+  /// 绑定到 Holepunch Pear 组网房间并开始监听入站事件。
+  Future<void> startPear() async {
+    await stop();
+    _instanceId = null;
+    _steam = false;
+    _pear = true;
+    _wire(rust_pear.pearSubscribeAppInbound(), 'pear');
+    appLogger.d('[PeerRpcRouter] 已启动 pear methods=$methodsCount');
+  }
+
+  void _wire(Stream<AppInboundEventC> stream, String label) {
     _inboundSub = stream.listen(
       _onEvent,
       onError: (Object err, StackTrace st) {
         appLogger.e(
-          '[PeerRpcRouter] 入站流错误 instance=$instanceId: $err',
+          '[PeerRpcRouter] 入站流错误 $label: $err',
           error: err,
           stackTrace: st,
         );
       },
       onDone: () {
-        if (_instanceId == instanceId) {
+        if (isRunning) {
           _instanceId = null;
+          _steam = false;
+          _pear = false;
           _inboundSub = null;
-          appLogger.d('[PeerRpcRouter] 入站流已关闭 instance=$instanceId');
+          appLogger.d('[PeerRpcRouter] 入站流已关闭 $label');
         }
       },
-    );
-
-    appLogger.d(
-      '[PeerRpcRouter] 已启动 instance=$instanceId methods=$methodsCount',
     );
   }
 
   /// 停止监听并清理状态。
   Future<void> stop() async {
     final sub = _inboundSub;
-    final id = _instanceId;
+    final label = _steam
+        ? 'steam'
+        : _pear
+        ? 'pear'
+        : _instanceId;
     _inboundSub = null;
     _instanceId = null;
+    _steam = false;
+    _pear = false;
     await sub?.cancel();
-    if (id != null) {
-      appLogger.d('[PeerRpcRouter] 已停止 instance=$id');
+    if (label != null) {
+      appLogger.d('[PeerRpcRouter] 已停止 $label');
     }
   }
 
@@ -184,8 +220,7 @@ class PeerRpcRouter {
     String errorMsg,
     Object? data,
   ) async {
-    final id = _instanceId;
-    if (id == null) return;
+    if (!isRunning) return;
     final Uint8List payload;
     try {
       payload = encodeRpcPayload(data);
@@ -193,19 +228,41 @@ class PeerRpcRouter {
       // 编码出错就降级为空 payload + 错误信息。
       appLogger.w('[PeerRpcRouter] 回包编码失败 token=$token: $e');
       try {
-        await appCallReply(
-          instanceId: id,
-          token: token,
-          status: -32603,
-          errorMsg: 'Encode error: $e',
-          payload: Uint8List(0),
-        );
+        await _reply(token, -32603, 'Encode error: $e', Uint8List(0));
       } catch (e) {
         appLogger.d('[PeerRpcRouter] 操作失败', error: e);
       }
       return;
     }
     try {
+      await _reply(token, status, errorMsg, payload);
+    } catch (e) {
+      appLogger.w('[PeerRpcRouter] 回包失败 token=$token: $e');
+    }
+  }
+
+  Future<void> _reply(
+    BigInt token,
+    int status,
+    String errorMsg,
+    Uint8List payload,
+  ) async {
+    final id = _instanceId;
+    if (_steam) {
+      await rust_steam.steamAppCallReply(
+        token: token,
+        status: status,
+        errorMsg: errorMsg,
+        payload: payload,
+      );
+    } else if (_pear) {
+      await rust_pear.pearAppCallReply(
+        token: token,
+        status: status,
+        errorMsg: errorMsg,
+        payload: payload,
+      );
+    } else if (id != null) {
       await appCallReply(
         instanceId: id,
         token: token,
@@ -213,8 +270,6 @@ class PeerRpcRouter {
         errorMsg: errorMsg,
         payload: payload,
       );
-    } catch (e) {
-      appLogger.w('[PeerRpcRouter] 回包失败 token=$token: $e');
     }
   }
 }

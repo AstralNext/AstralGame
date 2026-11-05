@@ -2,11 +2,16 @@ import 'dart:async';
 
 import 'package:astral_game/utils/logger.dart';
 import 'package:astral_game/src/rust/api/p2p.dart';
+import 'package:astral_game/src/rust/api/steam.dart' as rust_steam;
+import 'package:astral_game/src/rust/api/pear.dart' as rust_pear;
 
 import 'peer_rpc_codec.dart';
 import 'peer_rpc_exception.dart';
 
 /// 替代旧 `NodeNetClient` 的 peer-RPC 客户端封装。
+///
+/// 后端有三种：EasyTier 实例（按 instanceId）、Steam 组网房间或
+/// Holepunch Pear 组网房间（都没有 instanceId）。
 class PeerRpcClient {
   PeerRpcClient();
 
@@ -17,20 +22,40 @@ class PeerRpcClient {
   static const bool _verboseLog = false;
 
   String? _instanceId;
+  bool _steam = false;
+  bool _pear = false;
 
-  /// 是否已经绑定到一个运行中的 instance。
-  bool get isBound => _instanceId != null;
+  /// 是否已经绑定到一个运行中的实例 / Steam / Pear 房间。
+  bool get isBound => _steam || _pear || _instanceId != null;
 
-  /// 绑定/解绑当前 instance。传 `null` 解绑。
+  /// 绑定/解绑当前 EasyTier instance。传 `null` 解绑。
   void bindInstance(String? instanceId) {
+    _steam = false;
+    _pear = false;
     _instanceId = (instanceId == null || instanceId.isEmpty)
         ? null
         : instanceId;
   }
 
+  /// 绑定到 Steam 组网房间（没有 EasyTier instanceId）。
+  void bindSteam() {
+    _instanceId = null;
+    _steam = true;
+    _pear = false;
+  }
+
+  /// 绑定到 Holepunch Pear 组网房间（没有 EasyTier instanceId）。
+  void bindPear() {
+    _instanceId = null;
+    _steam = false;
+    _pear = true;
+  }
+
   /// 释放资源（兼容旧 `dispose()` 接口）。
   void dispose() {
     _instanceId = null;
+    _steam = false;
+    _pear = false;
   }
 
   /// 发送请求-响应 RPC，等待对端 handler 回包。
@@ -40,20 +65,39 @@ class PeerRpcClient {
     dynamic params,
     Duration timeout = defaultTimeout,
   }) async {
-    final id = _ensureBound();
+    _ensureBound();
     final sw = Stopwatch()..start();
 
     final AppCallResultC result;
     try {
-      result = await appCall(
-        instanceId: id,
-        dstPeerId: peerId,
-        channel: channel,
-        requestId: BigInt.zero,
-        payload: encodeRpcPayload(params),
-        flags: 0,
-        timeoutMs: timeout.inMilliseconds,
-      );
+      final payload = encodeRpcPayload(params);
+      result = _steam
+          ? await rust_steam.steamAppCall(
+              dstPeerId: peerId,
+              channel: channel,
+              requestId: BigInt.zero,
+              payload: payload,
+              flags: 0,
+              timeoutMs: timeout.inMilliseconds,
+            )
+          : _pear
+          ? await rust_pear.pearAppCall(
+              dstPeerId: peerId,
+              channel: channel,
+              requestId: BigInt.zero,
+              payload: payload,
+              flags: 0,
+              timeoutMs: timeout.inMilliseconds,
+            )
+          : await appCall(
+              instanceId: _instanceId!,
+              dstPeerId: peerId,
+              channel: channel,
+              requestId: BigInt.zero,
+              payload: payload,
+              flags: 0,
+              timeoutMs: timeout.inMilliseconds,
+            );
     } on TimeoutException {
       throw RpcException(-32000, 'Request timeout');
     } catch (e) {
@@ -95,15 +139,30 @@ class PeerRpcClient {
     dynamic params,
     Duration timeout = defaultTimeout,
   }) async {
-    final id = _ensureBound();
+    _ensureBound();
     try {
-      await appNotify(
-        instanceId: id,
-        dstPeerId: peerId,
-        channel: channel,
-        payload: encodeRpcPayload(params),
-        timeoutMs: timeout.inMilliseconds,
-      );
+      final payload = encodeRpcPayload(params);
+      if (_steam) {
+        await rust_steam.steamAppNotify(
+          dstPeerId: peerId,
+          channel: channel,
+          payload: payload,
+        );
+      } else if (_pear) {
+        await rust_pear.pearAppNotify(
+          dstPeerId: peerId,
+          channel: channel,
+          payload: payload,
+        );
+      } else {
+        await appNotify(
+          instanceId: _instanceId!,
+          dstPeerId: peerId,
+          channel: channel,
+          payload: payload,
+          timeoutMs: timeout.inMilliseconds,
+        );
+      }
     } on TimeoutException {
       throw RpcException(-32000, 'Request timeout');
     } catch (e) {
@@ -116,28 +175,36 @@ class PeerRpcClient {
 
   /// peer-to-peer ping（RTT 毫秒）。
   Future<int> ping(int peerId, {Duration timeout = defaultTimeout}) async {
-    final id = _ensureBound();
+    _ensureBound();
     try {
-      final rtt = await peerPing(
-        instanceId: id,
-        dstPeerId: peerId,
-        timeoutMs: timeout.inMilliseconds,
-      );
+      final rtt = _steam
+          ? await rust_steam.steamPeerPing(
+              dstPeerId: peerId,
+              timeoutMs: timeout.inMilliseconds,
+            )
+          : _pear
+          ? await rust_pear.pearPeerPing(
+              dstPeerId: peerId,
+              timeoutMs: timeout.inMilliseconds,
+            )
+          : await peerPing(
+              instanceId: _instanceId!,
+              dstPeerId: peerId,
+              timeoutMs: timeout.inMilliseconds,
+            );
       return rtt.toInt();
     } catch (e) {
       throw RpcException(-32603, 'ping error: $e');
     }
   }
 
-  String _ensureBound() {
-    final id = _instanceId;
-    if (id == null) {
+  void _ensureBound() {
+    if (!isBound) {
       throw RpcException(
         -32002,
-        'PeerRpcClient is not bound to any instance (call bindInstance first)',
+        'PeerRpcClient is not bound (call bindInstance / bindSteam / bindPear first)',
       );
     }
-    return id;
   }
 
   bool _looksLikeTimeout(String message) {

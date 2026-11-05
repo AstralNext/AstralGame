@@ -9,7 +9,9 @@ import 'api/magic_wall.dart';
 import 'api/multicast.dart';
 import 'api/nt.dart';
 import 'api/p2p.dart';
+import 'api/pear.dart';
 import 'api/process.dart';
+import 'api/steam.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'frb_generated.dart';
@@ -71,7 +73,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => 1978173974;
+  int get rustContentHash => -697470894;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -233,6 +235,54 @@ abstract class RustLibApi extends BaseApi {
 
   Future<int> crateApiP2PMyPeerId({required String instanceId});
 
+  Future<AppCallResultC> crateApiPearPearAppCall({
+    required int dstPeerId,
+    required String channel,
+    required BigInt requestId,
+    required List<int> payload,
+    required int flags,
+    required int timeoutMs,
+  });
+
+  Future<bool> crateApiPearPearAppCallReply({
+    required BigInt token,
+    required int status,
+    required String errorMsg,
+    required List<int> payload,
+  });
+
+  Future<void> crateApiPearPearAppNotify({
+    required int dstPeerId,
+    required String channel,
+    required List<int> payload,
+  });
+
+  Future<int> crateApiPearPearMyPeerId();
+
+  Future<PlatformInt64> crateApiPearPearPeerPing({
+    required int dstPeerId,
+    required int timeoutMs,
+  });
+
+  Future<PearRoomInfo> crateApiPearPearRoomInfo();
+
+  Future<PearRoomInfo> crateApiPearPearRoomInfoDefault();
+
+  Future<PearStatusInfo> crateApiPearPearStart({
+    required bool host,
+    required String hostKey,
+    required String joinToken,
+    required String nickname,
+  });
+
+  Future<PearStatusInfo> crateApiPearPearStatus();
+
+  Future<PearStatusInfo> crateApiPearPearStatusInfoDefault();
+
+  Future<void> crateApiPearPearStop();
+
+  Stream<AppInboundEventC> crateApiPearPearSubscribeAppInbound();
+
   Future<PlatformInt64> crateApiP2PPeerPing({
     required String instanceId,
     required int dstPeerId,
@@ -276,6 +326,56 @@ abstract class RustLibApi extends BaseApi {
     required int port,
     required String parser,
   });
+
+  Future<AppCallResultC> crateApiSteamSteamAppCall({
+    required int dstPeerId,
+    required String channel,
+    required BigInt requestId,
+    required List<int> payload,
+    required int flags,
+    required int timeoutMs,
+  });
+
+  Future<bool> crateApiSteamSteamAppCallReply({
+    required BigInt token,
+    required int status,
+    required String errorMsg,
+    required List<int> payload,
+  });
+
+  Future<void> crateApiSteamSteamAppNotify({
+    required int dstPeerId,
+    required String channel,
+    required List<int> payload,
+  });
+
+  Future<int> crateApiSteamSteamMyPeerId();
+
+  Future<PlatformInt64> crateApiSteamSteamPeerPing({
+    required int dstPeerId,
+    required int timeoutMs,
+  });
+
+  Future<SteamRoomInfo> crateApiSteamSteamRoomInfo();
+
+  Future<SteamRoomInfo> crateApiSteamSteamRoomInfoDefault();
+
+  Future<SteamStatusInfo> crateApiSteamSteamStart({
+    required bool host,
+    required String hostSteamId,
+    required String joinToken,
+    required String nickname,
+  });
+
+  Future<SteamStatusInfo> crateApiSteamSteamStatus();
+
+  Future<SteamStatusInfo> crateApiSteamSteamStatusInfoDefault();
+
+  Future<void> crateApiSteamSteamStop();
+
+  Stream<AppInboundEventC> crateApiSteamSteamSubscribeAppInbound();
+
+  Stream<SteamStatusInfo> crateApiSteamSteamSubscribeStatus();
 
   Future<void> crateApiForwardStopAllForwardServers();
 
@@ -1673,6 +1773,399 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: 'my_peer_id', argNames: ['instanceId']);
 
   @override
+  Future<AppCallResultC> crateApiPearPearAppCall({
+    required int dstPeerId,
+    required String channel,
+    required BigInt requestId,
+    required List<int> payload,
+    required int flags,
+    required int timeoutMs,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_u_32(dstPeerId, serializer);
+          sse_encode_String(channel, serializer);
+          sse_encode_u_64(requestId, serializer);
+          sse_encode_list_prim_u_8_loose(payload, serializer);
+          sse_encode_u_32(flags, serializer);
+          sse_encode_i_32(timeoutMs, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 41,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_app_call_result_c,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiPearPearAppCallConstMeta,
+        argValues: [dstPeerId, channel, requestId, payload, flags, timeoutMs],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPearPearAppCallConstMeta => const TaskConstMeta(
+    debugName: 'pear_app_call',
+    argNames: [
+      'dstPeerId',
+      'channel',
+      'requestId',
+      'payload',
+      'flags',
+      'timeoutMs',
+    ],
+  );
+
+  @override
+  Future<bool> crateApiPearPearAppCallReply({
+    required BigInt token,
+    required int status,
+    required String errorMsg,
+    required List<int> payload,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_u_64(token, serializer);
+          sse_encode_i_32(status, serializer);
+          sse_encode_String(errorMsg, serializer);
+          sse_encode_list_prim_u_8_loose(payload, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 42,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_bool,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiPearPearAppCallReplyConstMeta,
+        argValues: [token, status, errorMsg, payload],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPearPearAppCallReplyConstMeta =>
+      const TaskConstMeta(
+        debugName: 'pear_app_call_reply',
+        argNames: ['token', 'status', 'errorMsg', 'payload'],
+      );
+
+  @override
+  Future<void> crateApiPearPearAppNotify({
+    required int dstPeerId,
+    required String channel,
+    required List<int> payload,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_u_32(dstPeerId, serializer);
+          sse_encode_String(channel, serializer);
+          sse_encode_list_prim_u_8_loose(payload, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 43,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiPearPearAppNotifyConstMeta,
+        argValues: [dstPeerId, channel, payload],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPearPearAppNotifyConstMeta => const TaskConstMeta(
+    debugName: 'pear_app_notify',
+    argNames: ['dstPeerId', 'channel', 'payload'],
+  );
+
+  @override
+  Future<int> crateApiPearPearMyPeerId() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 44,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_u_32,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiPearPearMyPeerIdConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPearPearMyPeerIdConstMeta =>
+      const TaskConstMeta(debugName: 'pear_my_peer_id', argNames: []);
+
+  @override
+  Future<PlatformInt64> crateApiPearPearPeerPing({
+    required int dstPeerId,
+    required int timeoutMs,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_u_32(dstPeerId, serializer);
+          sse_encode_i_32(timeoutMs, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 45,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_i_64,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiPearPearPeerPingConstMeta,
+        argValues: [dstPeerId, timeoutMs],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPearPearPeerPingConstMeta => const TaskConstMeta(
+    debugName: 'pear_peer_ping',
+    argNames: ['dstPeerId', 'timeoutMs'],
+  );
+
+  @override
+  Future<PearRoomInfo> crateApiPearPearRoomInfo() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 46,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_pear_room_info,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiPearPearRoomInfoConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPearPearRoomInfoConstMeta =>
+      const TaskConstMeta(debugName: 'pear_room_info', argNames: []);
+
+  @override
+  Future<PearRoomInfo> crateApiPearPearRoomInfoDefault() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 47,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_pear_room_info,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiPearPearRoomInfoDefaultConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPearPearRoomInfoDefaultConstMeta =>
+      const TaskConstMeta(debugName: 'pear_room_info_default', argNames: []);
+
+  @override
+  Future<PearStatusInfo> crateApiPearPearStart({
+    required bool host,
+    required String hostKey,
+    required String joinToken,
+    required String nickname,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_bool(host, serializer);
+          sse_encode_String(hostKey, serializer);
+          sse_encode_String(joinToken, serializer);
+          sse_encode_String(nickname, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 48,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_pear_status_info,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiPearPearStartConstMeta,
+        argValues: [host, hostKey, joinToken, nickname],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPearPearStartConstMeta => const TaskConstMeta(
+    debugName: 'pear_start',
+    argNames: ['host', 'hostKey', 'joinToken', 'nickname'],
+  );
+
+  @override
+  Future<PearStatusInfo> crateApiPearPearStatus() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 49,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_pear_status_info,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiPearPearStatusConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPearPearStatusConstMeta =>
+      const TaskConstMeta(debugName: 'pear_status', argNames: []);
+
+  @override
+  Future<PearStatusInfo> crateApiPearPearStatusInfoDefault() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 50,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_pear_status_info,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiPearPearStatusInfoDefaultConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPearPearStatusInfoDefaultConstMeta =>
+      const TaskConstMeta(debugName: 'pear_status_info_default', argNames: []);
+
+  @override
+  Future<void> crateApiPearPearStop() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 51,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiPearPearStopConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPearPearStopConstMeta =>
+      const TaskConstMeta(debugName: 'pear_stop', argNames: []);
+
+  @override
+  Stream<AppInboundEventC> crateApiPearPearSubscribeAppInbound() {
+    final sink = RustStreamSink<AppInboundEventC>();
+    unawaited(
+      handler.executeNormal(
+        NormalTask(
+          callFfi: (port_) {
+            final serializer = SseSerializer(generalizedFrbRustBinding);
+            sse_encode_StreamSink_app_inbound_event_c_Sse(sink, serializer);
+            pdeCallFfi(
+              generalizedFrbRustBinding,
+              serializer,
+              funcId: 52,
+              port: port_,
+            );
+          },
+          codec: SseCodec(
+            decodeSuccessData: sse_decode_unit,
+            decodeErrorData: sse_decode_String,
+          ),
+          constMeta: kCrateApiPearPearSubscribeAppInboundConstMeta,
+          argValues: [sink],
+          apiImpl: this,
+        ),
+      ),
+    );
+    return sink.stream;
+  }
+
+  TaskConstMeta get kCrateApiPearPearSubscribeAppInboundConstMeta =>
+      const TaskConstMeta(
+        debugName: 'pear_subscribe_app_inbound',
+        argNames: ['sink'],
+      );
+
+  @override
   Future<PlatformInt64> crateApiP2PPeerPing({
     required String instanceId,
     required int dstPeerId,
@@ -1688,7 +2181,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 41,
+            funcId: 53,
             port: port_,
           );
         },
@@ -1717,7 +2210,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 42,
+            funcId: 54,
             port: port_,
           );
         },
@@ -1745,7 +2238,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 43,
+            funcId: 55,
             port: port_,
           );
         },
@@ -1780,7 +2273,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 44,
+            funcId: 56,
             port: port_,
           );
         },
@@ -1815,7 +2308,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 45,
+            funcId: 57,
             port: port_,
           );
         },
@@ -1852,7 +2345,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 46,
+            funcId: 58,
             port: port_,
           );
         },
@@ -1886,7 +2379,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 47,
+            funcId: 59,
             port: port_,
           );
         },
@@ -1915,7 +2408,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 48,
+            funcId: 60,
             port: port_,
           );
         },
@@ -1947,7 +2440,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 49,
+            funcId: 61,
             port: port_,
           );
         },
@@ -1984,7 +2477,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 50,
+            funcId: 62,
             port: port_,
           );
         },
@@ -2006,6 +2499,435 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<AppCallResultC> crateApiSteamSteamAppCall({
+    required int dstPeerId,
+    required String channel,
+    required BigInt requestId,
+    required List<int> payload,
+    required int flags,
+    required int timeoutMs,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_u_32(dstPeerId, serializer);
+          sse_encode_String(channel, serializer);
+          sse_encode_u_64(requestId, serializer);
+          sse_encode_list_prim_u_8_loose(payload, serializer);
+          sse_encode_u_32(flags, serializer);
+          sse_encode_i_32(timeoutMs, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 63,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_app_call_result_c,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSteamSteamAppCallConstMeta,
+        argValues: [dstPeerId, channel, requestId, payload, flags, timeoutMs],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSteamSteamAppCallConstMeta => const TaskConstMeta(
+    debugName: 'steam_app_call',
+    argNames: [
+      'dstPeerId',
+      'channel',
+      'requestId',
+      'payload',
+      'flags',
+      'timeoutMs',
+    ],
+  );
+
+  @override
+  Future<bool> crateApiSteamSteamAppCallReply({
+    required BigInt token,
+    required int status,
+    required String errorMsg,
+    required List<int> payload,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_u_64(token, serializer);
+          sse_encode_i_32(status, serializer);
+          sse_encode_String(errorMsg, serializer);
+          sse_encode_list_prim_u_8_loose(payload, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 64,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_bool,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSteamSteamAppCallReplyConstMeta,
+        argValues: [token, status, errorMsg, payload],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSteamSteamAppCallReplyConstMeta =>
+      const TaskConstMeta(
+        debugName: 'steam_app_call_reply',
+        argNames: ['token', 'status', 'errorMsg', 'payload'],
+      );
+
+  @override
+  Future<void> crateApiSteamSteamAppNotify({
+    required int dstPeerId,
+    required String channel,
+    required List<int> payload,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_u_32(dstPeerId, serializer);
+          sse_encode_String(channel, serializer);
+          sse_encode_list_prim_u_8_loose(payload, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 65,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSteamSteamAppNotifyConstMeta,
+        argValues: [dstPeerId, channel, payload],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSteamSteamAppNotifyConstMeta =>
+      const TaskConstMeta(
+        debugName: 'steam_app_notify',
+        argNames: ['dstPeerId', 'channel', 'payload'],
+      );
+
+  @override
+  Future<int> crateApiSteamSteamMyPeerId() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 66,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_u_32,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSteamSteamMyPeerIdConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSteamSteamMyPeerIdConstMeta =>
+      const TaskConstMeta(debugName: 'steam_my_peer_id', argNames: []);
+
+  @override
+  Future<PlatformInt64> crateApiSteamSteamPeerPing({
+    required int dstPeerId,
+    required int timeoutMs,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_u_32(dstPeerId, serializer);
+          sse_encode_i_32(timeoutMs, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 67,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_i_64,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSteamSteamPeerPingConstMeta,
+        argValues: [dstPeerId, timeoutMs],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSteamSteamPeerPingConstMeta => const TaskConstMeta(
+    debugName: 'steam_peer_ping',
+    argNames: ['dstPeerId', 'timeoutMs'],
+  );
+
+  @override
+  Future<SteamRoomInfo> crateApiSteamSteamRoomInfo() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 68,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_steam_room_info,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSteamSteamRoomInfoConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSteamSteamRoomInfoConstMeta =>
+      const TaskConstMeta(debugName: 'steam_room_info', argNames: []);
+
+  @override
+  Future<SteamRoomInfo> crateApiSteamSteamRoomInfoDefault() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 69,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_steam_room_info,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSteamSteamRoomInfoDefaultConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSteamSteamRoomInfoDefaultConstMeta =>
+      const TaskConstMeta(debugName: 'steam_room_info_default', argNames: []);
+
+  @override
+  Future<SteamStatusInfo> crateApiSteamSteamStart({
+    required bool host,
+    required String hostSteamId,
+    required String joinToken,
+    required String nickname,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_bool(host, serializer);
+          sse_encode_String(hostSteamId, serializer);
+          sse_encode_String(joinToken, serializer);
+          sse_encode_String(nickname, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 70,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_steam_status_info,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSteamSteamStartConstMeta,
+        argValues: [host, hostSteamId, joinToken, nickname],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSteamSteamStartConstMeta => const TaskConstMeta(
+    debugName: 'steam_start',
+    argNames: ['host', 'hostSteamId', 'joinToken', 'nickname'],
+  );
+
+  @override
+  Future<SteamStatusInfo> crateApiSteamSteamStatus() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 71,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_steam_status_info,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSteamSteamStatusConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSteamSteamStatusConstMeta =>
+      const TaskConstMeta(debugName: 'steam_status', argNames: []);
+
+  @override
+  Future<SteamStatusInfo> crateApiSteamSteamStatusInfoDefault() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 72,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_steam_status_info,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSteamSteamStatusInfoDefaultConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSteamSteamStatusInfoDefaultConstMeta =>
+      const TaskConstMeta(debugName: 'steam_status_info_default', argNames: []);
+
+  @override
+  Future<void> crateApiSteamSteamStop() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 73,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSteamSteamStopConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSteamSteamStopConstMeta =>
+      const TaskConstMeta(debugName: 'steam_stop', argNames: []);
+
+  @override
+  Stream<AppInboundEventC> crateApiSteamSteamSubscribeAppInbound() {
+    final sink = RustStreamSink<AppInboundEventC>();
+    unawaited(
+      handler.executeNormal(
+        NormalTask(
+          callFfi: (port_) {
+            final serializer = SseSerializer(generalizedFrbRustBinding);
+            sse_encode_StreamSink_app_inbound_event_c_Sse(sink, serializer);
+            pdeCallFfi(
+              generalizedFrbRustBinding,
+              serializer,
+              funcId: 74,
+              port: port_,
+            );
+          },
+          codec: SseCodec(
+            decodeSuccessData: sse_decode_unit,
+            decodeErrorData: sse_decode_String,
+          ),
+          constMeta: kCrateApiSteamSteamSubscribeAppInboundConstMeta,
+          argValues: [sink],
+          apiImpl: this,
+        ),
+      ),
+    );
+    return sink.stream;
+  }
+
+  TaskConstMeta get kCrateApiSteamSteamSubscribeAppInboundConstMeta =>
+      const TaskConstMeta(
+        debugName: 'steam_subscribe_app_inbound',
+        argNames: ['sink'],
+      );
+
+  @override
+  Stream<SteamStatusInfo> crateApiSteamSteamSubscribeStatus() {
+    final sink = RustStreamSink<SteamStatusInfo>();
+    unawaited(
+      handler.executeNormal(
+        NormalTask(
+          callFfi: (port_) {
+            final serializer = SseSerializer(generalizedFrbRustBinding);
+            sse_encode_StreamSink_steam_status_info_Sse(sink, serializer);
+            pdeCallFfi(
+              generalizedFrbRustBinding,
+              serializer,
+              funcId: 75,
+              port: port_,
+            );
+          },
+          codec: SseCodec(
+            decodeSuccessData: sse_decode_unit,
+            decodeErrorData: null,
+          ),
+          constMeta: kCrateApiSteamSteamSubscribeStatusConstMeta,
+          argValues: [sink],
+          apiImpl: this,
+        ),
+      ),
+    );
+    return sink.stream;
+  }
+
+  TaskConstMeta get kCrateApiSteamSteamSubscribeStatusConstMeta =>
+      const TaskConstMeta(
+        debugName: 'steam_subscribe_status',
+        argNames: ['sink'],
+      );
+
+  @override
   Future<void> crateApiForwardStopAllForwardServers() {
     return handler.executeNormal(
       NormalTask(
@@ -2014,7 +2936,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 51,
+            funcId: 76,
             port: port_,
           );
         },
@@ -2041,7 +2963,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 52,
+            funcId: 77,
             port: port_,
           );
         },
@@ -2071,7 +2993,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 53,
+            funcId: 78,
             port: port_,
           );
         },
@@ -2102,7 +3024,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 54,
+            funcId: 79,
             port: port_,
           );
         },
@@ -2132,7 +3054,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 55,
+            funcId: 80,
             port: port_,
           );
         },
@@ -2160,7 +3082,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 56,
+            funcId: 81,
             port: port_,
           );
         },
@@ -2196,7 +3118,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             pdeCallFfi(
               generalizedFrbRustBinding,
               serializer,
-              funcId: 57,
+              funcId: 82,
               port: port_,
             );
           },
@@ -2231,7 +3153,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             pdeCallFfi(
               generalizedFrbRustBinding,
               serializer,
-              funcId: 58,
+              funcId: 83,
               port: port_,
             );
           },
@@ -2263,7 +3185,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 59,
+            funcId: 84,
             port: port_,
           );
         },
@@ -2422,6 +3344,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @protected
   RustStreamSink<CoreLogEventC> dco_decode_StreamSink_core_log_event_c_Sse(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    throw UnimplementedError();
+  }
+
+  @protected
+  RustStreamSink<SteamStatusInfo> dco_decode_StreamSink_steam_status_info_Sse(
     dynamic raw,
   ) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -2688,6 +3618,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<PearMemberInfo> dco_decode_list_pear_member_info(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_pear_member_info).toList();
+  }
+
+  @protected
   List<int> dco_decode_list_prim_u_16_loose(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as List<int>;
@@ -2709,6 +3645,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as Uint8List;
+  }
+
+  @protected
+  List<SteamMemberInfo> dco_decode_list_steam_member_info(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_steam_member_info).toList();
   }
 
   @protected
@@ -2775,6 +3717,62 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  PearMemberInfo dco_decode_pear_member_info(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 10)
+      throw Exception('unexpected arr length: expect 10 but see ${arr.length}');
+    return PearMemberInfo(
+      peerId: dco_decode_u_32(arr[0]),
+      pearKey: dco_decode_String(arr[1]),
+      nickname: dco_decode_String(arr[2]),
+      virtualIp: dco_decode_String(arr[3]),
+      latencyMs: dco_decode_u_32(arr[4]),
+      online: dco_decode_bool(arr[5]),
+      isHost: dco_decode_bool(arr[6]),
+      isSelf: dco_decode_bool(arr[7]),
+      bytesIn: dco_decode_u_64(arr[8]),
+      bytesOut: dco_decode_u_64(arr[9]),
+    );
+  }
+
+  @protected
+  PearRoomInfo dco_decode_pear_room_info(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 7)
+      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    return PearRoomInfo(
+      active: dco_decode_bool(arr[0]),
+      isHost: dco_decode_bool(arr[1]),
+      virtualIp: dco_decode_String(arr[2]),
+      network: dco_decode_String(arr[3]),
+      memberCount: dco_decode_u_32(arr[4]),
+      selfPeerId: dco_decode_u_32(arr[5]),
+      members: dco_decode_list_pear_member_info(arr[6]),
+    );
+  }
+
+  @protected
+  PearStatusInfo dco_decode_pear_status_info(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 9)
+      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
+    return PearStatusInfo(
+      ok: dco_decode_bool(arr[0]),
+      ready: dco_decode_bool(arr[1]),
+      hostKey: dco_decode_String(arr[2]),
+      nickname: dco_decode_String(arr[3]),
+      roomActive: dco_decode_bool(arr[4]),
+      isHost: dco_decode_bool(arr[5]),
+      virtualIp: dco_decode_String(arr[6]),
+      memberCount: dco_decode_u_32(arr[7]),
+      message: dco_decode_String(arr[8]),
+    );
+  }
+
+  @protected
   (BigInt, BigInt, BigInt) dco_decode_record_usize_u_64_u_64(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -2785,6 +3783,64 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       dco_decode_usize(arr[0]),
       dco_decode_u_64(arr[1]),
       dco_decode_u_64(arr[2]),
+    );
+  }
+
+  @protected
+  SteamMemberInfo dco_decode_steam_member_info(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 11)
+      throw Exception('unexpected arr length: expect 11 but see ${arr.length}');
+    return SteamMemberInfo(
+      peerId: dco_decode_u_32(arr[0]),
+      steamId: dco_decode_String(arr[1]),
+      nickname: dco_decode_String(arr[2]),
+      virtualIp: dco_decode_String(arr[3]),
+      latencyMs: dco_decode_u_32(arr[4]),
+      online: dco_decode_bool(arr[5]),
+      isHost: dco_decode_bool(arr[6]),
+      isSelf: dco_decode_bool(arr[7]),
+      viaRelay: dco_decode_bool(arr[8]),
+      bytesIn: dco_decode_u_64(arr[9]),
+      bytesOut: dco_decode_u_64(arr[10]),
+    );
+  }
+
+  @protected
+  SteamRoomInfo dco_decode_steam_room_info(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 7)
+      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    return SteamRoomInfo(
+      active: dco_decode_bool(arr[0]),
+      isHost: dco_decode_bool(arr[1]),
+      virtualIp: dco_decode_String(arr[2]),
+      network: dco_decode_String(arr[3]),
+      memberCount: dco_decode_u_32(arr[4]),
+      selfPeerId: dco_decode_u_32(arr[5]),
+      members: dco_decode_list_steam_member_info(arr[6]),
+    );
+  }
+
+  @protected
+  SteamStatusInfo dco_decode_steam_status_info(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 10)
+      throw Exception('unexpected arr length: expect 10 but see ${arr.length}');
+    return SteamStatusInfo(
+      ok: dco_decode_bool(arr[0]),
+      loggedOn: dco_decode_bool(arr[1]),
+      steamId: dco_decode_String(arr[2]),
+      persona: dco_decode_String(arr[3]),
+      relayReady: dco_decode_bool(arr[4]),
+      roomActive: dco_decode_bool(arr[5]),
+      isHost: dco_decode_bool(arr[6]),
+      virtualIp: dco_decode_String(arr[7]),
+      memberCount: dco_decode_u_32(arr[8]),
+      message: dco_decode_String(arr[9]),
     );
   }
 
@@ -2972,6 +4028,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @protected
   RustStreamSink<CoreLogEventC> sse_decode_StreamSink_core_log_event_c_Sse(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    throw UnimplementedError('Unreachable ()');
+  }
+
+  @protected
+  RustStreamSink<SteamStatusInfo> sse_decode_StreamSink_steam_status_info_Sse(
     SseDeserializer deserializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -3323,6 +4387,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<PearMemberInfo> sse_decode_list_pear_member_info(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    final len_ = sse_decode_i_32(deserializer);
+    final ans_ = <PearMemberInfo>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_pear_member_info(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   List<int> sse_decode_list_prim_u_16_loose(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     final len_ = sse_decode_i_32(deserializer);
@@ -3348,6 +4426,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     final len_ = sse_decode_i_32(deserializer);
     return deserializer.buffer.getUint8List(len_);
+  }
+
+  @protected
+  List<SteamMemberInfo> sse_decode_list_steam_member_info(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    final len_ = sse_decode_i_32(deserializer);
+    final ans_ = <SteamMemberInfo>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_steam_member_info(deserializer));
+    }
+    return ans_;
   }
 
   @protected
@@ -3436,6 +4528,79 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  PearMemberInfo sse_decode_pear_member_info(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final var_peerId = sse_decode_u_32(deserializer);
+    final var_pearKey = sse_decode_String(deserializer);
+    final var_nickname = sse_decode_String(deserializer);
+    final var_virtualIp = sse_decode_String(deserializer);
+    final var_latencyMs = sse_decode_u_32(deserializer);
+    final var_online = sse_decode_bool(deserializer);
+    final var_isHost = sse_decode_bool(deserializer);
+    final var_isSelf = sse_decode_bool(deserializer);
+    final var_bytesIn = sse_decode_u_64(deserializer);
+    final var_bytesOut = sse_decode_u_64(deserializer);
+    return PearMemberInfo(
+      peerId: var_peerId,
+      pearKey: var_pearKey,
+      nickname: var_nickname,
+      virtualIp: var_virtualIp,
+      latencyMs: var_latencyMs,
+      online: var_online,
+      isHost: var_isHost,
+      isSelf: var_isSelf,
+      bytesIn: var_bytesIn,
+      bytesOut: var_bytesOut,
+    );
+  }
+
+  @protected
+  PearRoomInfo sse_decode_pear_room_info(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final var_active = sse_decode_bool(deserializer);
+    final var_isHost = sse_decode_bool(deserializer);
+    final var_virtualIp = sse_decode_String(deserializer);
+    final var_network = sse_decode_String(deserializer);
+    final var_memberCount = sse_decode_u_32(deserializer);
+    final var_selfPeerId = sse_decode_u_32(deserializer);
+    final var_members = sse_decode_list_pear_member_info(deserializer);
+    return PearRoomInfo(
+      active: var_active,
+      isHost: var_isHost,
+      virtualIp: var_virtualIp,
+      network: var_network,
+      memberCount: var_memberCount,
+      selfPeerId: var_selfPeerId,
+      members: var_members,
+    );
+  }
+
+  @protected
+  PearStatusInfo sse_decode_pear_status_info(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final var_ok = sse_decode_bool(deserializer);
+    final var_ready = sse_decode_bool(deserializer);
+    final var_hostKey = sse_decode_String(deserializer);
+    final var_nickname = sse_decode_String(deserializer);
+    final var_roomActive = sse_decode_bool(deserializer);
+    final var_isHost = sse_decode_bool(deserializer);
+    final var_virtualIp = sse_decode_String(deserializer);
+    final var_memberCount = sse_decode_u_32(deserializer);
+    final var_message = sse_decode_String(deserializer);
+    return PearStatusInfo(
+      ok: var_ok,
+      ready: var_ready,
+      hostKey: var_hostKey,
+      nickname: var_nickname,
+      roomActive: var_roomActive,
+      isHost: var_isHost,
+      virtualIp: var_virtualIp,
+      memberCount: var_memberCount,
+      message: var_message,
+    );
+  }
+
+  @protected
   (BigInt, BigInt, BigInt) sse_decode_record_usize_u_64_u_64(
     SseDeserializer deserializer,
   ) {
@@ -3444,6 +4609,83 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     final var_field1 = sse_decode_u_64(deserializer);
     final var_field2 = sse_decode_u_64(deserializer);
     return (var_field0, var_field1, var_field2);
+  }
+
+  @protected
+  SteamMemberInfo sse_decode_steam_member_info(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final var_peerId = sse_decode_u_32(deserializer);
+    final var_steamId = sse_decode_String(deserializer);
+    final var_nickname = sse_decode_String(deserializer);
+    final var_virtualIp = sse_decode_String(deserializer);
+    final var_latencyMs = sse_decode_u_32(deserializer);
+    final var_online = sse_decode_bool(deserializer);
+    final var_isHost = sse_decode_bool(deserializer);
+    final var_isSelf = sse_decode_bool(deserializer);
+    final var_viaRelay = sse_decode_bool(deserializer);
+    final var_bytesIn = sse_decode_u_64(deserializer);
+    final var_bytesOut = sse_decode_u_64(deserializer);
+    return SteamMemberInfo(
+      peerId: var_peerId,
+      steamId: var_steamId,
+      nickname: var_nickname,
+      virtualIp: var_virtualIp,
+      latencyMs: var_latencyMs,
+      online: var_online,
+      isHost: var_isHost,
+      isSelf: var_isSelf,
+      viaRelay: var_viaRelay,
+      bytesIn: var_bytesIn,
+      bytesOut: var_bytesOut,
+    );
+  }
+
+  @protected
+  SteamRoomInfo sse_decode_steam_room_info(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final var_active = sse_decode_bool(deserializer);
+    final var_isHost = sse_decode_bool(deserializer);
+    final var_virtualIp = sse_decode_String(deserializer);
+    final var_network = sse_decode_String(deserializer);
+    final var_memberCount = sse_decode_u_32(deserializer);
+    final var_selfPeerId = sse_decode_u_32(deserializer);
+    final var_members = sse_decode_list_steam_member_info(deserializer);
+    return SteamRoomInfo(
+      active: var_active,
+      isHost: var_isHost,
+      virtualIp: var_virtualIp,
+      network: var_network,
+      memberCount: var_memberCount,
+      selfPeerId: var_selfPeerId,
+      members: var_members,
+    );
+  }
+
+  @protected
+  SteamStatusInfo sse_decode_steam_status_info(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final var_ok = sse_decode_bool(deserializer);
+    final var_loggedOn = sse_decode_bool(deserializer);
+    final var_steamId = sse_decode_String(deserializer);
+    final var_persona = sse_decode_String(deserializer);
+    final var_relayReady = sse_decode_bool(deserializer);
+    final var_roomActive = sse_decode_bool(deserializer);
+    final var_isHost = sse_decode_bool(deserializer);
+    final var_virtualIp = sse_decode_String(deserializer);
+    final var_memberCount = sse_decode_u_32(deserializer);
+    final var_message = sse_decode_String(deserializer);
+    return SteamStatusInfo(
+      ok: var_ok,
+      loggedOn: var_loggedOn,
+      steamId: var_steamId,
+      persona: var_persona,
+      relayReady: var_relayReady,
+      roomActive: var_roomActive,
+      isHost: var_isHost,
+      virtualIp: var_virtualIp,
+      memberCount: var_memberCount,
+      message: var_message,
+    );
   }
 
   @protected
@@ -3660,6 +4902,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       self.setupAndSerialize(
         codec: SseCodec(
           decodeSuccessData: sse_decode_core_log_event_c,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+      ),
+      serializer,
+    );
+  }
+
+  @protected
+  void sse_encode_StreamSink_steam_status_info_Sse(
+    RustStreamSink<SteamStatusInfo> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(
+      self.setupAndSerialize(
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_steam_status_info,
           decodeErrorData: sse_decode_AnyhowException,
         ),
       ),
@@ -3954,6 +5213,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_pear_member_info(
+    List<PearMemberInfo> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_pear_member_info(item, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_list_prim_u_16_loose(
     List<int> self,
     SseSerializer serializer,
@@ -3995,6 +5266,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.length, serializer);
     serializer.buffer.putUint8List(self);
+  }
+
+  @protected
+  void sse_encode_list_steam_member_info(
+    List<SteamMemberInfo> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_steam_member_info(item, serializer);
+    }
   }
 
   @protected
@@ -4063,6 +5346,53 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_pear_member_info(
+    PearMemberInfo self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self.peerId, serializer);
+    sse_encode_String(self.pearKey, serializer);
+    sse_encode_String(self.nickname, serializer);
+    sse_encode_String(self.virtualIp, serializer);
+    sse_encode_u_32(self.latencyMs, serializer);
+    sse_encode_bool(self.online, serializer);
+    sse_encode_bool(self.isHost, serializer);
+    sse_encode_bool(self.isSelf, serializer);
+    sse_encode_u_64(self.bytesIn, serializer);
+    sse_encode_u_64(self.bytesOut, serializer);
+  }
+
+  @protected
+  void sse_encode_pear_room_info(PearRoomInfo self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_bool(self.active, serializer);
+    sse_encode_bool(self.isHost, serializer);
+    sse_encode_String(self.virtualIp, serializer);
+    sse_encode_String(self.network, serializer);
+    sse_encode_u_32(self.memberCount, serializer);
+    sse_encode_u_32(self.selfPeerId, serializer);
+    sse_encode_list_pear_member_info(self.members, serializer);
+  }
+
+  @protected
+  void sse_encode_pear_status_info(
+    PearStatusInfo self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_bool(self.ok, serializer);
+    sse_encode_bool(self.ready, serializer);
+    sse_encode_String(self.hostKey, serializer);
+    sse_encode_String(self.nickname, serializer);
+    sse_encode_bool(self.roomActive, serializer);
+    sse_encode_bool(self.isHost, serializer);
+    sse_encode_String(self.virtualIp, serializer);
+    sse_encode_u_32(self.memberCount, serializer);
+    sse_encode_String(self.message, serializer);
+  }
+
+  @protected
   void sse_encode_record_usize_u_64_u_64(
     (BigInt, BigInt, BigInt) self,
     SseSerializer serializer,
@@ -4071,6 +5401,58 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_usize(self.$1, serializer);
     sse_encode_u_64(self.$2, serializer);
     sse_encode_u_64(self.$3, serializer);
+  }
+
+  @protected
+  void sse_encode_steam_member_info(
+    SteamMemberInfo self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self.peerId, serializer);
+    sse_encode_String(self.steamId, serializer);
+    sse_encode_String(self.nickname, serializer);
+    sse_encode_String(self.virtualIp, serializer);
+    sse_encode_u_32(self.latencyMs, serializer);
+    sse_encode_bool(self.online, serializer);
+    sse_encode_bool(self.isHost, serializer);
+    sse_encode_bool(self.isSelf, serializer);
+    sse_encode_bool(self.viaRelay, serializer);
+    sse_encode_u_64(self.bytesIn, serializer);
+    sse_encode_u_64(self.bytesOut, serializer);
+  }
+
+  @protected
+  void sse_encode_steam_room_info(
+    SteamRoomInfo self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_bool(self.active, serializer);
+    sse_encode_bool(self.isHost, serializer);
+    sse_encode_String(self.virtualIp, serializer);
+    sse_encode_String(self.network, serializer);
+    sse_encode_u_32(self.memberCount, serializer);
+    sse_encode_u_32(self.selfPeerId, serializer);
+    sse_encode_list_steam_member_info(self.members, serializer);
+  }
+
+  @protected
+  void sse_encode_steam_status_info(
+    SteamStatusInfo self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_bool(self.ok, serializer);
+    sse_encode_bool(self.loggedOn, serializer);
+    sse_encode_String(self.steamId, serializer);
+    sse_encode_String(self.persona, serializer);
+    sse_encode_bool(self.relayReady, serializer);
+    sse_encode_bool(self.roomActive, serializer);
+    sse_encode_bool(self.isHost, serializer);
+    sse_encode_String(self.virtualIp, serializer);
+    sse_encode_u_32(self.memberCount, serializer);
+    sse_encode_String(self.message, serializer);
   }
 
   @protected

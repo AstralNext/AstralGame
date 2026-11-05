@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:astral_game/config/network_constants.dart';
 import 'package:astral_game/data/services/network_optimize_service.dart';
+import 'package:astral_game/utils/hidden_process.dart';
 import 'package:astral_game/utils/logger.dart';
 import 'package:astral_game/utils/runtime_platform.dart';
 import 'package:http/http.dart' as http;
@@ -93,7 +94,7 @@ class SmartDnsConfigUpdater {
       appLogger.w('[SmartDns] 找不到 auto_dns_binder.exe');
       return false;
     }
-    final result = await Process.run(exe, ['deploy-conf', path]);
+    final result = await runHidden(exe, ['deploy-conf', path]);
     final stdout = result.stdout.toString().trim();
     final stderr = result.stderr.toString().trim();
     if (stdout.isNotEmpty) appLogger.i('[SmartDns] $stdout');

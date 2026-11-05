@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:astral_game/utils/hidden_process.dart';
 import 'package:astral_game/utils/logger.dart';
 import 'package:astral_game/utils/room_share.dart';
 import 'package:astral_game/utils/runtime_platform.dart';
@@ -12,9 +13,9 @@ Future<void> registerJoinProtocol() async {
     final exe = Platform.resolvedExecutable;
     final command = '"$exe" "%1"';
     const root = 'HKCU\\Software\\Classes\\$kJoinAppScheme';
-    await Process.run('reg', ['add', root, '/ve', '/d', 'URL:Astral Game', '/f']);
-    await Process.run('reg', ['add', root, '/v', 'URL Protocol', '/d', '', '/f']);
-    await Process.run('reg', [
+    await runHidden('reg', ['add', root, '/ve', '/d', 'URL:Astral Game', '/f']);
+    await runHidden('reg', ['add', root, '/v', 'URL Protocol', '/d', '', '/f']);
+    await runHidden('reg', [
       'add',
       '$root\\shell\\open\\command',
       '/ve',

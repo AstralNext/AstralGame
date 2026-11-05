@@ -12,7 +12,9 @@ import 'api/magic_wall.dart';
 import 'api/multicast.dart';
 import 'api/nt.dart';
 import 'api/p2p.dart';
+import 'api/pear.dart';
 import 'api/process.dart';
+import 'api/steam.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'frb_generated.dart';
@@ -117,6 +119,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  RustStreamSink<SteamStatusInfo> dco_decode_StreamSink_steam_status_info_Sse(
+    dynamic raw,
+  );
+
+  @protected
   String dco_decode_String(dynamic raw);
 
   @protected
@@ -200,6 +207,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<NodeHopStats> dco_decode_list_node_hop_stats(dynamic raw);
 
   @protected
+  List<PearMemberInfo> dco_decode_list_pear_member_info(dynamic raw);
+
+  @protected
   List<int> dco_decode_list_prim_u_16_loose(dynamic raw);
 
   @protected
@@ -210,6 +220,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
+
+  @protected
+  List<SteamMemberInfo> dco_decode_list_steam_member_info(dynamic raw);
 
   @protected
   MagicWallRule dco_decode_magic_wall_rule(dynamic raw);
@@ -227,7 +240,25 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PlatformInt64? dco_decode_opt_box_autoadd_i_64(dynamic raw);
 
   @protected
+  PearMemberInfo dco_decode_pear_member_info(dynamic raw);
+
+  @protected
+  PearRoomInfo dco_decode_pear_room_info(dynamic raw);
+
+  @protected
+  PearStatusInfo dco_decode_pear_status_info(dynamic raw);
+
+  @protected
   (BigInt, BigInt, BigInt) dco_decode_record_usize_u_64_u_64(dynamic raw);
+
+  @protected
+  SteamMemberInfo dco_decode_steam_member_info(dynamic raw);
+
+  @protected
+  SteamRoomInfo dco_decode_steam_room_info(dynamic raw);
+
+  @protected
+  SteamStatusInfo dco_decode_steam_status_info(dynamic raw);
 
   @protected
   int dco_decode_u_16(dynamic raw);
@@ -322,6 +353,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   RustStreamSink<CoreLogEventC> sse_decode_StreamSink_core_log_event_c_Sse(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  RustStreamSink<SteamStatusInfo> sse_decode_StreamSink_steam_status_info_Sse(
     SseDeserializer deserializer,
   );
 
@@ -425,6 +461,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  List<PearMemberInfo> sse_decode_list_pear_member_info(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   List<int> sse_decode_list_prim_u_16_loose(SseDeserializer deserializer);
 
   @protected
@@ -435,6 +476,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
+
+  @protected
+  List<SteamMemberInfo> sse_decode_list_steam_member_info(
+    SseDeserializer deserializer,
+  );
 
   @protected
   MagicWallRule sse_decode_magic_wall_rule(SseDeserializer deserializer);
@@ -452,9 +498,27 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PlatformInt64? sse_decode_opt_box_autoadd_i_64(SseDeserializer deserializer);
 
   @protected
+  PearMemberInfo sse_decode_pear_member_info(SseDeserializer deserializer);
+
+  @protected
+  PearRoomInfo sse_decode_pear_room_info(SseDeserializer deserializer);
+
+  @protected
+  PearStatusInfo sse_decode_pear_status_info(SseDeserializer deserializer);
+
+  @protected
   (BigInt, BigInt, BigInt) sse_decode_record_usize_u_64_u_64(
     SseDeserializer deserializer,
   );
+
+  @protected
+  SteamMemberInfo sse_decode_steam_member_info(SseDeserializer deserializer);
+
+  @protected
+  SteamRoomInfo sse_decode_steam_room_info(SseDeserializer deserializer);
+
+  @protected
+  SteamStatusInfo sse_decode_steam_status_info(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_16(SseDeserializer deserializer);
@@ -566,6 +630,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_StreamSink_core_log_event_c_Sse(
     RustStreamSink<CoreLogEventC> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_StreamSink_steam_status_info_Sse(
+    RustStreamSink<SteamStatusInfo> self,
     SseSerializer serializer,
   );
 
@@ -708,6 +778,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_pear_member_info(
+    List<PearMemberInfo> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_prim_u_16_loose(
     List<int> self,
     SseSerializer serializer,
@@ -725,6 +801,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_prim_u_8_strict(
     Uint8List self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_steam_member_info(
+    List<SteamMemberInfo> self,
     SseSerializer serializer,
   );
 
@@ -750,8 +832,38 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_pear_member_info(
+    PearMemberInfo self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_pear_room_info(PearRoomInfo self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_pear_status_info(
+    PearStatusInfo self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_record_usize_u_64_u_64(
     (BigInt, BigInt, BigInt) self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_steam_member_info(
+    SteamMemberInfo self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_steam_room_info(SteamRoomInfo self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_steam_status_info(
+    SteamStatusInfo self,
     SseSerializer serializer,
   );
 
