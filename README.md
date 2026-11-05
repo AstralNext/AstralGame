@@ -54,6 +54,19 @@ sudo pacman -U https://github.com/AstralNext/AstralGame/releases/latest/download
 3. 将邀请链接或分享码发送给好友。
 4. 好友加入房间后，启动游戏即可开始联机。
 
+## 从源码构建
+
+需要 Flutter 3.47.2（或更高 stable）、Rust stable、Visual Studio 2022（含 C++ 桌面工具链）；Windows 的 Pear 组网侧车还需要 Node.js 20+。
+
+```bash
+flutter pub get
+# Pear 侧车依赖按锁文件安装，node_modules 不入库（构建时由 windows/runner 的 CMake 复制到 data/pear）
+npm ci --prefix pear
+flutter build windows --release
+```
+
+产物位于 `build/windows/x64/runner/Release`。`rust/vendor/steamworks` 是 `[patch.crates-io]` 的 path 依赖，已随仓库提供，无需额外安装。
+
 ## 反馈与支持
 
 - 使用中遇到问题或有功能建议，欢迎通过 [Issues](https://github.com/AstralNext/AstralGame/issues) 反馈。
