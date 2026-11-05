@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:astral_game/config/theme.dart';
 
 import 'package:astral_game/data/models/bookmark.dart';
 import 'package:astral_game/data/services/connection_service.dart';
@@ -120,6 +121,7 @@ class _JoinLinkBinderState extends State<JoinLinkBinder> {
     if (!ctx.mounted) return Future.value(false);
     return showDialog<bool>(
       context: ctx,
+      barrierColor: astralDialogBarrierColor,
       builder: (c) => AlertDialog(
         title: const Text('加入新房间'),
         content: const Text('当前已在房间内。离开并加入链接里的房间？'),

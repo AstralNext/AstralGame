@@ -530,7 +530,7 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
     final navTopOffset =
         AppDimensions.navBottomGap(context) +
         AppDimensions.navBarPadding * 2 +
-        AppDimensions.navBarHeight;
+        AppDimensions.navBarHeightFor(context);
     final nodes = getIt<NodeManagementService>();
 
     return PopScope(

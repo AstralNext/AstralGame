@@ -30,11 +30,13 @@ class AboutPage extends StatelessWidget {
           AppDimensions.pagePaddingH,
           AppDimensions.pagePaddingV,
           AppDimensions.pagePaddingH,
-          24,
+          AppDimensions.space24,
         ),
         children: [
           AstralCard(
-            padding: const EdgeInsets.symmetric(vertical: 28),
+            padding: const EdgeInsets.symmetric(
+              vertical: AppDimensions.space32,
+            ),
             child: Column(
               children: [
                 ClipRRect(
@@ -69,12 +71,14 @@ class AboutPage extends StatelessWidget {
                         const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
+                            horizontal: AppDimensions.space8,
+                            vertical: AppDimensions.space2,
                           ),
                           decoration: BoxDecoration(
                             color: colorScheme.primary.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(8),
+                            borderRadius: BorderRadius.circular(
+                              AppDimensions.radiusXs,
+                            ),
                           ),
                           child: Text(
                             '新版本: $latestVersion',
@@ -109,8 +113,8 @@ class AboutPage extends StatelessWidget {
                 trailing: Watch((context) {
                   if (updateState.isChecking.value) {
                     return const SizedBox(
-                      width: 20,
-                      height: 20,
+                      width: 16,
+                      height: 16,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     );
                   }

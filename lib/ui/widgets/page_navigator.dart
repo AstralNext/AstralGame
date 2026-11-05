@@ -1,3 +1,4 @@
+import 'package:astral_game/config/app_dimensions.dart';
 import 'package:flutter/material.dart';
 
 /// 简单的分页按钮（上一页 / 当前页-总页数 / 下一页）。
@@ -27,14 +28,17 @@ class PageNavigator extends StatelessWidget {
     return SafeArea(
       top: false,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+        padding: const EdgeInsets.fromLTRB(
+          AppDimensions.space16,
+          AppDimensions.space8,
+          AppDimensions.space16,
+          AppDimensions.space12,
+        ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             OutlinedButton(
-              onPressed: clamped == 0
-                  ? null
-                  : () => onPageChanged(clamped - 1),
+              onPressed: clamped == 0 ? null : () => onPageChanged(clamped - 1),
               child: const Text('上一页'),
             ),
             const SizedBox(width: 12),

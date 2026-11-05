@@ -150,7 +150,7 @@ class _BookmarksPageState extends State<BookmarksPage> {
             // 分页器只在宽屏出现；手机靠连续滚动，不需要页码。
             if (isWide && !isEmpty && !noResultAfterFilter)
               Padding(
-                padding: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.only(bottom: AppDimensions.space8),
                 child: PageNavigator(
                   currentPage: pageIndex,
                   totalPages: totalPages,
@@ -202,7 +202,7 @@ class _BookmarksPageState extends State<BookmarksPage> {
           sliver: SliverList.builder(
             itemCount: items.length,
             itemBuilder: (context, i) => Padding(
-              padding: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.only(bottom: AppDimensions.space12),
               child: card(items[i], grid: false),
             ),
           ),
@@ -260,11 +260,21 @@ class _BookmarksPageState extends State<BookmarksPage> {
       slivers: [
         if (pinned.isNotEmpty) ...[
           SliverPadding(
-            padding: EdgeInsets.fromLTRB(startPadding, 12, endPadding, 0),
+            padding: EdgeInsets.fromLTRB(
+              startPadding,
+              AppDimensions.space12,
+              endPadding,
+              0,
+            ),
             sliver: const SliverToBoxAdapter(child: SectionHeader(title: '置顶')),
           ),
           SliverPadding(
-            padding: EdgeInsets.fromLTRB(startPadding, 10, endPadding, 0),
+            padding: EdgeInsets.fromLTRB(
+              startPadding,
+              AppDimensions.space12,
+              endPadding,
+              0,
+            ),
             sliver: SliverGrid(
               gridDelegate: gridDelegate,
               delegate: SliverChildBuilderDelegate(
@@ -276,13 +286,23 @@ class _BookmarksPageState extends State<BookmarksPage> {
         ],
         if (unpinned.isNotEmpty) ...[
           SliverPadding(
-            padding: EdgeInsets.fromLTRB(startPadding, 12, endPadding, 0),
+            padding: EdgeInsets.fromLTRB(
+              startPadding,
+              AppDimensions.space12,
+              endPadding,
+              0,
+            ),
             sliver: SliverToBoxAdapter(
               child: SectionHeader(title: '全部收藏', count: unpinned.length),
             ),
           ),
           SliverPadding(
-            padding: EdgeInsets.fromLTRB(startPadding, 10, endPadding, 16),
+            padding: EdgeInsets.fromLTRB(
+              startPadding,
+              AppDimensions.space12,
+              endPadding,
+              AppDimensions.space16,
+            ),
             sliver: SliverGrid(
               gridDelegate: gridDelegate,
               delegate: SliverChildBuilderDelegate(
@@ -319,9 +339,11 @@ class _BookmarksPageState extends State<BookmarksPage> {
       useSafeArea: true,
       showDragHandle: true,
       backgroundColor: palette.background,
-      barrierColor: Colors.black.withValues(alpha: 0.35),
+      barrierColor: astralDialogBarrierColor,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppDimensions.radiusLg),
+        ),
       ),
       builder: (sheetContext) {
         void run(VoidCallback action) {
@@ -384,7 +406,12 @@ class _BookmarksPageState extends State<BookmarksPage> {
               ];
 
           return SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            padding: const EdgeInsets.fromLTRB(
+              AppDimensions.space16,
+              0,
+              AppDimensions.space16,
+              AppDimensions.space16,
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -395,7 +422,9 @@ class _BookmarksPageState extends State<BookmarksPage> {
                       width: 52,
                       height: 72,
                       child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(
+                          AppDimensions.radiusSm,
+                        ),
                         child: BookmarkCover(bookmark: b),
                       ),
                     ),
@@ -449,7 +478,9 @@ class _BookmarksPageState extends State<BookmarksPage> {
                         fontWeight: FontWeight.w700,
                       ),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(
+                          AppDimensions.radiusSm,
+                        ),
                       ),
                     ),
                   ),

@@ -97,8 +97,7 @@ class _LeftNavState extends State<LeftNav> with TickerProviderStateMixin {
     super.dispose();
   }
 
-  double _dragPosition(double dy) =>
-      (dy - _capsulePadding) / _itemHeight - 0.5;
+  double _dragPosition(double dy) => (dy - _capsulePadding) / _itemHeight - 0.5;
 
   @override
   Widget build(BuildContext context) {
@@ -129,9 +128,11 @@ class _LeftNavState extends State<LeftNav> with TickerProviderStateMixin {
                   physics: const NeverScrollableScrollPhysics(),
                   // 侧栏留白比投影半径小，交给 ScrollView 裁会把投影裁成方块。
                   clipBehavior: Clip.none,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: AppDimensions.space12,
+                  ),
                   child: GlassCapsule(
-                    radius: BorderRadius.circular(32),
+                    radius: BorderRadius.circular(AppDimensions.radiusPill),
                     child: SizedBox(
                       width: _capsuleWidth,
                       height: count * _itemHeight + _capsulePadding * 2,
@@ -149,7 +150,8 @@ class _LeftNavState extends State<LeftNav> with TickerProviderStateMixin {
                                     _dragPosition(details.localPosition.dy),
                                   ),
                               onVerticalDragEnd: (details) => _liquid.endDrag(
-                                details.velocity.pixelsPerSecond.dy / _itemHeight,
+                                details.velocity.pixelsPerSecond.dy /
+                                    _itemHeight,
                               ),
                               onVerticalDragCancel: () => _liquid.endDrag(0),
                               child: AnimatedBuilder(
@@ -210,9 +212,7 @@ class _LeftNavState extends State<LeftNav> with TickerProviderStateMixin {
                                                   selected:
                                                       i == widget.selectedIndex,
                                                   selectedness:
-                                                      (1 -
-                                                              (position - i)
-                                                                  .abs())
+                                                      (1 - (position - i).abs())
                                                           .clamp(0.0, 1.0),
                                                   labelProgress: labelProgress,
                                                   labelsCapable: labelsCapable,
@@ -253,9 +253,9 @@ class _LeftNavState extends State<LeftNav> with TickerProviderStateMixin {
                       : '编辑资料',
                   child: InkWell(
                     onTap: widget.onAvatarTap,
-                    borderRadius: BorderRadius.circular(28),
+                    borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
                     child: Padding(
-                      padding: const EdgeInsets.all(4),
+                      padding: const EdgeInsets.all(AppDimensions.space4),
                       child: AvatarWidget(
                         avatar: widget.avatar,
                         onTap: widget.onAvatarTap,
@@ -408,10 +408,14 @@ class _SideNavItem extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         excludeFromSemantics: true,
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
         // 玻璃上只用极轻的主题色高亮，避免焦点色留在玻璃里。
-        focusColor: palette.accent.withValues(alpha: 0.06),
-        hoverColor: palette.accent.withValues(alpha: 0.04),
+        focusColor: palette.accent.withValues(
+          alpha: AppInteraction.focusOpacity,
+        ),
+        hoverColor: palette.accent.withValues(
+          alpha: AppInteraction.hoverOpacity,
+        ),
         splashColor: Colors.transparent,
         highlightColor: Colors.transparent,
         child: AnimatedScale(
@@ -423,10 +427,7 @@ class _SideNavItem extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               icon,
-              if (label != null) ...[
-                const SizedBox(height: 2),
-                label,
-              ],
+              if (label != null) ...[const SizedBox(height: 2), label],
             ],
           ),
         ),
@@ -460,7 +461,7 @@ class _BrandBadge extends StatelessWidget {
       width: 56,
       height: 56,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
+        borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
         boxShadow: [
           BoxShadow(
             color: context.astralPalette.shadowSoft,

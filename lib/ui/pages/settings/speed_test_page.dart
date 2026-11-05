@@ -9,6 +9,7 @@ import 'package:astral_game/data/state/speed_test_state.dart';
 import 'package:astral_game/di.dart';
 import 'package:astral_game/ui/widgets/astral_card.dart';
 import 'package:astral_game/ui/widgets/empty_state.dart';
+import 'package:astral_game/ui/widgets/error_state.dart';
 import 'package:flutter/material.dart';
 import 'package:signals/signals_flutter.dart';
 
@@ -71,7 +72,8 @@ class _SpeedTestPageState extends State<SpeedTestPage> {
           top: false,
           child: switch ((loaded.isEmpty, loading, error)) {
             (true, true, _) => const Center(child: CircularProgressIndicator()),
-            (true, false, final message?) => _ErrorView(
+            (true, false, final message?) => ErrorState(
+              title: '网络测速暂不可用',
               message: message,
               onRetry: () => _state.loadNodes(forceRefresh: true),
             ),
@@ -90,7 +92,12 @@ class _SpeedTestPageState extends State<SpeedTestPage> {
   Widget _narrowLayout() {
     return LayoutBuilder(
       builder: (context, constraints) {
-        const padding = EdgeInsets.fromLTRB(20, 16, 20, 24);
+        const padding = EdgeInsets.fromLTRB(
+          AppDimensions.space20,
+          AppDimensions.space16,
+          AppDimensions.space20,
+          AppDimensions.space24,
+        );
         return SingleChildScrollView(
           padding: padding,
           child: Center(
@@ -125,7 +132,12 @@ class _SpeedTestPageState extends State<SpeedTestPage> {
 
   Widget _wideLayout() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(28, 20, 28, 24),
+      padding: const EdgeInsets.fromLTRB(
+        AppDimensions.space32,
+        AppDimensions.space20,
+        AppDimensions.space32,
+        AppDimensions.space24,
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -165,7 +177,12 @@ class _NodeCard extends StatelessWidget {
       final node = state.selected.value;
 
       return AstralCard(
-        padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+        padding: const EdgeInsets.fromLTRB(
+          AppDimensions.space16,
+          AppDimensions.space12,
+          AppDimensions.space12,
+          AppDimensions.space12,
+        ),
         child: Row(
           children: [
             _IconBadge(
@@ -271,7 +288,12 @@ class _NodePickerSheetState extends State<_NodePickerSheet> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+              padding: const EdgeInsets.fromLTRB(
+                AppDimensions.space24,
+                0,
+                AppDimensions.space24,
+                AppDimensions.space12,
+              ),
               child: Row(
                 children: [
                   Text(
@@ -291,7 +313,9 @@ class _NodePickerSheetState extends State<_NodePickerSheet> {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppDimensions.space20,
+              ),
               child: SearchBar(
                 controller: _controller,
                 hintText: '搜索节点 / 地区',
@@ -308,12 +332,14 @@ class _NodePickerSheetState extends State<_NodePickerSheet> {
               child: nodes.isEmpty
                   ? const Center(
                       child: Padding(
-                        padding: EdgeInsets.all(24),
+                        padding: EdgeInsets.all(AppDimensions.space24),
                         child: Text('没有匹配的节点'),
                       ),
                     )
                   : ListView.builder(
-                      padding: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.only(
+                        bottom: AppDimensions.space12,
+                      ),
                       itemCount: nodes.length,
                       itemBuilder: (context, index) {
                         final node = nodes[index];
@@ -384,7 +410,12 @@ class _MetricsCard extends StatelessWidget {
           result?.uploadLatencyMs ?? state.liveUploadLatencyMs.value;
 
       return AstralCard(
-        padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+        padding: const EdgeInsets.fromLTRB(
+          AppDimensions.space20,
+          AppDimensions.space20,
+          AppDimensions.space20,
+          AppDimensions.space16,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -479,12 +510,14 @@ class _PhaseSteps extends StatelessWidget {
             Expanded(
               child: Container(
                 height: 2,
-                margin: const EdgeInsets.symmetric(horizontal: 6),
+                margin: const EdgeInsets.symmetric(
+                  horizontal: AppDimensions.space8,
+                ),
                 decoration: BoxDecoration(
                   color: (finished || (active >= 0 && i <= active))
                       ? scheme.primary
                       : scheme.outlineVariant,
-                  borderRadius: BorderRadius.circular(1),
+                  borderRadius: BorderRadius.circular(AppDimensions.radiusXs),
                 ),
               ),
             ),
@@ -520,10 +553,15 @@ class _PhaseSteps extends StatelessWidget {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 260),
       curve: Curves.easeOutCubic,
-      padding: const EdgeInsets.fromLTRB(12, 7, 14, 7),
+      padding: const EdgeInsets.fromLTRB(
+        AppDimensions.space12,
+        AppDimensions.space8,
+        AppDimensions.space16,
+        AppDimensions.space8,
+      ),
       decoration: BoxDecoration(
         color: background,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(AppDimensions.radiusPill),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -651,10 +689,15 @@ class _LatencyChip extends StatelessWidget {
     final scheme = theme.colorScheme;
     final hasValue = latencyMs != null;
     return Container(
-      padding: const EdgeInsets.fromLTRB(10, 6, 12, 6),
+      padding: const EdgeInsets.fromLTRB(
+        AppDimensions.space12,
+        AppDimensions.space8,
+        AppDimensions.space12,
+        AppDimensions.space8,
+      ),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(AppDimensions.radiusPill),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -684,10 +727,15 @@ class _HistoryChip extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return Container(
-      padding: const EdgeInsets.fromLTRB(10, 6, 12, 6),
+      padding: const EdgeInsets.fromLTRB(
+        AppDimensions.space12,
+        AppDimensions.space8,
+        AppDimensions.space12,
+        AppDimensions.space8,
+      ),
       decoration: BoxDecoration(
         color: scheme.tertiaryContainer,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(AppDimensions.radiusPill),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -723,10 +771,15 @@ class _LossChip extends StatelessWidget {
     final hasValue = lossRate != null;
     final hasLoss = hasValue && lossRate! > 0;
     return Container(
-      padding: const EdgeInsets.fromLTRB(10, 6, 12, 6),
+      padding: const EdgeInsets.fromLTRB(
+        AppDimensions.space12,
+        AppDimensions.space8,
+        AppDimensions.space12,
+        AppDimensions.space8,
+      ),
       decoration: BoxDecoration(
         color: hasLoss ? scheme.errorContainer : scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(AppDimensions.radiusPill),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -764,10 +817,15 @@ class _FailureBanner extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 14, 10),
+      padding: const EdgeInsets.fromLTRB(
+        AppDimensions.space12,
+        AppDimensions.space12,
+        AppDimensions.space16,
+        AppDimensions.space12,
+      ),
       decoration: BoxDecoration(
         color: scheme.errorContainer,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
       ),
       child: Row(
         children: [
@@ -807,8 +865,8 @@ class _StartButton extends StatelessWidget {
           onPressed: enabled ? () => state.startTest() : null,
           icon: running
               ? const SizedBox(
-                  width: 18,
-                  height: 18,
+                  width: 16,
+                  height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Icon(Icons.speed_rounded),
@@ -854,7 +912,12 @@ class _ChartCard extends StatelessWidget {
       );
 
       return AstralCard(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+        padding: const EdgeInsets.fromLTRB(
+          AppDimensions.space20,
+          AppDimensions.space16,
+          AppDimensions.space20,
+          AppDimensions.space16,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1228,38 +1291,6 @@ class _IconBadge extends StatelessWidget {
       height: size + 20,
       decoration: BoxDecoration(color: background, shape: BoxShape.circle),
       child: Icon(icon, size: size, color: foreground),
-    );
-  }
-}
-
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.message, required this.onRetry});
-
-  final String message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            EmptyState(
-              icon: Icons.speed_outlined,
-              title: '网络测速暂不可用',
-              subtitle: message,
-            ),
-            const SizedBox(height: 16),
-            FilledButton.tonalIcon(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('重试'),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

@@ -1,3 +1,4 @@
+import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/models/bookmark.dart';
 import 'package:astral_game/data/services/connection_service.dart';
@@ -129,7 +130,7 @@ class _IdleHome extends StatelessWidget {
           final list = getIt<RoomState>().bookmarksList.value;
           if (list.isEmpty) return const SizedBox.shrink();
           return Padding(
-            padding: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.only(bottom: AppDimensions.space16),
             child: _BookmarkPreviewCard(
               bookmarks: list,
               onOpenAll: () =>
@@ -194,7 +195,12 @@ class _BookmarkPreviewCard extends StatelessWidget {
     final preview = bookmarks.take(3).toList();
 
     return AstralCard(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
+      padding: const EdgeInsets.fromLTRB(
+        AppDimensions.space16,
+        AppDimensions.space12,
+        AppDimensions.space16,
+        AppDimensions.space8,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -238,9 +244,9 @@ class _PreviewTile extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppDimensions.radiusXs),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10),
+          padding: const EdgeInsets.symmetric(vertical: AppDimensions.space12),
           child: Row(
             children: [
               Icon(

@@ -1,3 +1,4 @@
+import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/config/constants.dart';
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/models/enhanced_node_info.dart';
@@ -46,7 +47,7 @@ class _DashboardUserItemState extends State<DashboardUserItem> {
     final node = widget.node;
     final borderRadius = widget.grouped
         ? groupedTileBorderRadius(index: widget.index, count: widget.count)
-        : AppRadius.brMedium;
+        : BorderRadius.circular(AppDimensions.radiusCard);
 
     return RepaintBoundary(
       child: _UserTileShell(
@@ -59,7 +60,12 @@ class _DashboardUserItemState extends State<DashboardUserItem> {
         onTap: () =>
             _copyIp(context, hasIpv4: node.hasValidIpv4, ipv4: node.ipv4),
         child: Padding(
-          padding: EdgeInsets.fromLTRB(widget.grouped ? 16 : 12, 12, 12, 12),
+          padding: EdgeInsets.fromLTRB(
+            widget.grouped ? 16 : 12,
+            AppDimensions.space12,
+            AppDimensions.space12,
+            AppDimensions.space12,
+          ),
           child: _UserMainContentRow(
             node: node,
             isLocal: widget.isLocal,
@@ -307,7 +313,7 @@ class _UserMetaLine extends StatelessWidget {
           ),
           if (hasIpv6)
             Padding(
-              padding: const EdgeInsets.only(top: 2),
+              padding: const EdgeInsets.only(top: AppDimensions.space2),
               child: Text(
                 node.ipv6,
                 maxLines: 1,
@@ -379,12 +385,14 @@ class _UserMainContentRow extends StatelessWidget {
                           const SizedBox(width: 6),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 1.5,
+                              horizontal: AppDimensions.space8,
+                              vertical: AppDimensions.space2,
                             ),
                             decoration: BoxDecoration(
                               color: palette.accentMuted,
-                              borderRadius: AppRadius.brSmall,
+                              borderRadius: BorderRadius.circular(
+                                AppDimensions.radiusMd,
+                              ),
                             ),
                             child: Text(
                               '本机',
@@ -522,7 +530,7 @@ class _UserTileShell extends StatelessWidget {
         curve: Curves.easeOut,
         margin: grouped
             ? EdgeInsets.zero
-            : const EdgeInsets.symmetric(vertical: 4),
+            : const EdgeInsets.symmetric(vertical: AppDimensions.space4),
         decoration: BoxDecoration(
           color: isHovered
               ? palette.accent.withValues(alpha: 0.055)

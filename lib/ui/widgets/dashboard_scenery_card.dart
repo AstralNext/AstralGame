@@ -257,7 +257,7 @@ class DailySceneryCardState extends State<DailySceneryCard> {
         _revealDownloadOnHover && (_hovering || _downloading);
 
     Widget card = ClipRRect(
-      borderRadius: BorderRadius.circular(22),
+      borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -293,8 +293,8 @@ class DailySceneryCardState extends State<DailySceneryCard> {
                     onPressed: _downloading ? null : _downloadCurrentImage,
                     icon: _downloading
                         ? const SizedBox(
-                            width: 18,
-                            height: 18,
+                            width: 16,
+                            height: 16,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
                               color: Colors.white,

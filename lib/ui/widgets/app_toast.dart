@@ -139,16 +139,18 @@ class _ToastViewState extends State<_ToastView>
               child: Semantics(
                 liveRegion: true,
                 child: GlassCapsule(
-                  radius: BorderRadius.circular(999),
+                  radius: BorderRadius.circular(AppDimensions.radiusPill),
                   child: Material(
                     type: MaterialType.transparency,
                     child: InkWell(
-                      borderRadius: BorderRadius.circular(999),
+                      borderRadius: BorderRadius.circular(
+                        AppDimensions.radiusPill,
+                      ),
                       onTap: dismiss,
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 12,
+                          horizontal: AppDimensions.space20,
+                          vertical: AppDimensions.space12,
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -167,15 +169,17 @@ class _ToastViewState extends State<_ToastView>
                             if (hasAction) ...[
                               const SizedBox(width: 12),
                               InkWell(
-                                borderRadius: BorderRadius.circular(999),
+                                borderRadius: BorderRadius.circular(
+                                  AppDimensions.radiusPill,
+                                ),
                                 onTap: () {
                                   widget.onAction?.call();
                                   dismiss();
                                 },
                                 child: Padding(
                                   padding: const EdgeInsets.symmetric(
-                                    horizontal: 4,
-                                    vertical: 2,
+                                    horizontal: AppDimensions.space4,
+                                    vertical: AppDimensions.space2,
                                   ),
                                   child: Text(
                                     widget.actionLabel!,

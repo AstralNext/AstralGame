@@ -1,3 +1,4 @@
+import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/models/game_catalog.dart';
 import 'package:astral_game/data/models/lan_relay_status.dart';
@@ -153,15 +154,21 @@ class _OpenGameTile extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onCopy,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppDimensions.radiusXs),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          padding: const EdgeInsets.symmetric(
+            vertical: AppDimensions.space8,
+            horizontal: AppDimensions.space4,
+          ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (showAssist)
                 Padding(
-                  padding: const EdgeInsets.only(top: 6, right: 8),
+                  padding: const EdgeInsets.only(
+                    top: AppDimensions.space8,
+                    right: AppDimensions.space8,
+                  ),
                   child: Container(
                     width: 8,
                     height: 8,
@@ -251,10 +258,13 @@ class _OpenGameTile extends StatelessWidget {
 
   Widget _chip(TextTheme textTheme, String label, Color bg, Color fg) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppDimensions.space8,
+        vertical: AppDimensions.space2,
+      ),
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(AppDimensions.radiusXs),
       ),
       child: Text(
         label,

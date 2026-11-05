@@ -103,7 +103,7 @@ class _ServersMainPageState extends State<ServersMainPage> {
   }) {
     final palette = context.astralPalette;
     return Padding(
-      padding: const EdgeInsets.only(top: 2),
+      padding: const EdgeInsets.only(top: AppDimensions.space2),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -160,12 +160,14 @@ class _ServersMainPageState extends State<ServersMainPage> {
         height: AppDimensions.iconButtonSize,
         child: Material(
           color: palette.accent,
-          borderRadius: BorderRadius.circular(999),
+          borderRadius: BorderRadius.circular(AppDimensions.radiusPill),
           child: InkWell(
             onTap: () => showAddServerDialog(context),
-            borderRadius: BorderRadius.circular(999),
+            borderRadius: BorderRadius.circular(AppDimensions.radiusPill),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppDimensions.space16,
+              ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -308,7 +310,9 @@ class _ServersMainPageState extends State<ServersMainPage> {
                   // 卡片：左侧信息列（名称 / 地址 / 延迟+探测），右侧开关垂直居中。
                   // 手机点卡片打开操作面板；桌面端用「更多」菜单。
                   final card = Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.only(
+                      bottom: AppDimensions.space8,
+                    ),
                     child: AstralCard(
                       padding: EdgeInsets.zero,
                       onTap: RuntimePlatform.isMobile
@@ -321,7 +325,12 @@ class _ServersMainPageState extends State<ServersMainPage> {
                             )
                           : null,
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+                        padding: const EdgeInsets.fromLTRB(
+                          AppDimensions.space12,
+                          AppDimensions.space12,
+                          AppDimensions.space8,
+                          AppDimensions.space12,
+                        ),
                         child: Row(
                           children: [
                             Expanded(
@@ -358,8 +367,8 @@ class _ServersMainPageState extends State<ServersMainPage> {
                                   if (showAddress)
                                     Padding(
                                       padding: const EdgeInsets.only(
-                                        left: 14,
-                                        top: 4,
+                                        left: AppDimensions.space16,
+                                        top: AppDimensions.space4,
                                       ),
                                       child: Text(
                                         addressLine,
@@ -376,15 +385,15 @@ class _ServersMainPageState extends State<ServersMainPage> {
                                   // 延迟 · 状态 + 探测结果同一行，放不下时探测文案自己省略
                                   Padding(
                                     padding: const EdgeInsets.only(
-                                      left: 14,
-                                      top: 4,
+                                      left: AppDimensions.space16,
+                                      top: AppDimensions.space4,
                                     ),
                                     child: Row(
                                       children: [
                                         if (probing) ...[
                                           const SizedBox(
-                                            width: 14,
-                                            height: 14,
+                                            width: 16,
+                                            height: 16,
                                             child: CircularProgressIndicator(
                                               strokeWidth: 2,
                                             ),
@@ -562,9 +571,11 @@ class _ServersMainPageState extends State<ServersMainPage> {
       useSafeArea: true,
       showDragHandle: true,
       backgroundColor: palette.background,
-      barrierColor: Colors.black.withValues(alpha: 0.35),
+      barrierColor: astralDialogBarrierColor,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppDimensions.radiusLg),
+        ),
       ),
       builder: (sheetContext) {
         void run(VoidCallback action) {
@@ -594,7 +605,12 @@ class _ServersMainPageState extends State<ServersMainPage> {
             ];
 
         return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          padding: const EdgeInsets.fromLTRB(
+            AppDimensions.space16,
+            0,
+            AppDimensions.space16,
+            AppDimensions.space16,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -606,7 +622,9 @@ class _ServersMainPageState extends State<ServersMainPage> {
                     height: 52,
                     decoration: BoxDecoration(
                       color: palette.accentMuted,
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(
+                        AppDimensions.radiusSm,
+                      ),
                     ),
                     child: Icon(
                       Icons.dns_rounded,
@@ -668,7 +686,9 @@ class _ServersMainPageState extends State<ServersMainPage> {
                       fontWeight: FontWeight.w700,
                     ),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(
+                        AppDimensions.radiusSm,
+                      ),
                     ),
                   ),
                 ),
@@ -714,6 +734,7 @@ class _ServersMainPageState extends State<ServersMainPage> {
   Future<bool> _confirmDelete(ServerMod server) async {
     final confirmed = await showDialog<bool>(
       context: context,
+      barrierColor: astralDialogBarrierColor,
       builder: (context) => AlertDialog(
         title: const Text('删除服务器'),
         content: Text('确定要删除服务器 "${server.name}" 吗？此操作不可撤销。'),
@@ -747,6 +768,7 @@ class _ServersMainPageState extends State<ServersMainPage> {
   ) {
     final isBlocked = BlockedServers.isBlocked(server.url);
     final scheme = Theme.of(context).colorScheme;
+    final palette = context.astralPalette;
     return [
       PopupMenuItem(
         value: 'edit',
@@ -756,12 +778,12 @@ class _ServersMainPageState extends State<ServersMainPage> {
             Icon(
               Icons.edit_outlined,
               size: 18,
-              color: isBlocked ? scheme.outline : scheme.primary,
+              color: isBlocked ? palette.textTertiary : scheme.primary,
             ),
             const SizedBox(width: 12),
             Text(
               '编辑',
-              style: TextStyle(color: isBlocked ? scheme.outline : null),
+              style: TextStyle(color: isBlocked ? palette.textTertiary : null),
             ),
           ],
         ),

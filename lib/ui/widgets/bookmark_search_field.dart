@@ -1,3 +1,4 @@
+import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/state/bookmark_search_state.dart';
 import 'package:astral_game/di.dart';
@@ -28,7 +29,9 @@ class BookmarkSearchField extends StatelessWidget {
           isDense: true,
           filled: true,
           fillColor: palette.accentMuted,
-          contentPadding: const EdgeInsets.symmetric(vertical: 10),
+          contentPadding: const EdgeInsets.symmetric(
+            vertical: AppDimensions.space12,
+          ),
           prefixIcon: Icon(
             Icons.search_rounded,
             size: 18,
@@ -61,7 +64,7 @@ class BookmarkSearchField extends StatelessWidget {
           hintText: '搜索收藏',
           hintStyle: TextStyle(color: palette.textTertiary, fontSize: 13),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(19),
+            borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
             borderSide: BorderSide.none,
           ),
         ),
@@ -81,10 +84,15 @@ class BookmarkSearchBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.astralPalette;
     final state = getIt<BookmarkSearchState>();
-    final radius = BorderRadius.circular(32);
+    final radius = BorderRadius.circular(AppDimensions.radiusPill);
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
+      padding: const EdgeInsets.fromLTRB(
+        AppDimensions.space20,
+        AppDimensions.space12,
+        AppDimensions.space20,
+        AppDimensions.space12,
+      ),
       child: GlassCapsule(
         radius: radius,
         child: SizedBox(

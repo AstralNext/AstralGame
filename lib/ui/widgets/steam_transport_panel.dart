@@ -4,6 +4,7 @@ import 'package:astral_game/data/services/steam_transport_service.dart';
 import 'package:astral_game/src/rust/api/steam.dart';
 import 'package:astral_game/ui/widgets/astral_grouped_tile.dart';
 import 'package:astral_game/ui/widgets/astral_settings_section.dart';
+import 'package:astral_game/ui/widgets/error_state.dart';
 import 'package:flutter/material.dart';
 
 /// Steam 组网（SDR 虚拟局域网）状态面板。
@@ -66,6 +67,14 @@ class _SteamTransportPanelState extends State<SteamTransportPanel> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final room = _room;
+    if (_error != null) {
+      return ErrorState(
+        icon: Icons.cloud_off_rounded,
+        title: 'Steam 状态读取失败',
+        message: _error,
+        onRetry: _refresh,
+      );
+    }
 
     Widget badge(String text, {required bool ok}) => Text(
       text,
@@ -131,21 +140,11 @@ class _SteamTransportPanelState extends State<SteamTransportPanel> {
               ok: member.online,
             ),
           ),
-        if (_error != null)
-          (index, count) => AstralGroupedTile(
-            icon: Icons.error_outline_rounded,
-            label: '状态读取失败',
-            subtitle: _error,
-            index: index,
-            count: count,
-          ),
       ],
     );
   }
 
   String _accountSubtitle() {
-    final error = _error;
-    if (error != null) return error;
     final status = _status;
     if (status == null) return '正在启动 Steam 接口…';
     if (!status.ok) {

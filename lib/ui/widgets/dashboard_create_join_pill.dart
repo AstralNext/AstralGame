@@ -1,3 +1,4 @@
+import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/config/theme.dart';
 import 'package:flutter/material.dart';
 
@@ -20,22 +21,27 @@ class CreateJoinPill extends StatelessWidget {
       color: palette.card,
       elevation: 3,
       shadowColor: palette.shadowSoft,
-      borderRadius: BorderRadius.circular(999),
+      borderRadius: BorderRadius.circular(AppDimensions.radiusPill),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(6, 6, 10, 6),
+        padding: const EdgeInsets.fromLTRB(
+          AppDimensions.space8,
+          AppDimensions.space8,
+          AppDimensions.space12,
+          AppDimensions.space8,
+        ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Material(
               color: palette.accent,
-              borderRadius: BorderRadius.circular(999),
+              borderRadius: BorderRadius.circular(AppDimensions.radiusPill),
               child: InkWell(
                 onTap: onCreate,
-                borderRadius: BorderRadius.circular(999),
+                borderRadius: BorderRadius.circular(AppDimensions.radiusPill),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
+                    horizontal: AppDimensions.space16,
+                    vertical: AppDimensions.space12,
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -62,11 +68,11 @@ class CreateJoinPill extends StatelessWidget {
             const SizedBox(width: 4),
             InkWell(
               onTap: onJoin,
-              borderRadius: BorderRadius.circular(999),
+              borderRadius: BorderRadius.circular(AppDimensions.radiusPill),
               child: Padding(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 10,
+                  horizontal: AppDimensions.space12,
+                  vertical: AppDimensions.space12,
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,

@@ -1,4 +1,5 @@
 import 'package:astral_game/config/theme.dart';
+import 'package:astral_game/ui/widgets/chrome_bar.dart';
 import 'package:astral_game/ui/widgets/window_button.dart';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
@@ -35,57 +36,34 @@ class DesktopTitleBar extends StatelessWidget {
       // 顶栏不再铺底色，必须显式吃下整个区域，否则空白处拖不动窗口。
       behavior: HitTestBehavior.opaque,
       onPanStart: (_) => windowManager.startDragging(),
-      child: SizedBox(
-        height: 44,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Row(
-            children: [
-              const SizedBox(width: 8),
-              if (center == null)
-                Expanded(
-                  child: Text(
-                    'Astral Game',
-                    style: TextStyle(
-                      color: palette.textPrimary,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                )
-              else
-                Expanded(
-                  child: Center(
-                    heightFactor: 1,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 420),
-                      child: center,
-                    ),
-                  ),
-                ),
-              WindowButton(
-                icon: Icons.remove,
-                iconSize: 16,
-                hoverColor: palette.accentMuted,
-                iconColor: palette.textPrimary,
-                onTap: () => windowManager.minimize(),
-              ),
-              WindowButton(
-                icon: isMaximized ? Icons.filter_none : Icons.crop_square,
-                iconSize: 14,
-                hoverColor: palette.accentMuted,
-                iconColor: palette.textPrimary,
-                onTap: () => onToggleMaximize(),
-              ),
-              WindowButton(
-                icon: Icons.close,
-                iconSize: 16,
-                hoverColor: palette.error.withValues(alpha: 0.2),
-                iconColor: palette.textPrimary,
-                onTap: onClose,
-              ),
-            ],
-          ),
+      child: ChromeBar(
+        center: center,
+        minHeight: 44,
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            WindowButton(
+              icon: Icons.remove,
+              iconSize: 16,
+              hoverColor: palette.accentMuted,
+              iconColor: palette.textPrimary,
+              onTap: () => windowManager.minimize(),
+            ),
+            WindowButton(
+              icon: isMaximized ? Icons.filter_none : Icons.crop_square,
+              iconSize: 14,
+              hoverColor: palette.accentMuted,
+              iconColor: palette.textPrimary,
+              onTap: () => onToggleMaximize(),
+            ),
+            WindowButton(
+              icon: Icons.close,
+              iconSize: 16,
+              hoverColor: palette.error.withValues(alpha: 0.2),
+              iconColor: palette.textPrimary,
+              onTap: () => onClose(),
+            ),
+          ],
         ),
       ),
     );

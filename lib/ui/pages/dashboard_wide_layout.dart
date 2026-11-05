@@ -9,6 +9,7 @@ import 'package:astral_game/di.dart';
 import 'package:astral_game/ui/widgets/dashboard_home_panel.dart';
 import 'package:astral_game/ui/widgets/dashboard_members_skeleton.dart';
 import 'package:astral_game/ui/widgets/room_open_games_panel.dart';
+import 'package:astral_game/ui/widgets/section_header.dart';
 import 'package:astral_game/ui/widgets/user_list_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:signals/signals_flutter.dart';
@@ -35,7 +36,7 @@ class DashboardWideLayout extends StatelessWidget {
       if (!showRoom) {
         content = Padding(
           // 左侧不再额外留白：主体直接贴到页面内边距，靠近侧栏胶囊。
-          padding: const EdgeInsets.fromLTRB(0, 0, 4, 0),
+          padding: const EdgeInsets.fromLTRB(0, 0, AppDimensions.space4, 0),
           child: DashboardHomePanel(
             isConnected: false,
             username: nodeManagement.currentUsername.value,
@@ -90,58 +91,53 @@ class _MembersPane extends StatelessWidget {
         border: Border.all(color: palette.divider.withValues(alpha: 0.45)),
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
+        padding: const EdgeInsets.fromLTRB(
+          AppDimensions.space16,
+          AppDimensions.space16,
+          AppDimensions.space16,
+          AppDimensions.space12,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Watch((context) {
-                    final session = roomState.session.value;
-                    final game = session == null
-                        ? null
-                        : GameCatalog.byId(session.gameId);
-                    final title = [
-                      if (game != null) game.displayName,
-                      '成员',
-                    ].join(' · ');
-                    return Text(
-                      title,
-                      style: textTheme.titleSmall?.copyWith(
-                        color: palette.accent,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.2,
+            Watch((context) {
+              final session = roomState.session.value;
+              final game = session == null
+                  ? null
+                  : GameCatalog.byId(session.gameId);
+              final title = [
+                if (game != null) game.displayName,
+                '成员',
+              ].join(' · ');
+              final nodes = nodeManagement.userNodes.value;
+              final compact = settingsState.memberListCompact.value;
+              return SectionHeader(
+                title: title,
+                count: nodes.isEmpty ? null : nodes.length,
+                tone: SectionHeaderTone.accent,
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      compact ? '简洁' : '详细',
+                      style: textTheme.labelSmall?.copyWith(
+                        color: palette.textTertiary,
                       ),
-                    );
-                  }),
+                    ),
+                    const SizedBox(width: AppDimensions.space4),
+                    Switch.adaptive(
+                      value: compact,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      onChanged: (value) {
+                        settingsState.memberListCompact.value = value;
+                        settingsState.saveToPersistence();
+                      },
+                    ),
+                  ],
                 ),
-                Watch((context) {
-                  final compact = settingsState.memberListCompact.value;
-                  return Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        compact ? '简洁' : '详细',
-                        style: textTheme.labelSmall?.copyWith(
-                          color: palette.textTertiary,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Switch.adaptive(
-                        value: compact,
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        onChanged: (value) {
-                          settingsState.memberListCompact.value = value;
-                          settingsState.saveToPersistence();
-                        },
-                      ),
-                    ],
-                  );
-                }),
-              ],
-            ),
-            const SizedBox(height: 12),
+              );
+            }),
+            const SizedBox(height: AppDimensions.space12),
             Expanded(
               child: Watch(
                 (context) {

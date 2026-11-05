@@ -91,36 +91,38 @@ class _ThemeWaterDropHostState extends State<ThemeWaterDropHost>
             child: IgnorePointer(
               child: RepaintBoundary(
                 child: AnimatedBuilder(
-                animation: _controller,
-                builder: (context, _) {
-                  final size = MediaQuery.sizeOf(context);
-                  final origin = animating.origin!;
-                  final maxR = _maxRevealRadius(origin, size);
-                  final t =
-                      AppThemeAnimation.revealCurve.transform(_controller.value);
-                  final radius = maxR * t;
-                  final palette =
-                      AppThemePalette.of(animating.previousThemeId!);
+                  animation: _controller,
+                  builder: (context, _) {
+                    final size = MediaQuery.sizeOf(context);
+                    final origin = animating.origin!;
+                    final maxR = _maxRevealRadius(origin, size);
+                    final t = AppThemeAnimation.revealCurve.transform(
+                      _controller.value,
+                    );
+                    final radius = maxR * t;
+                    final palette = AppThemePalette.of(
+                      animating.previousThemeId!,
+                    );
 
-                  return ClipPath(
-                    clipper: _InverseCircleClipper(
-                      center: origin,
-                      radius: radius,
-                    ),
-                    child: ColoredBox(
-                      color: palette.background,
-                      child: CustomPaint(
-                        painter: _WaterDropEdgePainter(
-                          center: origin,
-                          radius: radius,
-                          edgeColor: palette.accent.withValues(alpha: 0.22),
-                        ),
-                        child: const SizedBox.expand(),
+                    return ClipPath(
+                      clipper: _InverseCircleClipper(
+                        center: origin,
+                        radius: radius,
                       ),
-                    ),
-                  );
-                },
-              ),
+                      child: ColoredBox(
+                        color: palette.background,
+                        child: CustomPaint(
+                          painter: _WaterDropEdgePainter(
+                            center: origin,
+                            radius: radius,
+                            edgeColor: palette.accent.withValues(alpha: 0.22),
+                          ),
+                          child: const SizedBox.expand(),
+                        ),
+                      ),
+                    );
+                  },
+                ),
               ),
             ),
           ),

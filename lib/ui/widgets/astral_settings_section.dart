@@ -1,5 +1,6 @@
 import 'package:astral_game/ui/widgets/astral_card.dart';
 import 'package:astral_game/ui/widgets/astral_grouped_tile.dart';
+import 'package:astral_game/ui/widgets/section_header.dart';
 import 'package:flutter/material.dart';
 
 class AstralSettingItem {
@@ -16,37 +17,6 @@ class AstralSettingItem {
   final String? subtitle;
   final bool subtitleMuted;
   final VoidCallback onTap;
-}
-
-/// 分区标题：卡片上方的小号灰字（MD3 section header），可带一行副标题。
-/// [AstralSettingsSection] 与 [AstralSettingsFormCard] 共用，保证两种容器标题一致。
-Widget buildSettingsHeader(
-  BuildContext context,
-  String text, {
-  String? subtitle,
-}) {
-  final theme = Theme.of(context);
-  final style = theme.textTheme.titleSmall?.copyWith(
-    color: theme.colorScheme.onSurfaceVariant,
-    fontWeight: FontWeight.w600,
-    letterSpacing: 0.2,
-  );
-  return Padding(
-    padding: const EdgeInsets.only(left: 4, bottom: 8),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(text, style: style),
-        if (subtitle != null)
-          Text(
-            subtitle,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-      ],
-    ),
-  );
 }
 
 /// 延迟构建行：FormCard 构建时注入 index/count，自动处理分隔线与首尾圆角。
@@ -69,7 +39,7 @@ class AstralSettingsSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        buildSettingsHeader(context, title),
+        SectionHeader(title: title, tone: SectionHeaderTone.muted),
         AstralCard(
           padding: EdgeInsets.zero,
           child: Column(
@@ -114,7 +84,11 @@ class AstralSettingsFormCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (title != null)
-          buildSettingsHeader(context, title!, subtitle: subtitle),
+          SectionHeader(
+            title: title!,
+            subtitle: subtitle,
+            tone: SectionHeaderTone.muted,
+          ),
         AstralCard(
           padding: EdgeInsets.zero,
           child: Column(

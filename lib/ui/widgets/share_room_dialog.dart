@@ -1,3 +1,4 @@
+import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/utils/room_share_actions.dart';
 import 'package:flutter/material.dart';
 
@@ -11,6 +12,7 @@ Future<void> showShareRoomDialog(
 }) async {
   await showDialog<void>(
     context: context,
+    barrierColor: astralDialogBarrierColor,
     builder: (dialogContext) => AlertDialog(
       title: Row(
         children: [

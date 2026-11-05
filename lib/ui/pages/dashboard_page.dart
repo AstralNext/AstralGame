@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:astral_game/config/theme.dart';
 
 import 'package:astral_game/data/models/active_room_session.dart';
 import 'package:astral_game/data/models/bookmark.dart';
@@ -140,6 +141,7 @@ class _DashboardPageState extends State<DashboardPage> {
       if (!mounted) return;
       showDialog<void>(
         context: context,
+        barrierColor: astralDialogBarrierColor,
         builder: (ctx) => AlertDialog(
           title: const Text('已离开房间'),
           content: Text(notice),
@@ -219,6 +221,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
     final result = await showDialog<String>(
       context: context,
+      barrierColor: astralDialogBarrierColor,
       builder: (dialogContext) {
         return AlertDialog(
           title: const Text('加入房间'),

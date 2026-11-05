@@ -2,9 +2,23 @@ import 'package:flutter/widgets.dart';
 
 /// 页面边距、分区间距与列表项内边距。
 abstract final class AppDimensions {
-  static const radiusSm = 16.0;
-  static const radiusMd = 18.0;
+  /// 圆角六档：8 / 12 / 16 / 18 / 20 / 999（胶囊）。
+  static const radiusXs = 8.0;
+  static const radiusSm = 12.0;
+  static const radiusMd = 16.0;
+  static const radiusCard = 18.0;
   static const radiusLg = 20.0;
+  static const radiusPill = 999.0;
+
+  /// 间距八档：2 / 4 / 8 / 12 / 16 / 20 / 24 / 32。
+  static const space2 = 2.0;
+  static const space4 = 4.0;
+  static const space8 = 8.0;
+  static const space12 = 12.0;
+  static const space16 = 16.0;
+  static const space20 = 20.0;
+  static const space24 = 24.0;
+  static const space32 = 32.0;
 
   static const pagePaddingH = 24.0;
   static const pagePaddingV = 20.0;
@@ -26,8 +40,17 @@ abstract final class AppDimensions {
   /// 桌面侧栏总宽（悬浮胶囊 + 靠近窗口一侧的投影留白）。
   static const sideNavWidth = 92.0;
 
-  /// 悬浮胶囊底栏的高度（与 BottomNav 保持一致）。
+  /// 悬浮胶囊底栏的基准高度（与 BottomNav 保持一致）。
   static const navBarHeight = 64.0;
+
+  /// 底栏随系统字号放大，最多放大到 1.3 倍。
+  static double navBarHeightFor(BuildContext context) {
+    final scale = (MediaQuery.textScalerOf(context).scale(11) / 11).clamp(
+      1.0,
+      1.3,
+    );
+    return navBarHeight * scale;
+  }
 
   /// 胶囊底栏内部的上下留白（与 BottomNav 的内边距保持一致）。
   static const navBarPadding = 10.0;
@@ -47,7 +70,10 @@ abstract final class AppDimensions {
   ///
   /// 留到胶囊上沿，再多留 [navContentGap]，最后一项不会贴死胶囊。
   static double listBottomWithNav(BuildContext context) =>
-      navBottomGap(context) + navBarPadding + navBarHeight + navContentGap;
+      navBottomGap(context) +
+      navBarPadding +
+      navBarHeightFor(context) +
+      navContentGap;
 
   /// 内容末尾与胶囊上沿之间的呼吸位。
   static const navContentGap = 12.0;

@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'package:astral_game/config/app_dimensions.dart';
 
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/services/app_settings_service.dart';
@@ -22,7 +23,7 @@ Future<void> showEditProfileDialog(
   final saved = await showDialog<bool>(
     context: context,
     barrierDismissible: !onboarding,
-    barrierColor: Colors.black.withValues(alpha: 0.32),
+    barrierColor: astralDialogBarrierColor,
     builder: (_) => _ProfileDialog(onboarding: onboarding),
   );
 
@@ -113,13 +114,16 @@ class _ProfileDialogState extends State<_ProfileDialog> {
     return Dialog(
       backgroundColor: Colors.transparent,
       elevation: 0,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+      insetPadding: const EdgeInsets.symmetric(
+        horizontal: AppDimensions.space24,
+        vertical: AppDimensions.space32,
+      ),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 400),
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: palette.card,
-            borderRadius: BorderRadius.circular(28),
+            borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
             boxShadow: [
               BoxShadow(
                 color: palette.shadowLift,
@@ -129,7 +133,12 @@ class _ProfileDialogState extends State<_ProfileDialog> {
             ],
           ),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(28, 32, 28, 16),
+            padding: const EdgeInsets.fromLTRB(
+              AppDimensions.space32,
+              AppDimensions.space32,
+              AppDimensions.space32,
+              AppDimensions.space16,
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -147,7 +156,7 @@ class _ProfileDialogState extends State<_ProfileDialog> {
                         right: -4,
                         bottom: -4,
                         child: Container(
-                          padding: const EdgeInsets.all(8),
+                          padding: const EdgeInsets.all(AppDimensions.space8),
                           decoration: BoxDecoration(
                             color: palette.accent,
                             shape: BoxShape.circle,
@@ -185,9 +194,11 @@ class _ProfileDialogState extends State<_ProfileDialog> {
                 Container(
                   decoration: BoxDecoration(
                     color: palette.canvas.withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
                   ),
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppDimensions.space16,
+                  ),
                   child: TextField(
                     controller: _nameController,
                     autofocus: onboarding,
@@ -211,7 +222,9 @@ class _ProfileDialogState extends State<_ProfileDialog> {
                       hintStyle: textTheme.bodyLarge?.copyWith(
                         color: palette.textTertiary,
                       ),
-                      contentPadding: const EdgeInsets.symmetric(vertical: 15),
+                      contentPadding: const EdgeInsets.symmetric(
+                        vertical: AppDimensions.space16,
+                      ),
                     ),
                   ),
                 ),
@@ -228,7 +241,9 @@ class _ProfileDialogState extends State<_ProfileDialog> {
                         alpha: 0.5,
                       ),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(15),
+                        borderRadius: BorderRadius.circular(
+                          AppDimensions.radiusMd,
+                        ),
                       ),
                       textStyle: const TextStyle(
                         fontSize: 16,
@@ -237,8 +252,8 @@ class _ProfileDialogState extends State<_ProfileDialog> {
                     ),
                     child: _saving
                         ? SizedBox(
-                            width: 20,
-                            height: 20,
+                            width: 16,
+                            height: 16,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
                               color: palette.onAccent,
@@ -254,7 +269,9 @@ class _ProfileDialogState extends State<_ProfileDialog> {
                     foregroundColor: palette.textSecondary,
                     minimumSize: const Size.fromHeight(44),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(
+                        AppDimensions.radiusSm,
+                      ),
                     ),
                   ),
                   child: Text(onboarding ? '稍后再说' : '取消'),

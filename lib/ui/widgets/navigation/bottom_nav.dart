@@ -110,7 +110,8 @@ class _BottomNavState extends State<BottomNav> with TickerProviderStateMixin {
     final reduceMotion = _liquid.reduceMotion;
     final textScale = MediaQuery.textScalerOf(context).scale(11) / 11;
 
-    final barHeight = isSmallWindow ? 56.0 : 64.0;
+    // 底栏随系统字体放大，但限制在 1.3 倍以内，避免大字号把页面内容挤没。
+    final barHeight = (isSmallWindow ? 56.0 : 64.0) * textScale.clamp(1.0, 1.3);
 
     // 行动胶囊的自然宽度：宽度动画的终点，也是玻璃裁剪的基准。
     final targetTrailingWidth = _trailingWidth(
@@ -129,12 +130,17 @@ class _BottomNavState extends State<BottomNav> with TickerProviderStateMixin {
 
     return Padding(
       // 上下对称留出间隙，避免胶囊与内容边缘贴死、看起来像盖住了内容。
-      padding: EdgeInsets.fromLTRB(20, 10, 20, isSmallWindow ? 6 : 10),
+      padding: EdgeInsets.fromLTRB(
+        AppDimensions.space20,
+        AppDimensions.space12,
+        AppDimensions.space20,
+        isSmallWindow ? 6 : 10,
+      ),
       child: Row(
         children: [
           Expanded(
             child: GlassCapsule(
-              radius: BorderRadius.circular(32),
+              radius: BorderRadius.circular(AppDimensions.radiusPill),
               child: Material(
                 type: MaterialType.transparency,
                 child: LayoutBuilder(
@@ -142,7 +148,6 @@ class _BottomNavState extends State<BottomNav> with TickerProviderStateMixin {
                     final count = widget.navigationItems.length;
                     if (count == 0) return const SizedBox.shrink();
                     final itemWidth = constraints.maxWidth / count;
-                    const height = 64.0;
                     // 用“动画终点”的稳定宽度决定标签是否可能显示，
                     // 避免行动胶囊收缩时标签整批闪现/消失。
                     final stableItemWidth =
@@ -162,8 +167,8 @@ class _BottomNavState extends State<BottomNav> with TickerProviderStateMixin {
                               labelScaleFade
                         : 0.0;
 
-                    return SizedBox(
-                      height: isSmallWindow ? 56.0 : height,
+                    return ConstrainedBox(
+                      constraints: BoxConstraints(minHeight: barHeight),
                       child: GestureDetector(
                         behavior: HitTestBehavior.opaque,
                         // 按住后左右拖动：指示器跟手，松手吸附到最近的 Tab。
@@ -190,7 +195,6 @@ class _BottomNavState extends State<BottomNav> with TickerProviderStateMixin {
                         child: AnimatedBuilder(
                           animation: _liquid.listenable,
                           builder: (context, _) {
-                            final barHeight = isSmallWindow ? 56.0 : height;
                             final position = _liquid.renderPosition;
                             final liquid = _liquid.liquidAmount;
                             final speed = _liquid.velocityRatio;
@@ -238,8 +242,7 @@ class _BottomNavState extends State<BottomNav> with TickerProviderStateMixin {
                                       Expanded(
                                         child: _NavItem(
                                           item: widget.navigationItems[i],
-                                          selected:
-                                              i == widget.selectedIndex,
+                                          selected: i == widget.selectedIndex,
                                           selectedness:
                                               (1 - (position - i).abs()).clamp(
                                                 0.0,
@@ -287,9 +290,7 @@ class _BottomNavState extends State<BottomNav> with TickerProviderStateMixin {
               ),
               // 与页面切换共用同一时基：收起/展开和页面是同一次动作。
               duration: Duration(
-                milliseconds: reduceMotion
-                    ? 1
-                    : AppDimensions.tabTransitionMs,
+                milliseconds: reduceMotion ? 1 : AppDimensions.tabTransitionMs,
               ),
               curve: Curves.easeOutCubic,
               // 内容作为 child 传入：宽度动画每帧只重建几何，
@@ -396,10 +397,7 @@ class _ActionCapsuleContent extends StatelessWidget {
           ),
         );
       },
-      child: KeyedSubtree(
-        key: ValueKey(signature),
-        child: _content(context),
-      ),
+      child: KeyedSubtree(key: ValueKey(signature), child: _content(context)),
     );
   }
 
@@ -462,8 +460,8 @@ class _CapsuleAction extends StatelessWidget {
           // 桌面端点击后 InkWell 会保留键盘焦点，默认 focusColor 是 12% 黑，
           // 在浅色玻璃上会留下一整块灰色圆盘，看起来像玻璃里又嵌了一个按钮。
           // 这里统一成跟玻璃同调的极轻高亮，露出一枚完整玻璃的观感。
-          focusColor: overlay.withValues(alpha: 0.06),
-          hoverColor: overlay.withValues(alpha: 0.04),
+          focusColor: overlay.withValues(alpha: AppInteraction.focusOpacity),
+          hoverColor: overlay.withValues(alpha: AppInteraction.hoverOpacity),
           splashColor: overlay.withValues(alpha: 0.05),
           highlightColor: Colors.transparent,
           child: Center(child: _ActionIcon(action: action, size: 21)),
@@ -672,11 +670,15 @@ class _NavItem extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         excludeFromSemantics: true,
-        borderRadius: BorderRadius.circular(32),
+        borderRadius: BorderRadius.circular(AppDimensions.radiusPill),
         // 与行动胶囊一致：玻璃上只用极轻的主题色高亮，
         // 避免默认焦点色在玻璃里留下灰色方块。
-        focusColor: palette.accent.withValues(alpha: 0.06),
-        hoverColor: palette.accent.withValues(alpha: 0.04),
+        focusColor: palette.accent.withValues(
+          alpha: AppInteraction.focusOpacity,
+        ),
+        hoverColor: palette.accent.withValues(
+          alpha: AppInteraction.hoverOpacity,
+        ),
         // 不要 Material 自带的按压水波纹：按压反馈只保留图标放大 + 指示器跟手。
         splashColor: Colors.transparent,
         highlightColor: Colors.transparent,
@@ -688,10 +690,7 @@ class _NavItem extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               icon,
-              if (label != null) ...[
-                const SizedBox(height: 2),
-                label,
-              ],
+              if (label != null) ...[const SizedBox(height: 2), label],
             ],
           ),
         ),

@@ -43,7 +43,7 @@ import 'vpn_routes_page.dart';
 /// 设置主页面。所有持久化字段统一通过 [SettingsState] signals 管理。
 ///
 /// 行组件统一走 [AstralGroupedTile]（MD3：主色图标 + 缩进分隔线 + trailing 控件），
-/// 分区标题统一在卡片上方（[buildSettingsHeader]）。
+/// 分区标题统一在卡片上方（[SectionHeader]）。
 class SettingsMainPage extends StatefulWidget {
   const SettingsMainPage({super.key, this.scrollController});
 
@@ -144,7 +144,12 @@ class _SettingsMainPageState extends State<SettingsMainPage>
                   final palette = context.astralPalette;
                   return AstralCard(
                     onTap: () => showEditProfileDialog(context),
-                    padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+                    padding: const EdgeInsets.fromLTRB(
+                      AppDimensions.space16,
+                      AppDimensions.space16,
+                      AppDimensions.space12,
+                      AppDimensions.space16,
+                    ),
                     child: Row(
                       children: [
                         AvatarWidget(
@@ -422,7 +427,7 @@ class _SettingsMainPageState extends State<SettingsMainPage>
                 child: DropdownButton<TransportMode>(
                   value: transportMode,
                   isDense: true,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
                   items: [
                     for (final mode in TransportMode.values)
                       DropdownMenuItem<TransportMode>(
@@ -731,6 +736,7 @@ class _SettingsMainPageState extends State<SettingsMainPage>
   ) {
     return showDialog<int>(
       context: context,
+      barrierColor: astralDialogBarrierColor,
       builder: (dialogContext) {
         final scheme = Theme.of(dialogContext).colorScheme;
         return AlertDialog(
@@ -751,7 +757,9 @@ class _SettingsMainPageState extends State<SettingsMainPage>
                       width: 40,
                       height: 40,
                       child: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(
+                          AppDimensions.radiusXs,
+                        ),
                         child: BookmarkCover(bookmark: bookmark),
                       ),
                     ),
@@ -833,6 +841,7 @@ class _SettingsMainPageState extends State<SettingsMainPage>
     final formKey = GlobalKey<FormState>();
     final result = await showDialog<bool>(
       context: context,
+      barrierColor: astralDialogBarrierColor,
       builder: (ctx) => AlertDialog(
         title: const Text('编辑虚拟网络 IP'),
         content: Form(
@@ -880,6 +889,7 @@ class _SettingsMainPageState extends State<SettingsMainPage>
     final formKey = GlobalKey<FormState>();
     final result = await showDialog<bool>(
       context: context,
+      barrierColor: astralDialogBarrierColor,
       builder: (ctx) => AlertDialog(
         title: const Text('编辑虚拟 IPv6 地址'),
         content: Form(

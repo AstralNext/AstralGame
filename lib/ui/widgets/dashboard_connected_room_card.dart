@@ -1,3 +1,4 @@
+import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/models/game_catalog.dart';
 import 'package:astral_game/ui/widgets/app_toast.dart';
@@ -38,17 +39,25 @@ class ConnectedRoomCard extends StatelessWidget {
     final code = roomShortCode?.trim() ?? '';
 
     return AstralCard(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+      padding: const EdgeInsets.fromLTRB(
+        AppDimensions.space16,
+        AppDimensions.space16,
+        AppDimensions.space16,
+        AppDimensions.space16,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
           if (isLinking) ...[
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppDimensions.space12,
+                vertical: AppDimensions.space12,
+              ),
               decoration: BoxDecoration(
                 color: palette.accentMuted,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
               ),
               child: Row(
                 children: [
@@ -86,7 +95,7 @@ class ConnectedRoomCard extends StatelessWidget {
                   height: 56,
                   decoration: BoxDecoration(
                     color: palette.accentMuted,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
                   ),
                   child: Icon(Icons.meeting_room, color: palette.accent),
                 ),

@@ -11,6 +11,7 @@ import 'package:astral_game/ui/pages/dashboard_user_item.dart';
 import 'package:astral_game/ui/widgets/dashboard_home_panel.dart';
 import 'package:astral_game/ui/widgets/dashboard_members_skeleton.dart';
 import 'package:astral_game/ui/widgets/room_open_games_panel.dart';
+import 'package:astral_game/ui/widgets/section_header.dart';
 import 'package:flutter/material.dart';
 import 'package:signals/signals_flutter.dart';
 
@@ -74,7 +75,7 @@ class DashboardNarrowLayout extends StatelessWidget {
               AppDimensions.pagePaddingH,
               AppDimensions.sectionGap,
               AppDimensions.pagePaddingH,
-              8,
+              AppDimensions.space8,
             ),
             sliver: SliverToBoxAdapter(
               child: _NarrowRoomHeader(
@@ -89,9 +90,9 @@ class DashboardNarrowLayout extends StatelessWidget {
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(
               AppDimensions.pagePaddingH,
-              8,
+              AppDimensions.space8,
               AppDimensions.pagePaddingH,
-              8,
+              AppDimensions.space8,
             ),
             sliver: SliverToBoxAdapter(
               child: _NarrowOpenGamesSlot(
@@ -206,35 +207,20 @@ class _MembersBlock extends StatelessWidget {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.only(left: 4),
-                    child: Row(
+                  SectionHeader(
+                    title: title,
+                    count: nodes.isEmpty ? null : nodes.length,
+                    tone: SectionHeaderTone.accent,
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          title,
-                          style: theme.labelLarge?.copyWith(
-                            color: palette.accent,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.2,
-                          ),
-                        ),
-                        if (nodes.isNotEmpty) ...[
-                          const SizedBox(width: 8),
-                          Text(
-                            '${nodes.length}',
-                            style: theme.labelSmall?.copyWith(
-                              color: palette.textTertiary,
-                            ),
-                          ),
-                        ],
-                        const Spacer(),
                         Text(
                           compact ? '简洁' : '详细',
                           style: theme.labelSmall?.copyWith(
                             color: palette.textTertiary,
                           ),
                         ),
-                        const SizedBox(width: 4),
+                        const SizedBox(width: AppDimensions.space4),
                         Switch.adaptive(
                           value: compact,
                           materialTapTargetSize:
@@ -247,7 +233,7 @@ class _MembersBlock extends StatelessWidget {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: AppDimensions.space8),
                   if (nodes.isEmpty) const DashboardMembersSkeleton(),
                 ],
               );

@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'package:astral_game/config/app_dimensions.dart';
 
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/ui/widgets/glass_capsule.dart';
@@ -129,9 +130,14 @@ class ProfileCapsule extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: GlassCapsule(
-        radius: BorderRadius.circular(999),
+        radius: BorderRadius.circular(AppDimensions.radiusPill),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(5, 5, 14, 5),
+          padding: const EdgeInsets.fromLTRB(
+            AppDimensions.space4,
+            AppDimensions.space4,
+            AppDimensions.space16,
+            AppDimensions.space4,
+          ),
           child: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: maxWidth),
             child: Row(

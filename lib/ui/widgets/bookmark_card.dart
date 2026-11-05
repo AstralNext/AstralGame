@@ -1,3 +1,4 @@
+import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/models/bookmark.dart';
 import 'package:astral_game/data/models/game_catalog.dart';
@@ -61,14 +62,14 @@ class BookmarkCard extends StatelessWidget {
     return AstralCard(
       onTap: onOpenActions,
       onLongPress: onOpenActions,
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(AppDimensions.space12),
       child: Row(
         children: [
           SizedBox(
             width: 64,
             height: 92,
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
               child: Stack(
                 children: [
                   Positioned.fill(child: BookmarkCover(bookmark: bookmark)),
@@ -132,14 +133,17 @@ class _JoinPillButton extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
     return Material(
       color: palette.accent,
-      borderRadius: BorderRadius.circular(999),
+      borderRadius: BorderRadius.circular(AppDimensions.radiusPill),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onPressed,
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 40, minWidth: 64),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppDimensions.space12,
+              vertical: AppDimensions.space8,
+            ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -207,7 +211,12 @@ class BookmarkGridCard extends StatelessWidget {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+            padding: const EdgeInsets.fromLTRB(
+              AppDimensions.space12,
+              AppDimensions.space8,
+              AppDimensions.space12,
+              AppDimensions.space12,
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -287,7 +296,7 @@ class _FallbackCover extends StatelessWidget {
     return Container(
       color: palette.accentMuted,
       alignment: Alignment.center,
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(AppDimensions.space8),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -317,7 +326,7 @@ class _PinBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(4),
+      padding: const EdgeInsets.all(AppDimensions.space4),
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.55),
         shape: BoxShape.circle,
@@ -352,7 +361,7 @@ class BookmarkActionsMenu extends StatelessWidget {
     );
     final trigger = onImage
         ? Container(
-            padding: const EdgeInsets.all(4),
+            padding: const EdgeInsets.all(AppDimensions.space4),
             decoration: BoxDecoration(
               color: Colors.black.withValues(alpha: 0.45),
               shape: BoxShape.circle,

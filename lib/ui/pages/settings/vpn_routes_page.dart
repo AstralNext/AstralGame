@@ -1,3 +1,4 @@
+import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/data/services/app_settings_service.dart';
 import 'package:astral_game/data/state/vpn_state.dart';
@@ -27,6 +28,7 @@ class VpnRoutesPage extends StatelessWidget {
     final formKey = GlobalKey<FormState>();
     final result = await showDialog<String>(
       context: context,
+      barrierColor: astralDialogBarrierColor,
       builder: (ctx) => AlertDialog(
         title: Text(index == null ? '添加 VPN 路由' : '编辑 VPN 路由'),
         content: Form(
@@ -79,6 +81,7 @@ class VpnRoutesPage extends StatelessWidget {
   ) async {
     final ok = await showDialog<bool>(
       context: context,
+      barrierColor: astralDialogBarrierColor,
       builder: (ctx) => AlertDialog(
         title: const Text('删除路由'),
         content: Text('确定删除「$cidr」？下次进房后生效。'),
@@ -131,7 +134,7 @@ class VpnRoutesPage extends StatelessWidget {
             AppDimensions.pagePaddingH,
             AppDimensions.pagePaddingV,
             AppDimensions.pagePaddingH,
-            24,
+            AppDimensions.space24,
           ),
           itemCount: routes.length,
           separatorBuilder: (_, _) => const SizedBox(height: 8),

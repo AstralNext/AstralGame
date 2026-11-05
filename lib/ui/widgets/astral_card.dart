@@ -8,7 +8,7 @@ class AstralCard extends StatelessWidget {
     super.key,
     required this.child,
     this.padding,
-    this.radius = AppDimensions.radiusMd,
+    this.radius = AppDimensions.radiusCard,
     this.shadow = true,
     this.color,
     this.onTap,
@@ -49,7 +49,9 @@ class AstralCard extends StatelessWidget {
           onLongPress: onLongPress,
           borderRadius: borderRadius,
           splashColor: palette.accentMuted,
-          highlightColor: palette.accent.withValues(alpha: 0.08),
+          highlightColor: palette.accent.withValues(
+            alpha: AppInteraction.pressedOpacity,
+          ),
           child: inner,
         ),
       );

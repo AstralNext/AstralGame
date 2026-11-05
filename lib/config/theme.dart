@@ -19,6 +19,17 @@ abstract final class AppFonts {
   ];
 }
 
+/// 弹窗遮罩统一用 35% 黑，避免各弹窗 32% / 40% / 默认 54% 混用。
+const astralDialogBarrierColor = Color(0x59000000);
+
+/// 全站统一的交互态透明度，避免各组件各写一套悬停/按压/禁用值。
+abstract final class AppInteraction {
+  static const hoverOpacity = 0.04;
+  static const pressedOpacity = 0.08;
+  static const focusOpacity = 0.06;
+  static const disabledOpacity = 0.5;
+}
+
 /// 主题切换与水滴揭示动画参数。
 abstract final class AppThemeAnimation {
   static const revealDuration = Duration(milliseconds: 580);
@@ -129,7 +140,7 @@ abstract final class AstralGameTheme {
         margin: EdgeInsets.zero,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+          borderRadius: BorderRadius.circular(AppDimensions.radiusCard),
         ),
       ),
       iconTheme: IconThemeData(
@@ -141,21 +152,26 @@ abstract final class AstralGameTheme {
           backgroundColor: palette.accent,
           foregroundColor: palette.onAccent,
           elevation: 0,
+          minimumSize: const Size(0, 48),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
+            borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
           ),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: palette.accent,
+          minimumSize: const Size(0, 44),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
+            borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
           ),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(foregroundColor: palette.accent),
+        style: TextButton.styleFrom(
+          foregroundColor: palette.accent,
+          minimumSize: const Size(0, 44),
+        ),
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: palette.card,
@@ -179,17 +195,17 @@ abstract final class AstralGameTheme {
         fillColor: palette.canvas,
         // 透明描边保留 outline 缺口，避免浮动标签被填充色裁掉汉字上半截。
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
+          borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
           borderSide: const BorderSide(color: Colors.transparent),
           gapPadding: 6,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
+          borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
           borderSide: const BorderSide(color: Colors.transparent),
           gapPadding: 6,
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
+          borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
           borderSide: BorderSide(color: palette.accent, width: 1.5),
           gapPadding: 6,
         ),

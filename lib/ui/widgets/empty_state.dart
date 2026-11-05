@@ -1,3 +1,4 @@
+import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/config/theme.dart';
 import 'package:flutter/material.dart';
 
@@ -33,7 +34,7 @@ class EmptyState extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.all(AppDimensions.space32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -42,7 +43,9 @@ class EmptyState extends StatelessWidget {
             Text(
               title,
               textAlign: TextAlign.center,
-              style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+              style: textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
             ),
             if (subtitle != null) ...[
               const SizedBox(height: 8),

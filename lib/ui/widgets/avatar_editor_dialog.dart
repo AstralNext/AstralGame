@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
+import 'package:astral_game/config/app_dimensions.dart';
 
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/ui/widgets/app_toast.dart';
@@ -16,7 +17,7 @@ Future<Uint8List?> showAvatarEditor(
 }) {
   return showDialog<Uint8List>(
     context: context,
-    barrierColor: Colors.black.withValues(alpha: 0.4),
+    barrierColor: astralDialogBarrierColor,
     builder: (_) => _AvatarEditorDialog(bytes: bytes, info: info),
   );
 }
@@ -116,13 +117,16 @@ class _AvatarEditorDialogState extends State<_AvatarEditorDialog> {
     return Dialog(
       backgroundColor: Colors.transparent,
       elevation: 0,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      insetPadding: const EdgeInsets.symmetric(
+        horizontal: AppDimensions.space24,
+        vertical: AppDimensions.space24,
+      ),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 400),
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: palette.card,
-            borderRadius: BorderRadius.circular(28),
+            borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
             boxShadow: [
               BoxShadow(
                 color: palette.shadowLift,
@@ -132,7 +136,12 @@ class _AvatarEditorDialogState extends State<_AvatarEditorDialog> {
             ],
           ),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+            padding: const EdgeInsets.fromLTRB(
+              AppDimensions.space24,
+              AppDimensions.space24,
+              AppDimensions.space24,
+              AppDimensions.space16,
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -202,7 +211,9 @@ class _AvatarEditorDialogState extends State<_AvatarEditorDialog> {
                           foregroundColor: palette.textSecondary,
                           minimumSize: const Size.fromHeight(48),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
+                            borderRadius: BorderRadius.circular(
+                              AppDimensions.radiusSm,
+                            ),
                           ),
                         ),
                         child: const Text('取消'),
@@ -220,7 +231,9 @@ class _AvatarEditorDialogState extends State<_AvatarEditorDialog> {
                           ),
                           minimumSize: const Size.fromHeight(48),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
+                            borderRadius: BorderRadius.circular(
+                              AppDimensions.radiusSm,
+                            ),
                           ),
                           textStyle: const TextStyle(
                             fontSize: 15,
@@ -229,8 +242,8 @@ class _AvatarEditorDialogState extends State<_AvatarEditorDialog> {
                         ),
                         child: _processing
                             ? SizedBox(
-                                width: 20,
-                                height: 20,
+                                width: 16,
+                                height: 16,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
                                   color: palette.onAccent,
@@ -258,7 +271,7 @@ class _AvatarEditorDialogState extends State<_AvatarEditorDialog> {
         _baseHeight = widget.info.height * _baseScale;
 
         return ClipRRect(
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
           child: ColoredBox(
             color: Colors.black,
             child: GestureDetector(

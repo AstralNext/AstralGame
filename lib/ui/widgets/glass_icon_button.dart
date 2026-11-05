@@ -1,3 +1,4 @@
+import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/ui/widgets/glass_capsule.dart';
 import 'package:flutter/material.dart';
 
@@ -23,17 +24,31 @@ class GlassIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final button = SizedBox(
-      width: size,
-      height: size,
-      child: GlassCapsule(
-        radius: BorderRadius.circular(size),
-        child: Material(
-          type: MaterialType.transparency,
-          child: InkWell(
-            onTap: onPressed,
-            customBorder: const CircleBorder(),
-            child: Center(child: child),
+    final enabled = onPressed != null;
+    final button = Opacity(
+      opacity: enabled ? 1 : AppInteraction.disabledOpacity,
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: GlassCapsule(
+          radius: BorderRadius.circular(size),
+          child: Material(
+            type: MaterialType.transparency,
+            child: InkWell(
+              onTap: onPressed,
+              customBorder: const CircleBorder(),
+              hoverColor: enabled
+                  ? context.astralPalette.accent.withValues(
+                      alpha: AppInteraction.hoverOpacity,
+                    )
+                  : null,
+              highlightColor: enabled
+                  ? context.astralPalette.accent.withValues(
+                      alpha: AppInteraction.pressedOpacity,
+                    )
+                  : null,
+              child: Center(child: child),
+            ),
           ),
         ),
       ),
@@ -41,7 +56,7 @@ class GlassIconButton extends StatelessWidget {
 
     return Semantics(
       button: true,
-      enabled: onPressed != null,
+      enabled: enabled,
       label: semanticsLabel,
       child: tooltip == null
           ? button

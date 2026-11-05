@@ -1,3 +1,4 @@
+import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/models/game_catalog.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +11,7 @@ Future<GameInfo?> showCreateRoomDialog(
 }) {
   return showDialog<GameInfo>(
     context: context,
+    barrierColor: astralDialogBarrierColor,
     builder: (context) =>
         _CreateRoomDialog(catalog: catalog, onRequestAdapt: onRequestAdapt),
   );
@@ -78,7 +80,10 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
     final maxH = size.height * 0.82;
 
     return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      insetPadding: const EdgeInsets.symmetric(
+        horizontal: AppDimensions.space16,
+        vertical: AppDimensions.space20,
+      ),
       clipBehavior: Clip.antiAlias,
       child: SizedBox(
         width: maxW,
@@ -87,7 +92,12 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 12, 8),
+              padding: const EdgeInsets.fromLTRB(
+                AppDimensions.space20,
+                AppDimensions.space16,
+                AppDimensions.space12,
+                AppDimensions.space8,
+              ),
               child: Row(
                 children: [
                   Expanded(
@@ -107,7 +117,12 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              padding: const EdgeInsets.fromLTRB(
+                AppDimensions.space20,
+                0,
+                AppDimensions.space20,
+                AppDimensions.space8,
+              ),
               child: TextField(
                 controller: _searchController,
                 textInputAction: TextInputAction.search,
@@ -145,7 +160,12 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
                       ),
                     )
                   : ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+                      padding: const EdgeInsets.fromLTRB(
+                        AppDimensions.space8,
+                        AppDimensions.space4,
+                        AppDimensions.space8,
+                        AppDimensions.space8,
+                      ),
                       itemCount: filtered.length,
                       itemBuilder: (context, index) {
                         final g = filtered[index];
@@ -158,7 +178,12 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
                     ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              padding: const EdgeInsets.fromLTRB(
+                AppDimensions.space16,
+                AppDimensions.space8,
+                AppDimensions.space16,
+                AppDimensions.space16,
+              ),
               child: Row(
                 children: [
                   const Spacer(),
@@ -201,17 +226,23 @@ class _GameListTile extends StatelessWidget {
     final desc = game.description.trim();
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppDimensions.space4,
+        vertical: AppDimensions.space2,
+      ),
       child: Material(
         color: selected
             ? palette.accent.withValues(alpha: 0.14)
             : Colors.transparent,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppDimensions.radiusXs),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(AppDimensions.radiusXs),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppDimensions.space12,
+              vertical: AppDimensions.space8,
+            ),
             child: Row(
               children: [
                 GameLogo(game: game),

@@ -1,3 +1,4 @@
+import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/models/bookmark.dart';
 import 'package:flutter/material.dart';
 
@@ -101,6 +102,7 @@ Future<Bookmark?> showBookmarkEditor(
 }) async {
   final result = await showDialog<BookmarkEditorResult>(
     context: context,
+    barrierColor: astralDialogBarrierColor,
     builder: (c) => BookmarkEditorDialog(bookmark: existing),
   );
   if (result == null) return null;
@@ -119,6 +121,7 @@ Future<String?> showBookmarkNameDialog(
 }) {
   return showDialog<String>(
     context: context,
+    barrierColor: astralDialogBarrierColor,
     builder: (_) =>
         _BookmarkNameDialog(initialName: initialName, cancelLabel: cancelLabel),
   );

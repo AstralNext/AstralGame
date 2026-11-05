@@ -63,12 +63,14 @@ class AstralGroupedTile extends StatelessWidget {
             onTap: onTap,
             borderRadius: borderRadius,
             splashColor: palette.accentMuted,
-            highlightColor: palette.accent.withValues(alpha: 0.08),
+            highlightColor: palette.accent.withValues(
+              alpha: AppInteraction.pressedOpacity,
+            ),
             child: Padding(
               padding: EdgeInsets.fromLTRB(
-                16,
+                AppDimensions.space16,
                 subtitle != null ? 12 : 14,
-                12,
+                AppDimensions.space12,
                 subtitle != null ? 12 : 14,
               ),
               child: Row(
@@ -99,7 +101,9 @@ class AstralGroupedTile extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.bodyMedium?.copyWith(
                               color: subtitleMuted
-                                  ? scheme.onSurfaceVariant.withValues(alpha: 0.7)
+                                  ? scheme.onSurfaceVariant.withValues(
+                                      alpha: 0.7,
+                                    )
                                   : scheme.onSurfaceVariant,
                             ),
                           ),
@@ -107,10 +111,7 @@ class AstralGroupedTile extends StatelessWidget {
                       ],
                     ),
                   ),
-                  if (tail != null) ...[
-                    const SizedBox(width: 12),
-                    tail,
-                  ],
+                  if (tail != null) ...[const SizedBox(width: 12), tail],
                 ],
               ),
             ),

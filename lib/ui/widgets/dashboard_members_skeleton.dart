@@ -1,12 +1,10 @@
+import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/config/theme.dart';
 import 'package:flutter/material.dart';
 
 /// 窄屏成员列表加载骨架（节点尚未轮询到时）。
 class DashboardMembersSkeleton extends StatefulWidget {
-  const DashboardMembersSkeleton({
-    super.key,
-    this.rows = 3,
-  });
+  const DashboardMembersSkeleton({super.key, this.rows = 3});
 
   final int rows;
 
@@ -48,7 +46,11 @@ class _DashboardMembersSkeletonState extends State<DashboardMembersSkeleton>
         return Column(
           children: [
             for (var i = 0; i < widget.rows; i++) ...[
-              if (i > 0) Divider(height: 1, color: palette.divider.withValues(alpha: 0.25)),
+              if (i > 0)
+                Divider(
+                  height: 1,
+                  color: palette.divider.withValues(alpha: 0.25),
+                ),
               _SkeletonRow(color: color),
             ],
           ],
@@ -66,16 +68,16 @@ class _SkeletonRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppDimensions.space12,
+        vertical: AppDimensions.space12,
+      ),
       child: Row(
         children: [
           Container(
             width: 36,
             height: 36,
-            decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-            ),
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -93,7 +95,7 @@ class _SkeletonRow extends StatelessWidget {
             height: 8,
             decoration: BoxDecoration(
               color: color,
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(AppDimensions.radiusXs),
             ),
           ),
         ],
@@ -101,7 +103,11 @@ class _SkeletonRow extends StatelessWidget {
     );
   }
 
-  Widget _bar(Color color, {required double widthFactor, required double height}) {
+  Widget _bar(
+    Color color, {
+    required double widthFactor,
+    required double height,
+  }) {
     return FractionallySizedBox(
       widthFactor: widthFactor,
       alignment: Alignment.centerLeft,
@@ -109,7 +115,7 @@ class _SkeletonRow extends StatelessWidget {
         height: height,
         decoration: BoxDecoration(
           color: color,
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(AppDimensions.radiusXs),
         ),
       ),
     );

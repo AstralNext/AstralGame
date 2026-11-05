@@ -1,3 +1,4 @@
+import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/config/app_theme_id.dart';
 import 'package:astral_game/data/state/theme_reveal_state.dart';
 import 'package:astral_game/ui/widgets/astral_card.dart';
@@ -23,7 +24,12 @@ Future<ThemePickResult?> showAppThemePickerSheet(
 
       return SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          padding: const EdgeInsets.fromLTRB(
+            AppDimensions.space16,
+            AppDimensions.space8,
+            AppDimensions.space16,
+            AppDimensions.space16,
+          ),
           child: SizedBox(
             height: sheetHeight,
             child: Column(

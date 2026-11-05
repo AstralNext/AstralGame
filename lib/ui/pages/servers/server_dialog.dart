@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:astral_game/config/theme.dart';
 
 import 'package:flutter/material.dart';
 import 'package:astral_game/config/app_dimensions.dart';
@@ -12,6 +13,7 @@ import 'blocked_servers.dart';
 Future<void> showAddServerDialog(BuildContext context) async {
   return showDialog(
     context: context,
+    barrierColor: astralDialogBarrierColor,
     builder: (context) => const ServerDialog(title: '添加服务器', confirmText: '添加'),
   );
 }
@@ -22,6 +24,7 @@ Future<void> showEditServerDialog(
 }) async {
   return showDialog(
     context: context,
+    barrierColor: astralDialogBarrierColor,
     builder: (context) =>
         ServerDialog(title: '编辑服务器', confirmText: '保存', server: server),
   );
@@ -99,6 +102,7 @@ class _ServerDialogState extends State<ServerDialog> {
   Future<bool> _confirmNonEasyTier(String url) async {
     final confirmed = await showDialog<bool>(
       context: context,
+      barrierColor: astralDialogBarrierColor,
       builder: (context) => AlertDialog(
         title: const Text('非 EasyTier 服务器'),
         content: Text('检测到 "$url" 不是 EasyTier 服务器，可能无法正常联机。\n是否仍然继续添加？'),
@@ -127,7 +131,10 @@ class _ServerDialogState extends State<ServerDialog> {
     return AlertDialog(
       // 窄屏收紧默认 insetPadding（左右各 40 太浪费），给输入框留出宽度
       insetPadding: MediaQuery.sizeOf(context).width < AppBreakpoints.narrow
-          ? const EdgeInsets.symmetric(horizontal: 20, vertical: 24)
+          ? const EdgeInsets.symmetric(
+              horizontal: AppDimensions.space20,
+              vertical: AppDimensions.space24,
+            )
           : null,
       title: Text(widget.title),
       content: SizedBox(

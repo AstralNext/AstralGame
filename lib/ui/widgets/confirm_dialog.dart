@@ -1,3 +1,4 @@
+import 'package:astral_game/config/theme.dart';
 import 'package:flutter/material.dart';
 
 /// 通用「取消 / 确认」弹窗；返回 true 表示用户点了确认，false 表示取消或关闭。
@@ -10,6 +11,7 @@ Future<bool> showConfirmDialog(
 }) async {
   final confirmed = await showDialog<bool>(
     context: context,
+    barrierColor: astralDialogBarrierColor,
     builder: (ctx) => AlertDialog(
       title: Text(title),
       content: Text(content),

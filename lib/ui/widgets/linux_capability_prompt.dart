@@ -1,3 +1,4 @@
+import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/services/linux_capability_service.dart';
 import 'package:astral_game/ui/widgets/app_toast.dart';
 import 'package:flutter/material.dart';
@@ -15,6 +16,7 @@ Future<bool> showLinuxCapabilityPrompt(
 }) async {
   final confirmed = await showDialog<bool>(
     context: context,
+    barrierColor: astralDialogBarrierColor,
     builder: (ctx) => AlertDialog(
       title: const Text('需要网络权限'),
       content: Text(
@@ -50,6 +52,7 @@ Future<bool> showLinuxCapabilityPrompt(
     case LinuxCapabilityGrant.granted:
       await showDialog<void>(
         context: context,
+        barrierColor: astralDialogBarrierColor,
         builder: (ctx) => AlertDialog(
           title: const Text('授权完成'),
           content: const Text('权限已写入，请重启 Astral Game 后生效。'),
