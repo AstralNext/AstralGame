@@ -121,63 +121,57 @@ class _IdleHome extends StatelessWidget {
     final version = ClientRuntimeInfo.appVersion;
     final os = ClientRuntimeInfo.operatingSystemVersion;
 
-    return CustomScrollView(
-      physics: const ClampingScrollPhysics(),
-      slivers: [
-        SliverFillRemaining(
-          hasScrollBody: false,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(child: DailySceneryCard(username: username)),
-              const SizedBox(height: 16),
-              Watch((context) {
-                final list = getIt<RoomState>().bookmarksList.value;
-                if (list.isEmpty) return const SizedBox.shrink();
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: AppDimensions.space16),
-                  child: _BookmarkPreviewCard(
-                    bookmarks: list,
-                    onOpenAll: () =>
-                        getIt<ShellNavigationService>().openBookmarksTab(),
-                    onJoin: (b) => _handlePreviewJoin(context, b),
-                  ),
-                );
-              }),
-              // 版本信息与右侧「创建/加入」胶囊同一行、底部对齐
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
+    // 首页按剩余空间自适应：风景卡吃掉剩余高度，下方信息与胶囊贴底。
+    // 这里不能套 ScrollView——即使内容刚好放下，桌面端也会因为可滚动而显示滚动条。
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(child: DailySceneryCard(username: username)),
+        const SizedBox(height: 16),
+        Watch((context) {
+          final list = getIt<RoomState>().bookmarksList.value;
+          if (list.isEmpty) return const SizedBox.shrink();
+          return Padding(
+            padding: const EdgeInsets.only(bottom: AppDimensions.space16),
+            child: _BookmarkPreviewCard(
+              bookmarks: list,
+              onOpenAll: () =>
+                  getIt<ShellNavigationService>().openBookmarksTab(),
+              onJoin: (b) => _handlePreviewJoin(context, b),
+            ),
+          );
+        }),
+        // 版本信息与右侧「创建/加入」胶囊同一行、底部对齐
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'v$version',
-                          style: textTheme.labelMedium?.copyWith(
-                            color: palette.textSecondary,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          os,
-                          style: textTheme.labelSmall?.copyWith(
-                            color: palette.textTertiary,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
+                  Text(
+                    'v$version',
+                    style: textTheme.labelMedium?.copyWith(
+                      color: palette.textSecondary,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(width: 16),
-                  CreateJoinPill(onCreate: onCreate, onJoin: onJoin),
+                  const SizedBox(height: 4),
+                  Text(
+                    os,
+                    style: textTheme.labelSmall?.copyWith(
+                      color: palette.textTertiary,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ],
               ),
-            ],
-          ),
+            ),
+            const SizedBox(width: 16),
+            CreateJoinPill(onCreate: onCreate, onJoin: onJoin),
+          ],
         ),
       ],
     );
