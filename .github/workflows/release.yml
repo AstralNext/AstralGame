@@ -214,8 +214,8 @@ jobs:
             echo "Release $TAG 已存在，跳过 create"
             exit 0
           fi
-          echo "" > /tmp/release-body.md
-          args=(release create "$TAG" --title "Astral Game $TAG" --notes-file /tmp/release-body.md --target "$TARGET")
+          # 正文交给 GitHub 按提交/PR 自动生成，避免发布出空白说明。
+          args=(release create "$TAG" --title "Astral Game $TAG" --generate-notes --target "$TARGET")
           if [ "$DRAFT" = "true" ]; then args+=(--draft); fi
           if [ "$PRE" = "true" ]; then args+=(--prerelease); fi
           # shellcheck disable=SC2206
