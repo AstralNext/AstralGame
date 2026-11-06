@@ -56,14 +56,34 @@ sudo pacman -U https://github.com/AstralNext/AstralGame/releases/latest/download
 
 ## 从源码构建
 
-需要 Flutter 3.47.2（或更高 stable）、Rust stable、Visual Studio 2022（含 C++ 桌面工具链）。
+### 前置依赖
+
+- Flutter 3.47.2（或更高 stable）、Rust stable（`rustup`）
+- Visual Studio 2022（含「使用 C++ 的桌面开发」工作负载）
+- [NASM](https://www.nasm.us/)：需在 `PATH` 中（部分依赖含汇编源码，需汇编器参与编译）
+- **protoc 23.3**：需在 `PATH` 中，CI 固定使用该版本（由 `prost`/`cargokit` 的构建脚本调用）
+- [Inno Setup 6](https://jrsoftware.org/isinfo.php)：仅制作安装包时需要
+
+### 构建步骤
+
+先编译两个随发行版分发的 Windows 辅助工具，再构建 Flutter 应用：
 
 ```bash
+cargo build --release --manifest-path tools\mono_inject\Cargo.toml
+cargo build --release --manifest-path tools\auto_dns_binder\Cargo.toml
+
 flutter pub get
 flutter build windows --release
 ```
 
 产物位于 `build/windows/x64/runner/Release`。`rust/vendor/steamworks` 是 `[patch.crates-io]` 的 path 依赖，已随仓库提供，无需额外安装。
+
+> 漏做上述前置步骤（NASM、protoc、两个 `cargo build`）**不会**让构建报错：`windows/CMakeLists.txt` 只打印 `WARNING` 然后静默降级，产物与 Release 页面分发的版本不一致。
+>
+> - 缺 `tools/mono_inject/target/release/astral_mono_inject.exe` → 日志出现 `Mono injector missing ...; auto-inject disabled`，游戏自动注入功能关闭；
+> - 缺 `tools/auto_dns_binder/target/release/auto_dns_binder.exe` 或 `tools/smartdns/smartdns.exe` → 日志出现 `网络优化服务不可用`，SmartDNS 相关能力失效。
+>
+> 排查「自动注入/网络优化不生效」类问题时，先确认这些文件是否已生成。
 
 ## 反馈与支持
 
