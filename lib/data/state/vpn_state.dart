@@ -1,13 +1,9 @@
 import 'package:signals/signals.dart';
 
 /// VPN 相关状态（Android VpnService 路由等）。
+///
+/// 运行 / 连接中状态统一由连接状态机表达，这里只保留配置项。
 class VpnState {
-  /// VPN 是否正在运行
-  final isRunning = signal(false);
-
-  /// VPN 是否正在连接中
-  final isConnecting = signal(false);
-
   /// VPN IPv4 地址
   final ipv4Addr = signal('10.126.126.1/24');
 
@@ -16,14 +12,6 @@ class VpnState {
 
   /// 自定义 VPN 路由（CIDR），写入 Android VpnService，不含对端子网代理。
   final customRoutes = signal<List<String>>([]);
-
-  void setRunning(bool value) {
-    isRunning.value = value;
-  }
-
-  void setConnecting(bool value) {
-    isConnecting.value = value;
-  }
 
   void setIpv4Addr(String value) {
     ipv4Addr.value = value;

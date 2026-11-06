@@ -122,6 +122,10 @@ class NodeManagementService {
   }
 
   String? get instanceId => currentInstanceId.value;
+
+  /// 传输实例是否存在（仅内部用于清理/回滚判断）。
+  ///
+  /// **不是连接状态**：UI 判断「已连接」请读 `RoomState.isConnected`。
   bool get isRunning => currentInstanceId.value != null;
 
   /// 该 peer 的时延/丢包（独立 signal，成员行可局部 Watch）。

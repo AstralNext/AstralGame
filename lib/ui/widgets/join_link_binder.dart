@@ -55,7 +55,7 @@ class _JoinLinkBinderState extends State<JoinLinkBinder> {
     try {
       final connection = getIt<ConnectionService>();
       // 连接中先等它结束，而不是直接吞掉邀请链接。
-      if (connection.isConnecting.value || connection.isLinking.value) {
+      if (connection.isConnecting.value) {
         _toast('正在连接中，稍后自动打开邀请…');
         if (!await _waitUntilIdle(connection)) {
           _toast('连接仍未结束，请稍后重新打开邀请链接');
@@ -102,7 +102,7 @@ class _JoinLinkBinderState extends State<JoinLinkBinder> {
   Future<bool> _waitUntilIdle(ConnectionService connection) async {
     final deadline = DateTime.now().add(const Duration(seconds: 60));
     while (DateTime.now().isBefore(deadline)) {
-      if (!connection.isConnecting.value && !connection.isLinking.value) {
+      if (!connection.isConnecting.value) {
         return true;
       }
       await Future.delayed(const Duration(milliseconds: 300));

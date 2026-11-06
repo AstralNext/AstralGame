@@ -24,8 +24,8 @@ class VpnManager {
         },
       ) {
     _session.onRevokedBySystem = (_) async {
-      vpnState.setRunning(false);
-      vpnState.setConnecting(false);
+      // 系统回收 VPN 后由连接健康检查把状态机切回 idle，这里不再单独维护开关。
+      appLogger.w('[VpnManager] VPN 被系统回收');
     };
   }
 
@@ -44,7 +44,6 @@ class VpnManager {
   }) async {
     // Android 13+ 未授予通知权限时前台服务通知不可见，先请求授权。
     await _notifications.ensurePermission();
-    vpnState.setConnecting(true);
     final finalIpv4 = AndroidVpnSession.withDefaultPrefix(ipv4Addr);
     final finalMtu = mtu ?? vpnState.mtu.value;
     vpnState.setIpv4Addr(finalIpv4);
@@ -67,8 +66,6 @@ class VpnManager {
       routes: routes,
       disallowedApplications: disallowed,
     );
-    vpnState.setConnecting(false);
-    vpnState.setRunning(ok);
     if (ok) {
       await _notifications.refreshVpnNotification();
     }
@@ -78,8 +75,6 @@ class VpnManager {
   Future<void> stop() async {
     await _session.stop();
     await _notifications.cancelVpnNotification();
-    vpnState.setRunning(false);
-    vpnState.setConnecting(false);
   }
 
   void startListening() => _session.startListening();
