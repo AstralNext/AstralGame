@@ -87,14 +87,14 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
   # 质量门槛：与平台构建解耦，只跑静态检查与单测，避免三端矩阵里重复执行。
-  # tag 发布时由下面的 build 负责产物，这里不再重复跑。
+  # 所有触发（含 tag 发布）都必须跑；发布工作流会校验本 job 的结论后才创建 Release。
   quality:
     name: 🧹 Quality gate
-    if: github.event_name != 'push'
     runs-on: windows-2022
-    timeout-minutes: 45
+    timeout-minutes: 60
     env:
       FLUTTER_VERSION: '3.47.2'
+      FRB_CODEGEN_VERSION: '2.12.0'
 
     steps:
       - name: 📥 Checkout code
@@ -141,6 +141,32 @@ jobs:
           restore-keys: |
             cargo-crates-${{ runner.os }}-
 
+      # codegen 编译一次要几分钟，按版本缓存二进制；版本与 pubspec.yaml 的
+      # flutter_rust_bridge 严格对齐，避免版本漂移导致生成结果不同。
+      - name: 🧊 Cache FRB codegen
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/flutter_rust_bridge_codegen.exe
+          key: frb-codegen-${{ runner.os }}-${{ env.FRB_CODEGEN_VERSION }}
+
+      - name: 🔁 FRB 生成代码一致性
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v flutter_rust_bridge_codegen >/dev/null 2>&1; then
+            cargo install flutter_rust_bridge_codegen \
+              --version "$FRB_CODEGEN_VERSION" --locked
+          fi
+          flutter_rust_bridge_codegen --version
+          flutter_rust_bridge_codegen generate
+          # Windows 上仓库没有 .gitattributes 且 core.autocrlf 可能为 true，
+          # codegen 写出 LF 会被判定为改动；行尾不参与语义比较。
+          if ! git diff --ignore-cr-at-eol --quiet -- lib/src/rust rust/src/frb_generated.rs; then
+            git diff --ignore-cr-at-eol --stat -- lib/src/rust rust/src/frb_generated.rs
+            echo "::error::FRB 生成代码与 Rust 源码不一致：请在本地运行 flutter_rust_bridge_codegen generate（$FRB_CODEGEN_VERSION）并提交生成结果"
+            exit 1
+          fi
+
       - name: 🔍 flutter analyze
         run: flutter analyze
 
@@ -163,6 +189,17 @@ jobs:
           for manifest in rust tools/mono_inject tools/auto_dns_binder; do
             echo "--- $manifest ---"
             cargo clippy --manifest-path "$manifest/Cargo.toml" --all-targets -- -D warnings
+          done
+
+      # 放在 clippy 之后：clippy --all-targets 已经用 debug profile 编译过依赖，
+      # 这里只补编测试二进制，几乎不额外增加耗时。
+      - name: 🧪 cargo test
+        shell: bash
+        run: |
+          set -euo pipefail
+          for manifest in rust tools/mono_inject tools/auto_dns_binder; do
+            echo "--- $manifest ---"
+            cargo test --manifest-path "$manifest/Cargo.toml"
           done
 
   build:

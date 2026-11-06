@@ -101,6 +101,45 @@ jobs:
           echo "PKG_VER=$VER" >> "$GITHUB_ENV"
           echo "TAG_NAME=$TAG" >> "$GITHUB_ENV"
 
+      # 跨工作流无法直接 needs，这里回查触发构建的 quality job 结论。
+      # 自动发布：用 workflow_run 传入的 run id；手动发布：取该 tag 最近一次成功构建。
+      - name: 校验质量门槛
+        env:
+          GH_TOKEN: ${{ secrets.ASTRAL_SITE_TOKEN || secrets.GITHUB_TOKEN }}
+          RUN_ID: ${{ steps.cfg.outputs.run_id }}
+          TAG: ${{ steps.cfg.outputs.tag }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "workflow_run" ]; then
+            RUN="$RUN_ID"
+          else
+            RUN=$(gh api \
+              "repos/$GITHUB_REPOSITORY/actions/workflows/build.yml/runs?event=push&per_page=100" \
+              --jq ".workflow_runs[] | select(.head_branch == \"$TAG\" and .conclusion == \"success\") | .id" \
+              | head -1)
+          fi
+          if [ -z "$RUN" ]; then
+            echo "::error::找不到 $TAG 的成功构建记录，无法确认质量门槛；请先推送 tag 并等待 Build 完成"
+            exit 1
+          fi
+          RESULT=$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/runs/$RUN/jobs?per_page=100" \
+            --jq '[.jobs[] | select(.name | contains("Quality gate"))] | if length == 0 then "missing" else .[0].conclusion end')
+          case "$RESULT" in
+            success)
+              echo "质量门槛通过（build run $RUN）"
+              ;;
+            missing)
+              echo "::error::构建 run $RUN 没有质量门槛 job（早于门槛上线），请重新构建后再发布"
+              exit 1
+              ;;
+            *)
+              echo "::error::质量门槛未通过（$RESULT），中止发布（build run $RUN）"
+              exit 1
+              ;;
+          esac
+
       - name: 拉取 Windows zip
         uses: dawidd6/action-download-artifact@v6
         with:
