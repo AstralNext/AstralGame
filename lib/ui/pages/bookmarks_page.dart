@@ -531,7 +531,7 @@ class _BookmarksPageState extends State<BookmarksPage> {
   // ============ 操作 ============
 
   Future<void> _handleJoin(Bookmark b) async {
-    if (_connectionService.isConnecting) {
+    if (_connectionService.isConnecting.value) {
       if (!mounted) return;
       showAppToast(context, '正在连接中，请稍候…');
       return;

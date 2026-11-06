@@ -97,8 +97,11 @@ class ConnectionService {
       '虚拟网卡（TUN）创建失败，无法建立联机网络。请检查网络权限后重试：'
       'Windows 请以管理员身份运行，Linux 请确认已授予网络能力。';
 
-  bool _isConnecting = false;
-  bool get isConnecting => _isConnecting;
+  /// 是否正在建立连接。
+  ///
+  /// 用信号而非普通 bool，让「创建/加入」等 UI 能实时切到 busy 态；
+  /// [_connect] 的 finally 保证失败、取消、成功都会复位为 false。
+  final isConnecting = signal(false);
 
   /// 已有短码/会话，EasyTier 仍在连接中（供房间卡「连接中」提示）。
   final isLinking = signal(false);
@@ -584,11 +587,11 @@ class ConnectionService {
     String? gameId,
     required int epoch,
   }) async {
-    if (_isConnecting) {
+    if (isConnecting.value) {
       appLogger.w('[ConnectionService] 已有连接正在进行中，跳过');
       return false;
     }
-    _isConnecting = true;
+    isConnecting.value = true;
     final connectStartedAt = DateTime.now();
     // 健康检查的后台撤销标记：TUN/VPN 失败提前抛出时，让并行的服务器连通检查立刻退出。
     var checksAborted = false;
@@ -803,7 +806,7 @@ class ConnectionService {
       if (translated != e) throw translated;
       return false;
     } finally {
-      _isConnecting = false;
+      isConnecting.value = false;
     }
   }
 

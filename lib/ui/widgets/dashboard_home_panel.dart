@@ -170,7 +170,15 @@ class _IdleHome extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 16),
-            CreateJoinPill(onCreate: onCreate, onJoin: onJoin),
+            // 直接跟踪连接信号：连接失败/取消时 finally 会复位，胶囊随之恢复可点。
+            Watch((context) {
+              final busy = getIt<ConnectionService>().isConnecting.value;
+              return CreateJoinPill(
+                onCreate: onCreate,
+                onJoin: onJoin,
+                busy: busy,
+              );
+            }),
           ],
         ),
       ],
@@ -297,7 +305,7 @@ class _PreviewTile extends StatelessWidget {
 Future<void> _handlePreviewJoin(BuildContext context, Bookmark b) async {
   final cs = getIt<ConnectionService>();
   final rs = getIt<RoomState>();
-  if (cs.isConnecting) {
+  if (cs.isConnecting.value) {
     showAppToast(context, '正在连接中，请稍候…');
     return;
   }

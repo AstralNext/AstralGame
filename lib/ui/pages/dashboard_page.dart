@@ -169,7 +169,7 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Future<void> _handleCreateRoom() async {
-    if (_connectionService.isConnecting) {
+    if (_connectionService.isConnecting.value) {
       if (mounted) showAppToast(context, '正在连接中，请稍候…');
       return;
     }
@@ -203,7 +203,7 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Future<void> _handleJoinRoom() async {
-    if (_connectionService.isConnecting) {
+    if (_connectionService.isConnecting.value) {
       if (mounted) showAppToast(context, '正在连接中，请稍候…');
       return;
     }
