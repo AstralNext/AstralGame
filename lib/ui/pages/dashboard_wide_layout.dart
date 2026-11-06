@@ -114,10 +114,10 @@ class _RoomPane extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Watch((context) {
-      final isRunning = nodeManagement.isRunning;
-      final linkingFlag = getIt<ConnectionService>().isLinking.value;
-      final isLinking =
-          roomState.session.value != null && (linkingFlag || !isRunning);
+      // 传输可用（TUN/VPN/SDR 就绪）才算已连接；实例存在与否不再是 UI 口径。
+      final isConnected = roomState.isConnected.value;
+      // 已有会话且仍在建联（含 Steam 启动期）。
+      final isLinking = getIt<ConnectionService>().isLinking.value;
       final session = roomState.session.value;
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -133,7 +133,7 @@ class _RoomPane extends StatelessWidget {
           ),
           const SizedBox(height: AppDimensions.sectionGap),
           Expanded(
-            child: isRunning
+            child: isConnected
                 ? RoomOpenGamesPanel(gameId: session?.gameId)
                 : const SizedBox.shrink(),
           ),

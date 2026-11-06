@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:astral_game/data/services/app_settings_service.dart';
 import 'package:astral_game/data/services/floating_overlay_service.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
+import 'package:astral_game/data/state/room_state.dart';
 import 'package:astral_game/data/state/settings_state.dart';
 import 'package:astral_game/di.dart';
 import 'package:astral_game/utils/runtime_platform.dart';
@@ -32,10 +33,12 @@ class _FloatingOverlayBinderState extends State<FloatingOverlayBinder>
     WidgetsBinding.instance.addObserver(this);
     final settings = getIt<SettingsState>();
     final nodes = getIt<NodeManagementService>();
+    final roomState = getIt<RoomState>();
 
     _effectCleanup = effect(() {
       settings.floatingOverlayEnabled.value;
-      nodes.isRunning;
+      // 悬浮窗展示连接态，跟随传输可用性（而非实例启动）。
+      roomState.isConnected.value;
       // 延迟存放在独立的 linkMetrics signal 中，需逐个订阅才能实时刷新。
       for (final node in nodes.userNodes.value) {
         nodes.linkMetricsOf(node.peerId).value.latencyMs;
@@ -58,6 +61,7 @@ class _FloatingOverlayBinderState extends State<FloatingOverlayBinder>
       _overlay.applyFromAppState(
         settings: getIt<AppSettingsService>(),
         nodes: getIt<NodeManagementService>(),
+        connected: getIt<RoomState>().isConnected.value,
       );
     });
   }

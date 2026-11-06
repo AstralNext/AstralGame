@@ -36,7 +36,6 @@ class RoomState {
 
   /// 全部收藏（已按 pinned + sortKey 排序）。UI 消费前可再搜索/分页。
   final bookmarksList = signal<List<Bookmark>>([]);
-  final connectedRoomName = signal<String?>(null);
 
   final Random _random = Random();
 
@@ -75,14 +74,12 @@ class RoomState {
       if (clearSession) {
         session.value = null;
       }
-      connectedRoomName.value = null;
       hostOnline.value = true;
     }
   }
 
   void setSession(ActiveRoomSession? value) {
     session.value = value;
-    connectedRoomName.value = value?.networkName;
     if (value != null) {
       hostOnline.value = true;
     }

@@ -74,9 +74,13 @@ class FloatingOverlayService {
   }
 
   /// 按设置开关与悬浮窗权限应用显示/隐藏并刷新数据。
+  ///
+  /// [connected] 由调用方从连接状态机读取（传输可用），不再由本服务推断
+  /// 「实例是否启动」。
   Future<void> applyFromAppState({
     required AppSettingsService settings,
     required NodeManagementService nodes,
+    required bool connected,
   }) async {
     if (!isSupported) return;
     final enabled = settings.isFloatingOverlayEnabled();
@@ -89,7 +93,6 @@ class FloatingOverlayService {
       return;
     }
 
-    final connected = nodes.isRunning;
     final users = nodes.userNodes.value
         .where((n) => !n.hostname.startsWith(AppConstants.publicServerHostname))
         .toList();

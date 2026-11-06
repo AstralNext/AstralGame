@@ -34,8 +34,9 @@ class _HomeWidgetRefreshBinderState extends State<HomeWidgetRefreshBinder>
     final nodes = getIt<NodeManagementService>();
 
     _effectCleanup = effect(() {
-      roomState.connectedRoomName.value;
-      nodes.isRunning;
+      // 连接态与房间码都来自同一真源：传输状态 + 会话。
+      roomState.isConnected.value;
+      roomState.session.value;
       roomState.bookmarksList.value.length;
       settings.appThemeId.value;
       nodes.userNodes.value.length;

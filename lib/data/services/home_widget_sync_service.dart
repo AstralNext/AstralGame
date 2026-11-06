@@ -40,7 +40,8 @@ class HomeWidgetSyncService {
     if (!RuntimePlatform.isAndroid) return;
     final roomState = _roomState;
     final nodeManagement = _nodeManagement;
-    final inRoom = nodeManagement.isRunning;
+    // 桌面小部件展示的是「能否联机」，所以取传输可用而不是实例存在。
+    final inRoom = roomState.isConnected.value;
     final first = _firstBookmark(roomState);
     final roomLabel = _resolveRoomLabel(roomState, first, inRoom);
     final memberCount = nodeManagement.onlinePeersForDisplay.length;
@@ -69,7 +70,7 @@ class HomeWidgetSyncService {
     } else {
       final code =
           roomState.activeShareCode ??
-          roomState.connectedRoomName.value ??
+          roomState.session.value?.networkName ??
           first?.payload.networkName ??
           '';
       await HomeWidget.saveWidgetData<String>(
@@ -124,7 +125,8 @@ class HomeWidgetSyncService {
     if (!RuntimePlatform.isAndroid) return;
     final roomState = _roomState;
     final nodeManagement = _nodeManagement;
-    final inRoom = nodeManagement.isRunning;
+    // 与 syncConnect 同口径：只有传输可用时才展示在线成员。
+    final inRoom = roomState.isConnected.value;
     final first = _firstBookmark(roomState);
     final members = nodeManagement.onlinePeersForDisplay;
     final preview = members

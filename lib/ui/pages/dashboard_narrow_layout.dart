@@ -29,11 +29,12 @@ class DashboardNarrowLayout extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Watch((context) {
-      final isRunning = nodeManagement.isRunning;
       final session = roomState.session.value;
-      final linkingFlag = getIt<ConnectionService>().isLinking.value;
       final showRoom = session != null;
-      final isLinking = showRoom && (linkingFlag || !isRunning);
+      // 传输可用（TUN/VPN/SDR 就绪）才算已连接；实例存在与否不再是 UI 口径。
+      final isConnected = roomState.isConnected.value;
+      // 已有会话且仍在建联（含 Steam 启动期）。
+      final isLinking = getIt<ConnectionService>().isLinking.value;
 
       final username = nodeManagement.currentUsername.value.trim();
 
@@ -92,7 +93,7 @@ class DashboardNarrowLayout extends StatelessWidget {
             sliver: SliverToBoxAdapter(
               child: _NarrowOpenGamesSlot(
                 gameId: active.gameId,
-                isRunning: isRunning,
+                isConnected: isConnected,
               ),
             ),
           ),
@@ -147,10 +148,15 @@ class _NarrowRoomHeader extends StatelessWidget {
 }
 
 class _NarrowOpenGamesSlot extends StatelessWidget {
-  const _NarrowOpenGamesSlot({required this.gameId, required this.isRunning});
+  const _NarrowOpenGamesSlot({
+    required this.gameId,
+    required this.isConnected,
+  });
 
   final String gameId;
-  final bool isRunning;
+
+  /// 开房面板只在传输可用后展示：建联途中没数据可看，提前展示只会闪一下空卡。
+  final bool isConnected;
 
   @override
   Widget build(BuildContext context) {
@@ -158,7 +164,7 @@ class _NarrowOpenGamesSlot extends StatelessWidget {
       final openGames = getIt<OpenGamesService>();
       final openListings = openGames.listings.value;
       final showOpenGames =
-          isRunning && (openGames.isActive || openListings.isNotEmpty);
+          isConnected && (openGames.isActive || openListings.isNotEmpty);
       if (!showOpenGames) return const SizedBox.shrink();
       final openGamesHeight = openListings.isEmpty ? 72.0 : 220.0;
       return AnimatedSize(
