@@ -86,6 +86,85 @@ jobs:
             echo 'MATRIX_EOF'
           } >> "$GITHUB_OUTPUT"
 
+  # 质量门槛：与平台构建解耦，只跑静态检查与单测，避免三端矩阵里重复执行。
+  # tag 发布时由下面的 build 负责产物，这里不再重复跑。
+  quality:
+    name: 🧹 Quality gate
+    if: github.event_name != 'push'
+    runs-on: windows-2022
+    timeout-minutes: 45
+    env:
+      FLUTTER_VERSION: '3.47.2'
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v5
+
+      - name: 🐦 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: 🦀 Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      # clippy/check 需要编译 easytier 等依赖，其 build script 依赖 protoc。
+      - name: 📥 Install protoc
+        shell: pwsh
+        env:
+          PROTOC_VERSION: '23.3'
+        run: |
+          $url = "https://github.com/protocolbuffers/protobuf/releases/download/v$env:PROTOC_VERSION/protoc-$env:PROTOC_VERSION-win64.zip"
+          Invoke-WebRequest -Uri $url -OutFile "$env:RUNNER_TEMP\protoc.zip"
+          Expand-Archive -Path "$env:RUNNER_TEMP\protoc.zip" -DestinationPath "$env:RUNNER_TEMP\protoc" -Force
+          "$env:RUNNER_TEMP\protoc\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          Add-Content -Path $env:GITHUB_ENV -Value "PROTOC=$env:RUNNER_TEMP\protoc\bin\protoc.exe"
+          & "$env:RUNNER_TEMP\protoc\bin\protoc.exe" --version
+
+      - name: 📥 Install NASM
+        uses: ilammy/setup-nasm@v1
+
+      - name: 📚 Get dependencies
+        run: flutter pub get
+
+      - name: 🧊 Cache cargo crates
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-crates-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+          restore-keys: |
+            cargo-crates-${{ runner.os }}-
+
+      - name: 🔍 flutter analyze
+        run: flutter analyze
+
+      - name: 🧪 flutter test
+        run: flutter test
+
+      - name: 🎨 cargo fmt --check
+        shell: bash
+        run: |
+          set -euo pipefail
+          for manifest in rust tools/mono_inject tools/auto_dns_binder; do
+            echo "--- $manifest ---"
+            cargo fmt --manifest-path "$manifest/Cargo.toml" --all --check
+          done
+
+      - name: 🧹 cargo clippy
+        shell: bash
+        run: |
+          set -euo pipefail
+          for manifest in rust tools/mono_inject tools/auto_dns_binder; do
+            echo "--- $manifest ---"
+            cargo clippy --manifest-path "$manifest/Cargo.toml" --all-targets -- -D warnings
+          done
+
   build:
     name: 🏗️ ${{ matrix.platform }}
     needs: matrix-prep

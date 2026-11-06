@@ -3,9 +3,9 @@ use std::ffi::OsStr;
 #[cfg(target_os = "windows")]
 use std::os::windows::ffi::OsStrExt;
 #[cfg(target_os = "windows")]
-use windows::Win32::Storage::FileSystem::QueryDosDeviceW;
-#[cfg(target_os = "windows")]
 use windows::core::PCWSTR;
+#[cfg(target_os = "windows")]
+use windows::Win32::Storage::FileSystem::QueryDosDeviceW;
 
 #[cfg(not(target_os = "windows"))]
 pub fn get_nt_path(_dos_path: &str) -> Option<String> {
@@ -22,12 +22,7 @@ pub fn get_nt_path(dos_path: &str) -> Option<String> {
         .collect();
 
     let mut buffer = vec![0u16; 1024];
-    let len = unsafe {
-        QueryDosDeviceW(
-            PCWSTR(prefix_w.as_ptr()),
-            Some(&mut buffer[..]),
-        )
-    };
+    let len = unsafe { QueryDosDeviceW(PCWSTR(prefix_w.as_ptr()), Some(&mut buffer[..])) };
 
     if len == 0 {
         return None;
@@ -38,7 +33,7 @@ pub fn get_nt_path(dos_path: &str) -> Option<String> {
         .iter()
         .position(|&x| x == 0)
         .unwrap_or(len as usize);
-    
+
     let device_path = String::from_utf16_lossy(&buffer[..actual_len]);
 
     // 拼接完整的 NT 路径

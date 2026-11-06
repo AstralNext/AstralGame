@@ -79,9 +79,9 @@ pub struct SteamRoomInfo {
     pub members: Vec<SteamMemberInfo>,
 }
 
+use crate::frb_generated::StreamSink;
 #[cfg(target_os = "windows")]
 use crate::steam_tunnel;
-use crate::frb_generated::StreamSink;
 
 #[cfg(not(target_os = "windows"))]
 fn unsupported() -> String {

@@ -174,10 +174,7 @@ pub fn uninstall() -> Result<(), String> {
         if dir.is_dir() {
             match remove_dir_best_effort(&dir) {
                 Ok(()) => log::info(&format!("removed {}", dir.display())),
-                Err(err) => log::warn(&format!(
-                    "could not fully remove {}: {err}",
-                    dir.display()
-                )),
+                Err(err) => log::warn(&format!("could not fully remove {}: {err}", dir.display())),
             }
         }
     }

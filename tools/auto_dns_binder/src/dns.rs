@@ -113,8 +113,8 @@ fn is_physical_nic(row: &MIB_IF_ROW2) -> bool {
     }
 
     // USB 有线网卡经常报 Unspecified/Other；有连接器 + 硬件标志才收。
-    let maybe_usb = medium == NdisPhysicalMediumUnspecified.0
-        || medium == NdisPhysicalMediumOther.0;
+    let maybe_usb =
+        medium == NdisPhysicalMediumUnspecified.0 || medium == NdisPhysicalMediumOther.0;
     maybe_usb && flags & FLAG_CONNECTOR != 0 && row.AccessType == NET_IF_ACCESS_BROADCAST
 }
 
@@ -320,13 +320,9 @@ fn set_nameservers(guid_str: &str, servers: &str, ipv6: bool) -> bool {
             Err(err) => {
                 let hr = err.code().0 as u32;
                 if hr == 0x8007_0005 {
-                    log::error(
-                        "SetInterfaceDnsSettings access denied; run as Administrator",
-                    );
+                    log::error("SetInterfaceDnsSettings access denied; run as Administrator");
                 } else {
-                    log::error(&format!(
-                        "SetInterfaceDnsSettings {stack} failed: {err}"
-                    ));
+                    log::error(&format!("SetInterfaceDnsSettings {stack} failed: {err}"));
                 }
                 false
             }

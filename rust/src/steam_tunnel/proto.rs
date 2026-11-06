@@ -68,12 +68,8 @@ pub fn decode(data: &[u8]) -> Option<Frame<'_>> {
     if data.len() < HEADER_LEN || data[0] != VERSION {
         return None;
     }
-    let src = Ipv4Addr::from(u32::from_le_bytes([
-        data[4], data[5], data[6], data[7],
-    ]));
-    let dst = Ipv4Addr::from(u32::from_le_bytes([
-        data[8], data[9], data[10], data[11],
-    ]));
+    let src = Ipv4Addr::from(u32::from_le_bytes([data[4], data[5], data[6], data[7]]));
+    let dst = Ipv4Addr::from(u32::from_le_bytes([data[8], data[9], data[10], data[11]]));
     Some(Frame {
         kind: data[1],
         flags: data[2],
@@ -127,7 +123,9 @@ pub fn ipv4_dst(packet: &[u8]) -> Option<Ipv4Addr> {
     if packet.len() < 20 || packet[0] >> 4 != 4 {
         return None;
     }
-    Some(Ipv4Addr::new(packet[16], packet[17], packet[18], packet[19]))
+    Some(Ipv4Addr::new(
+        packet[16], packet[17], packet[18], packet[19],
+    ))
 }
 
 // ---------------------------------------------------------------------------

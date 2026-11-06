@@ -33,7 +33,7 @@ mod windows_impl {
     use std::ffi::OsString;
     use std::os::windows::ffi::OsStringExt;
     use windows::core::PWSTR;
-    use windows::Win32::Foundation::{BOOL, HWND, LPARAM, CloseHandle};
+    use windows::Win32::Foundation::{CloseHandle, BOOL, HWND, LPARAM};
     use windows::Win32::NetworkManagement::IpHelper::{
         GetExtendedUdpTable, MIB_UDPROW_OWNER_PID, MIB_UDPTABLE_OWNER_PID, UDP_TABLE_OWNER_PID,
     };
@@ -91,10 +91,8 @@ mod windows_impl {
             let exe = wchar_to_string(&entry.szExeFile).to_ascii_lowercase();
             let title = titles.get(&pid).cloned().unwrap_or_default();
             let exe_hit = exes.iter().any(|e| exe == *e);
-            let title_hit = !title.is_empty()
-                && needles
-                    .iter()
-                    .any(|n| title.to_lowercase().contains(n));
+            let title_hit =
+                !title.is_empty() && needles.iter().any(|n| title.to_lowercase().contains(n));
             if exe_hit || title_hit {
                 let mut ports = udp_by_pid.get(&pid).cloned().unwrap_or_default();
                 ports.sort_unstable();
@@ -151,14 +149,7 @@ mod windows_impl {
     fn udp_ports_by_pid() -> HashMap<u32, Vec<u16>> {
         let mut size = 0u32;
         unsafe {
-            GetExtendedUdpTable(
-                None,
-                &mut size,
-                true,
-                AF_INET,
-                UDP_TABLE_OWNER_PID,
-                0,
-            );
+            GetExtendedUdpTable(None, &mut size, true, AF_INET, UDP_TABLE_OWNER_PID, 0);
         }
         if size == 0 {
             return HashMap::new();
@@ -182,9 +173,7 @@ mod windows_impl {
         let header = std::mem::size_of::<u32>();
         let max_rows = buf.len().saturating_sub(header) / row_size.max(1);
         let count = (table.dwNumEntries as usize).min(max_rows);
-        let rows = unsafe {
-            std::slice::from_raw_parts(table.table.as_ptr(), count)
-        };
+        let rows = unsafe { std::slice::from_raw_parts(table.table.as_ptr(), count) };
         let mut map: HashMap<u32, Vec<u16>> = HashMap::new();
         for row in rows {
             let port = u16::from_be((row.dwLocalPort & 0xFFFF) as u16);
@@ -209,7 +198,10 @@ mod windows_impl {
             map: HashMap::new(),
         };
         unsafe {
-            let _ = EnumWindows(Some(enum_windows_proc), LPARAM(&mut sink as *mut _ as isize));
+            let _ = EnumWindows(
+                Some(enum_windows_proc),
+                LPARAM(&mut sink as *mut _ as isize),
+            );
         }
         sink.map
     }

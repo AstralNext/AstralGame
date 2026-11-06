@@ -56,12 +56,8 @@ pub fn install_official_service() -> Result<(), String> {
 }
 
 pub fn deploy_conf() -> io::Result<()> {
-    let src_dir = paths::find_smartdns_src_dir().ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::NotFound,
-            "找不到 smartdns.conf 源目录",
-        )
-    })?;
+    let src_dir = paths::find_smartdns_src_dir()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "找不到 smartdns.conf 源目录"))?;
     let src_conf = src_dir.join(paths::SMARTDNS_CONF_NAME);
     if !src_conf.is_file() {
         return Err(io::Error::new(

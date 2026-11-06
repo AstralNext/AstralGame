@@ -1,8 +1,8 @@
 use easytier::common::config::{
-    ConfigFileControl, ConfigLoader, TomlConfigLoader, normalize_secure_mode_config,
+    normalize_secure_mode_config, ConfigFileControl, ConfigLoader, TomlConfigLoader,
 };
 pub use easytier::common::global_ctx::{EventBusSubscriber, GlobalCtxEvent};
-use easytier::instance::factory::{NativeInstanceManager, native_cli_instance_manager};
+use easytier::instance::factory::{native_cli_instance_manager, NativeInstanceManager};
 pub use easytier::proto;
 pub use easytier::proto::api::instance::{PeerRoutePair, Route};
 pub use easytier::proto::common::NatType;
@@ -84,11 +84,10 @@ fn spawn_set_nic_metric_task(instance_id: &str, dev_name: &str) {
         for attempt in 1..=max_attempts {
             let name = dev_name.clone();
             let fallback = dev_name.clone();
-            let (used, ok) = tokio::task::spawn_blocking(move || {
-                set_interface_metric_blocking(&name)
-            })
-            .await
-            .unwrap_or((fallback, false));
+            let (used, ok) =
+                tokio::task::spawn_blocking(move || set_interface_metric_blocking(&name))
+                    .await
+                    .unwrap_or((fallback, false));
 
             if ok {
                 emit_core_log(
@@ -103,7 +102,10 @@ fn spawn_set_nic_metric_task(instance_id: &str, dev_name: &str) {
         }
         emit_core_log(
             &instance_id,
-            &format!("nic {} interface metric set to 0 failed: interface not found", dev_name),
+            &format!(
+                "nic {} interface metric set to 0 failed: interface not found",
+                dev_name
+            ),
         );
     });
 }
@@ -111,7 +113,7 @@ fn spawn_set_nic_metric_task(instance_id: &str, dev_name: &str) {
 #[cfg(target_os = "windows")]
 fn find_wintun_adapters() -> Vec<String> {
     use windows::Win32::NetworkManagement::IpHelper::{
-        GAA_FLAG_INCLUDE_PREFIX, GetAdaptersAddresses, IP_ADAPTER_ADDRESSES_LH,
+        GetAdaptersAddresses, GAA_FLAG_INCLUDE_PREFIX, IP_ADAPTER_ADDRESSES_LH,
     };
     use windows::Win32::Networking::WinSock::AF_UNSPEC;
 
@@ -166,7 +168,10 @@ fn resolve_wintun_interface(dev_name: &str) -> Option<String> {
         if let Some(name) = adapters.iter().find(|n| n.to_lowercase() == want) {
             return Some(name.clone());
         }
-        if let Some(name) = adapters.iter().find(|n| n.to_lowercase().starts_with(&want)) {
+        if let Some(name) = adapters
+            .iter()
+            .find(|n| n.to_lowercase().starts_with(&want))
+        {
             return Some(name.clone());
         }
     }
@@ -264,21 +269,22 @@ fn event_to_message(e: GlobalCtxEvent) -> Option<String> {
     match e {
         GlobalCtxEvent::PeerAdded(p) => Some(format!("peer added. peer_id: {}", p)),
         GlobalCtxEvent::PeerRemoved(p) => Some(format!("peer removed. peer_id: {}", p)),
-        GlobalCtxEvent::PeerConnAdded(p) => {
-            Some(format!("peer connection added. conn_info: {}", peer_conn_info_to_string(p)))
-        }
-        GlobalCtxEvent::PeerConnRemoved(p) => {
-            Some(format!(
-                "peer connection removed. conn_info: {}",
-                peer_conn_info_to_string(p)
-            ))
-        }
-        GlobalCtxEvent::ListenerAddFailed(p, msg) => {
-            Some(format!("listener add failed. listener: {}, msg: {}", p, msg))
-        }
-        GlobalCtxEvent::ListenerAcceptFailed(p, msg) => {
-            Some(format!("listener accept failed. listener: {}, msg: {}", p, msg))
-        }
+        GlobalCtxEvent::PeerConnAdded(p) => Some(format!(
+            "peer connection added. conn_info: {}",
+            peer_conn_info_to_string(p)
+        )),
+        GlobalCtxEvent::PeerConnRemoved(p) => Some(format!(
+            "peer connection removed. conn_info: {}",
+            peer_conn_info_to_string(p)
+        )),
+        GlobalCtxEvent::ListenerAddFailed(p, msg) => Some(format!(
+            "listener add failed. listener: {}, msg: {}",
+            p, msg
+        )),
+        GlobalCtxEvent::ListenerAcceptFailed(p, msg) => Some(format!(
+            "listener accept failed. listener: {}, msg: {}",
+            p, msg
+        )),
         GlobalCtxEvent::ListenerAdded(p) => {
             if p.scheme() == "ring" {
                 None
@@ -286,15 +292,14 @@ fn event_to_message(e: GlobalCtxEvent) -> Option<String> {
                 Some(format!("listener added. listener: {}", p))
             }
         }
-        GlobalCtxEvent::ConnectionAccepted(local, remote) => {
-            Some(format!("connection accepted. local: {}, remote: {}", local, remote))
-        }
-        GlobalCtxEvent::ConnectionError(local, remote, err) => {
-            Some(format!(
-                "connection error. local: {}, remote: {}, err: {}",
-                local, remote, err
-            ))
-        }
+        GlobalCtxEvent::ConnectionAccepted(local, remote) => Some(format!(
+            "connection accepted. local: {}, remote: {}",
+            local, remote
+        )),
+        GlobalCtxEvent::ConnectionError(local, remote, err) => Some(format!(
+            "connection error. local: {}, remote: {}, err: {}",
+            local, remote, err
+        )),
         GlobalCtxEvent::TunDeviceReady(dev) => Some(format!("tun device ready. dev: {}", dev)),
         GlobalCtxEvent::TunDeviceError(err) => Some(format!("tun device error. err: {}", err)),
         GlobalCtxEvent::Connecting(dst) => Some(format!("connecting to peer. dst: {}", dst)),
@@ -320,9 +325,7 @@ fn event_to_message(e: GlobalCtxEvent) -> Option<String> {
         GlobalCtxEvent::DhcpIpv6Changed(old, new) => {
             Some(format!("dhcp ipv6 changed. old: {:?}, new: {:?}", old, new))
         }
-        GlobalCtxEvent::DhcpIpv6Conflicted(ip) => {
-            Some(format!("dhcp ipv6 conflict. ip: {:?}", ip))
-        }
+        GlobalCtxEvent::DhcpIpv6Conflicted(ip) => Some(format!("dhcp ipv6 conflict. ip: {:?}", ip)),
         GlobalCtxEvent::PortForwardAdded(cfg) => {
             Some(format!("port forward added. cfg: {:?}", cfg))
         }
@@ -334,9 +337,10 @@ fn event_to_message(e: GlobalCtxEvent) -> Option<String> {
             "listener port mapping established. local: {}, mapped: {}, backend: {}",
             local_listener, mapped_listener, backend
         )),
-        GlobalCtxEvent::PublicIpv6Changed(old, new) => {
-            Some(format!("public ipv6 changed. old: {:?}, new: {:?}", old, new))
-        }
+        GlobalCtxEvent::PublicIpv6Changed(old, new) => Some(format!(
+            "public ipv6 changed. old: {:?}, new: {:?}",
+            old, new
+        )),
         GlobalCtxEvent::PublicIpv6RoutesUpdated(added, removed) => Some(format!(
             "public ipv6 routes updated. added: {:?}, removed: {:?}",
             added, removed
@@ -404,7 +408,9 @@ pub async fn is_easytier_running(instance_id: String) -> bool {
     let Ok(id) = parse_instance_id(&instance_id) else {
         return false;
     };
-    MANAGER.instance(id).is_some_and(|instance| instance.is_ready())
+    MANAGER
+        .instance(id)
+        .is_some_and(|instance| instance.is_ready())
 }
 
 #[derive(Debug)]
@@ -490,9 +496,9 @@ pub async fn set_lan_nat(
     if first {
         let peer_manager = instance.peer_manager();
         peer_manager
-            .add_nic_packet_process_pipeline(Box::new(
-                crate::lan_nat::NicNatFilter::new(state.clone()),
-            ))
+            .add_nic_packet_process_pipeline(Box::new(crate::lan_nat::NicNatFilter::new(
+                state.clone(),
+            )))
             .await;
         peer_manager
             .add_packet_process_pipeline(Box::new(crate::lan_nat::PeerNatFilter::new(state)))
@@ -769,11 +775,12 @@ pub fn network_status_from_info(
         let mut identity_credential = false;
         if let Some(peer) = &p.peer {
             for conn in &peer.conns {
-                if remote_static_pubkey_b64.is_empty() && !conn.noise_remote_static_pubkey.is_empty()
+                if remote_static_pubkey_b64.is_empty()
+                    && !conn.noise_remote_static_pubkey.is_empty()
                 {
                     use base64::Engine;
-                    remote_static_pubkey_b64 =
-                        base64::engine::general_purpose::STANDARD.encode(&conn.noise_remote_static_pubkey);
+                    remote_static_pubkey_b64 = base64::engine::general_purpose::STANDARD
+                        .encode(&conn.noise_remote_static_pubkey);
                 }
                 if conn.peer_identity_type
                     == easytier::proto::peer_rpc::PeerIdentityType::Credential as i32

@@ -321,9 +321,17 @@ fn call(
     let code = assemble64(fn_addr, ret, args, attach_root, exports)?;
     let code_addr = mem.write_bytes(&code)?;
     unsafe {
-        let start = transmute(code_addr as usize);
-        let thread = CreateRemoteThread(mem.handle, None, 0, start, None, Default::default(), None)
-            .map_err(|e| format!("CreateRemoteThread: {e}"))?;
+        let start: unsafe extern "system" fn(*mut c_void) -> u32 = transmute(code_addr as usize);
+        let thread = CreateRemoteThread(
+            mem.handle,
+            None,
+            0,
+            Some(start),
+            None,
+            Default::default(),
+            None,
+        )
+        .map_err(|e| format!("CreateRemoteThread: {e}"))?;
         let wait = WaitForSingleObject(thread, INFINITE);
         let _ = CloseHandle(thread);
         if wait != WAIT_OBJECT_0 {
@@ -408,14 +416,14 @@ fn is_64bit(handle: HANDLE) -> bool {
 
 fn wait_for_mono(handle: HANDLE) -> Result<u64, String> {
     let deadline = Instant::now() + Duration::from_secs(45);
-    let mut last = String::from("mono.dll not found");
     let mut last_log: Option<Instant> = None;
     loop {
         match find_mono_module(handle) {
             Ok(addr) => return Ok(addr),
-            Err(err) => {
-                last = err;
-                let should_log = last_log.map(|t| t.elapsed() >= Duration::from_secs(3)).unwrap_or(true);
+            Err(last) => {
+                let should_log = last_log
+                    .map(|t| t.elapsed() >= Duration::from_secs(3))
+                    .unwrap_or(true);
                 if should_log {
                     let left = deadline.saturating_duration_since(Instant::now()).as_secs();
                     crate::log::info(&format!("waiting mono.dll ({last}) left={left}s"));
@@ -463,13 +471,8 @@ fn find_mono_module(handle: HANDLE) -> Result<u64, String> {
                 continue;
             }
             let mut info = MODULEINFO::default();
-            if !K32GetModuleInformation(
-                handle,
-                module,
-                &mut info,
-                size_of::<MODULEINFO>() as u32,
-            )
-            .as_bool()
+            if !K32GetModuleInformation(handle, module, &mut info, size_of::<MODULEINFO>() as u32)
+                .as_bool()
             {
                 continue;
             }

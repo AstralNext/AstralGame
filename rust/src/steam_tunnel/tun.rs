@@ -56,11 +56,8 @@ pub fn open_named(
     adapter_guid: u128,
     adapter_desc: &str,
 ) -> Result<TunRoom, String> {
-    let wintun = load_wintun().map_err(|e| {
-        format!(
-            "加载 wintun.dll 失败（请确认程序目录存在 wintun.dll）: {e}"
-        )
-    })?;
+    let wintun = load_wintun()
+        .map_err(|e| format!("加载 wintun.dll 失败（请确认程序目录存在 wintun.dll）: {e}"))?;
 
     let adapter = match Adapter::open(&wintun, adapter_name) {
         Ok(a) => a,
@@ -86,17 +83,14 @@ pub fn open_named(
     let reader = session.clone();
     thread::Builder::new()
         .name("astral-steam-tun".to_string())
-        .spawn(move || loop {
-            match reader.receive_blocking() {
-                Ok(packet) => {
-                    let bytes = packet.bytes().to_vec();
-                    drop(packet);
-                    if tx.send(bytes).is_err() {
-                        break;
-                    }
+        .spawn(move || {
+            // shutdown() 或被驱动打断时 receive_blocking 返回 Err，循环随之结束。
+            while let Ok(packet) = reader.receive_blocking() {
+                let bytes = packet.bytes().to_vec();
+                drop(packet);
+                if tx.send(bytes).is_err() {
+                    break;
                 }
-                // shutdown() 或被驱动打断：结束读线程。
-                Err(_) => break,
             }
         })
         .map_err(|e| format!("启动网卡读线程失败: {e}"))?;

@@ -1084,8 +1084,6 @@ class ConnectionService {
     try {
       final ifaces = await NetworkInterface.list(
         type: InternetAddressType.IPv4,
-        includeLoopback: false,
-        includeLinkLocal: false,
       );
       final candidates = <({String name, InternetAddress addr, bool lan})>[];
       for (final iface in ifaces) {

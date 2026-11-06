@@ -11,7 +11,7 @@ Future<void> main() async {
   sock.broadcastEnabled = true;
   sock.readEventsEnabled = true;
 
-  print('local ephemeral ${sock.address.address}:${sock.port}');
+  stdout.writeln('local ephemeral ${sock.address.address}:${sock.port}');
 
   final hits = <String>[];
   final sub = sock.listen((event) {
@@ -22,7 +22,7 @@ Future<void> main() async {
       final parsed = parser(dg.data, fallbackPort: 6567);
       final line =
           '<< ${dg.address.address}:${dg.port} len=${dg.data.length} -> $parsed';
-      print(line);
+      stdout.writeln(line);
       if (parsed != null) {
         hits.add('${parsed.label}:${parsed.port}');
       }
@@ -31,7 +31,7 @@ Future<void> main() async {
 
   void send(InternetAddress a, int p) {
     final n = sock.send(probe, a, p);
-    print('>> fe01 -> ${a.address}:$p sent=$n');
+    stdout.writeln('>> fe01 -> ${a.address}:$p sent=$n');
   }
 
   send(InternetAddress.loopbackIPv4, 6567);
@@ -41,7 +41,7 @@ Future<void> main() async {
   await Future<void>.delayed(const Duration(milliseconds: 1500));
   await sub.cancel();
   sock.close();
-  print(hits.isNotEmpty
+  stdout.writeln(hits.isNotEmpty
       ? 'DART_DISCOVERY_OK hits=${hits.toSet()}'
       : 'DART_DISCOVERY_FAIL');
   exit(hits.isNotEmpty ? 0 : 1);

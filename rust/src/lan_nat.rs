@@ -157,17 +157,15 @@ fn parse_ipv4(buf: &[u8]) -> Option<Ipv4View> {
     let src = Ipv4Addr::new(buf[12], buf[13], buf[14], buf[15]);
     let dst = Ipv4Addr::new(buf[16], buf[17], buf[18], buf[19]);
 
-    let (src_port, dst_port) = if frag_offset == 0
-        && matches!(proto, IPPROTO_UDP)
-        && total_len >= ihl + 4
-    {
-        (
-            Some(u16::from_be_bytes([buf[ihl], buf[ihl + 1]])),
-            Some(u16::from_be_bytes([buf[ihl + 2], buf[ihl + 3]])),
-        )
-    } else {
-        (None, None)
-    };
+    let (src_port, dst_port) =
+        if frag_offset == 0 && matches!(proto, IPPROTO_UDP) && total_len >= ihl + 4 {
+            (
+                Some(u16::from_be_bytes([buf[ihl], buf[ihl + 1]])),
+                Some(u16::from_be_bytes([buf[ihl + 2], buf[ihl + 3]])),
+            )
+        } else {
+            (None, None)
+        };
 
     Some(Ipv4View {
         ihl,
@@ -219,9 +217,7 @@ fn rewrite_inbound(buf: &mut [u8], state: &NatState) -> bool {
         let from_service = view.src_port.is_some_and(|p| state.port_matches(p))
             || view.dst_port.is_some_and(|p| state.port_matches(p));
         if from_service && !view.src.is_unspecified() {
-            state
-                .target
-                .store(u32::from(view.src), Ordering::Relaxed);
+            state.target.store(u32::from(view.src), Ordering::Relaxed);
             tracing::debug!(host = %view.src, "lan_nat learned host");
         }
     }
@@ -258,17 +254,55 @@ fn fix_ip_checksum(buf: &mut [u8], ihl: usize) {
     buf[11] = bytes[1];
 }
 
+/// 在玩家物理网段里挑一个假地址（默认 .250），供 VpnService 加 /32 路由。
+///
+/// 只认局域网网卡（Wi‑Fi / 以太网）：手机常同时有蜂窝网卡（rmnet/ccmni），
+/// 选到运营商网段（如 100.64/10）时假地址不在游戏所在局域网里，等于没映射。
+pub fn pick_fake_ip() -> Result<Ipv4Addr, String> {
+    let ifas = local_ip_address::list_afinet_netifas()
+        .map_err(|e| format!("enumerate interfaces failed: {e}"))?;
+    let mut candidates = Vec::new();
+    for (name, ip) in ifas {
+        let IpAddr::V4(v4) = ip else { continue };
+        if v4.is_loopback() || v4.is_link_local() || v4.is_unspecified() {
+            continue;
+        }
+        let o = v4.octets();
+        // 只要 RFC1918 私网；排除 100.64/10（运营商 CGNAT）与 100.100.100.x 虚拟网。
+        let private = o[0] == 10
+            || (o[0] == 172 && (16..=31).contains(&o[1]))
+            || (o[0] == 192 && o[1] == 168);
+        if !private {
+            continue;
+        }
+        let lower = name.to_lowercase();
+        let non_lan = [
+            "tun", "rmnet", "ccmni", "pdp", "clat", "dummy", "ip6tnl", "sit", "p2p",
+        ];
+        if non_lan.iter().any(|p| lower.starts_with(p))
+            || lower.contains("vethernet")
+            || lower.contains("docker")
+        {
+            continue;
+        }
+        let preferred =
+            lower.starts_with("wlan") || lower.starts_with("wifi") || lower.starts_with("eth");
+        candidates.push((preferred, v4));
+    }
+    candidates.sort_by_key(|(preferred, _)| !*preferred);
+    if let Some((_, v4)) = candidates.into_iter().next() {
+        let o = v4.octets();
+        let last = if o[3] == 250 { 249 } else { 250 };
+        return Ok(Ipv4Addr::new(o[0], o[1], o[2], last));
+    }
+    Err("no suitable LAN IPv4 address".to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn build_udp(
-        src: Ipv4Addr,
-        dst: Ipv4Addr,
-        sport: u16,
-        dport: u16,
-        payload: &[u8],
-    ) -> Vec<u8> {
+    fn build_udp(src: Ipv4Addr, dst: Ipv4Addr, sport: u16, dport: u16, payload: &[u8]) -> Vec<u8> {
         let total = 20 + 8 + payload.len();
         let mut p = vec![0u8; total];
         p[0] = 0x45;
@@ -379,47 +413,4 @@ mod tests {
         assert_eq!(Ipv4Addr::new(tail[12], tail[13], tail[14], tail[15]), fake);
         assert!(checksum_ok(&tail, 20));
     }
-}
-
-/// 在玩家物理网段里挑一个假地址（默认 .250），供 VpnService 加 /32 路由。
-///
-/// 只认局域网网卡（Wi‑Fi / 以太网）：手机常同时有蜂窝网卡（rmnet/ccmni），
-/// 选到运营商网段（如 100.64/10）时假地址不在游戏所在局域网里，等于没映射。
-pub fn pick_fake_ip() -> Result<Ipv4Addr, String> {
-    let ifas = local_ip_address::list_afinet_netifas()
-        .map_err(|e| format!("enumerate interfaces failed: {e}"))?;
-    let mut candidates = Vec::new();
-    for (name, ip) in ifas {
-        let IpAddr::V4(v4) = ip else { continue };
-        if v4.is_loopback() || v4.is_link_local() || v4.is_unspecified() {
-            continue;
-        }
-        let o = v4.octets();
-        // 只要 RFC1918 私网；排除 100.64/10（运营商 CGNAT）与 100.100.100.x 虚拟网。
-        let private = o[0] == 10
-            || (o[0] == 172 && (16..=31).contains(&o[1]))
-            || (o[0] == 192 && o[1] == 168);
-        if !private {
-            continue;
-        }
-        let lower = name.to_lowercase();
-        let non_lan = ["tun", "rmnet", "ccmni", "pdp", "clat", "dummy", "ip6tnl", "sit", "p2p"];
-        if non_lan.iter().any(|p| lower.starts_with(p))
-            || lower.contains("vethernet")
-            || lower.contains("docker")
-        {
-            continue;
-        }
-        let preferred = lower.starts_with("wlan")
-            || lower.starts_with("wifi")
-            || lower.starts_with("eth");
-        candidates.push((preferred, v4));
-    }
-    candidates.sort_by_key(|(preferred, _)| !*preferred);
-    for (_, v4) in candidates {
-        let o = v4.octets();
-        let last = if o[3] == 250 { 249 } else { 250 };
-        return Ok(Ipv4Addr::new(o[0], o[1], o[2], last));
-    }
-    Err("no suitable LAN IPv4 address".to_string())
 }

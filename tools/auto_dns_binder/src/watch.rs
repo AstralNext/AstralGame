@@ -2,10 +2,10 @@ use std::time::Duration;
 
 use windows::Win32::Foundation::{CloseHandle, HANDLE, WAIT_FAILED, WAIT_OBJECT_0, WAIT_TIMEOUT};
 use windows::Win32::NetworkManagement::IpHelper::{CancelIPChangeNotify, NotifyAddrChange};
-use windows::Win32::System::IO::OVERLAPPED;
 use windows::Win32::System::Threading::{
     CreateEventW, ResetEvent, WaitForMultipleObjects, INFINITE,
 };
+use windows::Win32::System::IO::OVERLAPPED;
 
 use crate::dns::{self, AdapterState};
 use crate::log;

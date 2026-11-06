@@ -101,7 +101,10 @@ fn parse_args() -> Args {
 
 fn main() {
     let args = parse_args();
-    let dll_dir = args.dll.parent().unwrap_or_else(|| std::path::Path::new("."));
+    let dll_dir = args
+        .dll
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new("."));
     log::init(&[dll_dir]);
     if !args.dll.is_file() {
         log::error(&format!("plugin not found: {}", args.dll.display()));
@@ -138,10 +141,7 @@ fn main() {
     #[cfg(windows)]
     {
         if args.watch {
-            let name = args
-                .process
-                .clone()
-                .unwrap_or_else(|| "Raft".to_string());
+            let name = args.process.clone().unwrap_or_else(|| "Raft".to_string());
             let mut seen: HashSet<u32> = HashSet::new();
             let mut idle_ticks = 0u32;
             log::info(&format!("watch process={name}"));
@@ -149,7 +149,7 @@ fn main() {
                 let pids = mono::pids_by_name(&name);
                 if pids.is_empty() {
                     idle_ticks += 1;
-                    if idle_ticks == 1 || idle_ticks % 15 == 0 {
+                    if idle_ticks == 1 || idle_ticks.is_multiple_of(15) {
                         log::info(&format!("watch: no process named {name}"));
                     }
                 } else {
@@ -161,13 +161,7 @@ fn main() {
                         continue;
                     }
                     log::info(&format!("watch: try pid={pid}"));
-                    match mono::inject(
-                        pid,
-                        &assembly,
-                        &args.namespace,
-                        &args.class,
-                        &args.method,
-                    ) {
+                    match mono::inject(pid, &assembly, &args.namespace, &args.class, &args.method) {
                         Ok(()) => log::info(&format!("injected pid={pid}")),
                         Err(err) => {
                             log::error(&format!("inject pid={pid} failed: {err}"));

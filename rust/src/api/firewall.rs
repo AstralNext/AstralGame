@@ -1,13 +1,15 @@
 #[cfg(target_os = "windows")]
 use windows::{
-    core::{Result, HRESULT, Error},
+    core::{Error, Result, HRESULT},
     Win32::Foundation::VARIANT_BOOL,
     Win32::{
         NetworkManagement::WindowsFirewall::{
             INetFwPolicy2, NetFwPolicy2, NET_FW_PROFILE2_DOMAIN, NET_FW_PROFILE2_PRIVATE,
             NET_FW_PROFILE2_PUBLIC,
         },
-        System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED},
+        System::Com::{
+            CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED,
+        },
     },
 };
 

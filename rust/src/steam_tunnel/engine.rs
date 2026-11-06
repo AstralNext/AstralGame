@@ -22,11 +22,11 @@ use steamworks::{
 };
 use tokio::sync::oneshot;
 
+use super::proto::{self, Frame, RosterEntry};
+use super::tun::{self, TunRoom};
 use crate::api::p2p::{AppCallResultC, AppInboundEventC, AppInboundKindC};
 use crate::api::steam::{SteamMemberInfo, SteamRoomInfo, SteamStatusInfo};
 use crate::frb_generated::StreamSink;
-use super::proto::{self, Frame, RosterEntry};
-use super::tun::{self, TunRoom};
 
 /// 初始化失败后的重试间隔：避免设置页轮询把失败刷成忙等。
 const BOOT_RETRY: Duration = Duration::from_secs(5);
@@ -728,9 +728,11 @@ impl Engine {
         if self.host_steam_id == 0 {
             return;
         }
-        let identity =
-            NetworkingIdentity::new_steam_id(SteamId::from_raw(self.host_steam_id));
-        match self.sockets.connect_p2p(identity, CONTROL_VPORT_CACHE, vec![]) {
+        let identity = NetworkingIdentity::new_steam_id(SteamId::from_raw(self.host_steam_id));
+        match self
+            .sockets
+            .connect_p2p(identity, CONTROL_VPORT_CACHE, vec![])
+        {
             Ok(conn) => {
                 self.host_conn = Some(conn);
                 self.host_via_relay = false;
@@ -1230,13 +1232,7 @@ impl Engine {
                     mtu: proto::MTU as u16,
                 };
                 let body = proto::welcome(&welcome);
-                let bytes = proto::encode(
-                    proto::KIND_CONTROL,
-                    0,
-                    proto::HOST_VIP,
-                    vip,
-                    &body,
-                );
+                let bytes = proto::encode(proto::KIND_CONTROL, 0, proto::HOST_VIP, vip, &body);
                 self.send_to_steam(from_steam, &bytes, SendFlags::RELIABLE);
                 self.message = "成员已加入房间".to_string();
                 self.broadcast_roster();
@@ -1337,13 +1333,7 @@ impl Engine {
     fn on_rpc(&mut self, _from_steam: u64, frame: &Frame<'_>) {
         if self.role == Role::Host && frame.dst != proto::HOST_VIP {
             if let Some(sid) = self.steam_id_of_vip(frame.dst) {
-                let bytes = proto::encode(
-                    proto::KIND_RPC,
-                    0,
-                    frame.src,
-                    frame.dst,
-                    frame.payload,
-                );
+                let bytes = proto::encode(proto::KIND_RPC, 0, frame.src, frame.dst, frame.payload);
                 self.send_to_steam(sid, &bytes, SendFlags::RELIABLE);
             }
             return;
@@ -1500,24 +1490,22 @@ impl Engine {
             }
             return;
         }
-        if self.role == Role::Guest && !self.hello_sent {
-            if self.host_conn.is_some() {
-                let body = proto::hello(&proto::HelloMsg {
-                    token: self.join_token.clone(),
-                    steam_id: self.self_steam_id,
-                    nickname: self.nickname.clone(),
-                    version: proto::VERSION.to_string(),
-                });
-                let bytes = proto::encode(
-                    proto::KIND_CONTROL,
-                    0,
-                    Ipv4Addr::UNSPECIFIED,
-                    proto::HOST_VIP,
-                    &body,
-                );
-                if self.send_to_host(&bytes, SendFlags::RELIABLE) {
-                    self.hello_sent = true;
-                }
+        if self.role == Role::Guest && !self.hello_sent && self.host_conn.is_some() {
+            let body = proto::hello(&proto::HelloMsg {
+                token: self.join_token.clone(),
+                steam_id: self.self_steam_id,
+                nickname: self.nickname.clone(),
+                version: proto::VERSION.to_string(),
+            });
+            let bytes = proto::encode(
+                proto::KIND_CONTROL,
+                0,
+                Ipv4Addr::UNSPECIFIED,
+                proto::HOST_VIP,
+                &body,
+            );
+            if self.send_to_host(&bytes, SendFlags::RELIABLE) {
+                self.hello_sent = true;
             }
         }
 
@@ -1540,13 +1528,8 @@ impl Engine {
             }
             Role::Guest => {
                 self.guest_ping_at = Some(Instant::now());
-                let bytes = proto::encode(
-                    proto::KIND_CONTROL,
-                    0,
-                    self.my_vip,
-                    proto::HOST_VIP,
-                    &body,
-                );
+                let bytes =
+                    proto::encode(proto::KIND_CONTROL, 0, self.my_vip, proto::HOST_VIP, &body);
                 self.send_to_host(&bytes, SendFlags::RELIABLE);
             }
             Role::Idle => {}
@@ -1566,10 +1549,7 @@ impl Engine {
         let ids: Vec<u64> = self.conns.keys().copied().collect();
         for id in ids {
             if let Some(conn) = self.conns.get(&id) {
-                if let Ok((info, _)) = self
-                    .sockets
-                    .get_realtime_connection_status(conn, 1)
-                {
+                if let Ok((info, _)) = self.sockets.get_realtime_connection_status(conn, 1) {
                     let ping = info.ping().max(0) as u32;
                     if let Some(m) = self.members.get_mut(&id) {
                         m.latency_ms = ping;
@@ -1593,8 +1573,10 @@ impl Engine {
 
     fn prune(&mut self) {
         let now = Instant::now();
-        self.flood_seen.retain(|_, at| now.duration_since(*at) < DEDUP_WINDOW);
-        self.pending.retain(|_, p| now.duration_since(p.at) < Duration::from_secs(30));
+        self.flood_seen
+            .retain(|_, at| now.duration_since(*at) < DEDUP_WINDOW);
+        self.pending
+            .retain(|_, p| now.duration_since(p.at) < Duration::from_secs(30));
         self.assign_cache
             .retain(|_, (_, _, at)| now.duration_since(*at) < Duration::from_secs(30));
         if self.role == Role::Host {
@@ -1727,7 +1709,8 @@ impl Engine {
         if let Some((peer_id, vip, at)) = self.assign_cache.get(&steam_id) {
             if at.elapsed() < Duration::from_secs(30) {
                 let pair = (*peer_id, *vip);
-                self.assign_cache.insert(steam_id, (pair.0, pair.1, Instant::now()));
+                self.assign_cache
+                    .insert(steam_id, (pair.0, pair.1, Instant::now()));
                 return pair;
             }
         }
@@ -1827,10 +1810,7 @@ impl Engine {
                 .find(|m| m.vip == vip)
                 .map(|m| m.peer_id)
         } else {
-            self.roster
-                .iter()
-                .find(|e| e.vip == vip)
-                .map(|e| e.peer_id)
+            self.roster.iter().find(|e| e.vip == vip).map(|e| e.peer_id)
         }
     }
 

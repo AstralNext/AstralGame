@@ -17,7 +17,10 @@ pub fn init(extra_dirs: &[&Path]) {
         push_unique(&mut paths, dir.join("astral_mono_inject.log"));
     }
     if let Ok(tmp) = std::env::var("TEMP").or_else(|_| std::env::var("TMP")) {
-        push_unique(&mut paths, PathBuf::from(tmp).join("astral_mono_inject.log"));
+        push_unique(
+            &mut paths,
+            PathBuf::from(tmp).join("astral_mono_inject.log"),
+        );
     }
     let _ = LOG_PATHS.set(paths.clone());
     let listed = paths

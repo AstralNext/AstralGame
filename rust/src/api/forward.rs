@@ -1,13 +1,13 @@
 use flutter_rust_bridge::frb;
+use lazy_static::lazy_static;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::Arc;
 use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
+use tokio::runtime::Runtime;
+use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
-use tokio::sync::Mutex;
-use lazy_static::lazy_static;
-use tokio::runtime::Runtime;
 
 lazy_static! {
     static ref FORWARD_RT: Runtime = Runtime::new().expect("创建 Tokio 运行时失败");
@@ -20,6 +20,12 @@ pub struct ServerStats {
     connections: Arc<AtomicUsize>,
     bytes_sent: Arc<AtomicU64>,
     bytes_received: Arc<AtomicU64>,
+}
+
+impl Default for ServerStats {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ServerStats {
@@ -43,7 +49,8 @@ impl ServerStats {
         self.bytes_received.load(Ordering::Relaxed)
     }
 }
-#[frb(opaque)]pub struct ForwardServer {
+#[frb(opaque)]
+pub struct ForwardServer {
     listen_addr: String,
     forward_addr: String,
     handle: Option<JoinHandle<()>>,
@@ -116,7 +123,11 @@ impl ForwardServer {
     }
 }
 
-async fn handle_connection(mut client_stream: TcpStream, forward_addr: &str, stats: ServerStats) -> io::Result<()> {
+async fn handle_connection(
+    mut client_stream: TcpStream,
+    forward_addr: &str,
+    stats: ServerStats,
+) -> io::Result<()> {
     let mut remote_stream = TcpStream::connect(forward_addr).await?;
 
     let (mut client_read, mut client_write) = client_stream.split();
@@ -144,7 +155,9 @@ async fn handle_connection(mut client_stream: TcpStream, forward_addr: &str, sta
                 return io::Result::Ok(());
             }
             client_write.write_all(&buf[..n]).await?;
-            stats_recv.bytes_received.fetch_add(n as u64, Ordering::Relaxed);
+            stats_recv
+                .bytes_received
+                .fetch_add(n as u64, Ordering::Relaxed);
         }
     };
 
@@ -152,7 +165,7 @@ async fn handle_connection(mut client_stream: TcpStream, forward_addr: &str, sta
         result = client_to_remote => result,
         result = remote_to_client => result,
     };
-    
+
     stats.connections.fetch_sub(1, Ordering::Relaxed);
     result
 }
@@ -164,16 +177,19 @@ async fn handle_connection(mut client_stream: TcpStream, forward_addr: &str, sta
 pub fn create_forward_server(listen_addr: String, forward_addr: String) -> Result<usize, String> {
     FORWARD_RT.block_on(async move {
         let mut server = ForwardServer::new(listen_addr.clone(), forward_addr.clone());
-        
+
         match server.start().await {
             Ok(_) => {
                 let mut servers = FORWARD_SERVERS.lock().await;
                 servers.push(server);
                 let index = servers.len() - 1;
-                println!("端口转发服务器已启动: {} -> {}, 索引: {}", listen_addr, forward_addr, index);
+                println!(
+                    "端口转发服务器已启动: {} -> {}, 索引: {}",
+                    listen_addr, forward_addr, index
+                );
                 Ok(index)
             }
-            Err(e) => Err(format!("启动端口转发服务器失败: {}", e))
+            Err(e) => Err(format!("启动端口转发服务器失败: {}", e)),
         }
     })
 }
@@ -182,11 +198,11 @@ pub fn create_forward_server(listen_addr: String, forward_addr: String) -> Resul
 pub fn stop_forward_server(index: usize) -> Result<(), String> {
     FORWARD_RT.block_on(async move {
         let mut servers = FORWARD_SERVERS.lock().await;
-        
+
         if index >= servers.len() {
             return Err(format!("无效的服务器索引: {}", index));
         }
-        
+
         servers[index].stop().await;
         println!("端口转发服务器已停止，索引: {}", index);
         Ok(())
@@ -197,12 +213,12 @@ pub fn stop_forward_server(index: usize) -> Result<(), String> {
 pub fn stop_all_forward_servers() -> Result<(), String> {
     FORWARD_RT.block_on(async move {
         let mut servers = FORWARD_SERVERS.lock().await;
-        
+
         for (index, server) in servers.iter_mut().enumerate() {
             server.stop().await;
             println!("端口转发服务器已停止，索引: {}", index);
         }
-        
+
         servers.clear();
         println!("所有端口转发服务器已停止");
         Ok(())
@@ -213,11 +229,11 @@ pub fn stop_all_forward_servers() -> Result<(), String> {
 pub fn get_forward_server_stats(index: usize) -> Result<(usize, u64, u64), String> {
     FORWARD_RT.block_on(async move {
         let servers = FORWARD_SERVERS.lock().await;
-        
+
         if index >= servers.len() {
             return Err(format!("无效的服务器索引: {}", index));
         }
-        
+
         let stats = &servers[index].stats;
         Ok((
             stats.get_connections(),
@@ -239,11 +255,11 @@ pub fn get_forward_server_count() -> usize {
 pub fn is_forward_server_running(index: usize) -> bool {
     FORWARD_RT.block_on(async move {
         let servers = FORWARD_SERVERS.lock().await;
-        
+
         if index >= servers.len() {
             return false;
         }
-        
+
         servers[index].is_running()
     })
 }
