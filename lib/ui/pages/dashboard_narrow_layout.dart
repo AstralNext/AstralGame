@@ -140,7 +140,6 @@ class _NarrowRoomHeader extends StatelessWidget {
         roomDisplayName: roomState.activeRoomDisplayLabel,
         roomGameId: gameId,
         roomShortCode: roomState.activeShareCode,
-        hostOnline: roomState.hostOnline.value,
         callbacks: callbacks,
       );
     });

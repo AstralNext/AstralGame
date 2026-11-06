@@ -45,7 +45,6 @@ class DashboardHomePanel extends StatelessWidget {
     this.roomDisplayName,
     this.roomGameId,
     this.roomShortCode,
-    this.hostOnline = true,
     required this.callbacks,
   });
 
@@ -57,7 +56,6 @@ class DashboardHomePanel extends StatelessWidget {
   final String? roomDisplayName;
   final String? roomGameId;
   final String? roomShortCode;
-  final bool hostOnline;
   final DashboardCallbacks callbacks;
 
   @override
@@ -82,7 +80,6 @@ class DashboardHomePanel extends StatelessWidget {
                 roomDisplayName: roomDisplayName ?? '房间',
                 roomGameId: roomGameId,
                 roomShortCode: roomShortCode,
-                hostOnline: hostOnline,
                 isLinking: isLinking,
                 onShare: callbacks.onShareRoom,
                 onDisconnect: callbacks.onDisconnect,

@@ -13,7 +13,6 @@ class ConnectedRoomCard extends StatelessWidget {
     required this.roomDisplayName,
     this.roomGameId,
     this.roomShortCode,
-    this.hostOnline = true,
     this.isLinking = false,
     required this.onShare,
     required this.onDisconnect,
@@ -24,7 +23,6 @@ class ConnectedRoomCard extends StatelessWidget {
   final String roomDisplayName;
   final String? roomGameId;
   final String? roomShortCode;
-  final bool hostOnline;
   final bool isLinking;
   final VoidCallback onShare;
   final VoidCallback onDisconnect;

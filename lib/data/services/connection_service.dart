@@ -157,7 +157,6 @@ class ConnectionService {
     required bool isHost,
     required int epoch,
     String failMessage = '连接失败，请重试',
-    bool armGuestWatch = false,
   }) async {
     final ok = await _connect(
       networkName: networkName,
@@ -173,13 +172,17 @@ class ConnectionService {
     if (!ok) {
       throw StateError(failMessage);
     }
-    if (armGuestWatch) _armGuestPresenceWatch();
     await _roomAssist.startForRoom(isHost: isHost, gameId: gameId);
     await _gameInject.startForRoom(gameId: gameId);
     await _openGames.startForRoom(isHost: isHost, gameId: gameId);
   }
 
   EffectCleanup? _guestPresenceDispose;
+
+  /// 客机侧「房间内无其他成员」日志的边沿标记。
+  ///
+  /// UI 已不再消费房主在线状态，这里只保留一次性告警，避免反复刷日志。
+  bool _guestPresenceOffline = false;
 
   /// 最近一次离线邀请串（短码服务失败时的回退）。
   String? lastOfflineInvite;
@@ -943,6 +946,7 @@ class ConnectionService {
   void _armGuestPresenceWatch() {
     _disarmGuestPresenceWatch();
     final watch = GuestPresenceWatch();
+    _guestPresenceOffline = false;
     _guestPresenceDispose = effect(() {
       final session = _roomState.session.value;
       final connected = _roomState.isConnected.value;
@@ -961,13 +965,11 @@ class ConnectionService {
         case GuestPresenceAction.waiting:
           break;
         case GuestPresenceAction.online:
-          if (!_roomState.hostOnline.value) {
-            _roomState.setHostOnline(true);
-          }
+          _guestPresenceOffline = false;
           break;
         case GuestPresenceAction.offline:
-          if (_roomState.hostOnline.value) {
-            _roomState.setHostOnline(false);
+          if (!_guestPresenceOffline) {
+            _guestPresenceOffline = true;
             appLogger.w('[ConnectionService] 房间内无其他成员');
           }
           break;

@@ -31,9 +31,6 @@ class RoomState {
   /// 强制结束提示（VPN 失败 / 房主离线等），UI 消费后应 [clearForceEndNotice]。
   final forceEndNotice = signal<String?>(null);
 
-  /// 客人侧：房主当前是否在线（基于成员列表推断）。
-  final hostOnline = signal<bool>(true);
-
   /// 全部收藏（已按 pinned + sortKey 排序）。UI 消费前可再搜索/分页。
   final bookmarksList = signal<List<Bookmark>>([]);
 
@@ -74,15 +71,11 @@ class RoomState {
       if (clearSession) {
         session.value = null;
       }
-      hostOnline.value = true;
     }
   }
 
   void setSession(ActiveRoomSession? value) {
     session.value = value;
-    if (value != null) {
-      hostOnline.value = true;
-    }
   }
 
   void setForceEndNotice(String? message) {
@@ -91,10 +84,6 @@ class RoomState {
 
   void clearForceEndNotice() {
     forceEndNotice.value = null;
-  }
-
-  void setHostOnline(bool value) {
-    hostOnline.value = value;
   }
 
   // ---------------- Bookmark 操作 ----------------

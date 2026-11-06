@@ -128,7 +128,6 @@ class _RoomPane extends StatelessWidget {
             roomDisplayName: roomState.activeRoomDisplayLabel,
             roomGameId: session?.gameId,
             roomShortCode: roomState.activeShareCode,
-            hostOnline: roomState.hostOnline.value,
             callbacks: callbacks,
           ),
           const SizedBox(height: AppDimensions.sectionGap),
