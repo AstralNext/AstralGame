@@ -147,7 +147,10 @@ pub(crate) fn subscribe_app_inbound(sink: StreamSink<AppInboundEventC>) {
     // 替换时旧 sink 会在此处 drop：FRB 的 StreamSink 在最后一个克隆被释放时
     // 才向 Dart 发送关闭消息，Dart 侧旧订阅的 `async*` 生成器收到关闭后才会退出，
     // 否则它的 `cancel()` Future 永远不会完成（退出房间会卡死）。
-    let _old = INBOUND.lock().ok().and_then(|mut guard| guard.replace(sink));
+    let _old = INBOUND
+        .lock()
+        .ok()
+        .and_then(|mut guard| guard.replace(sink));
 }
 
 /// 关闭入站订阅：房间结束时不再向 Dart 推送事件，并让旧订阅正常收尾。
