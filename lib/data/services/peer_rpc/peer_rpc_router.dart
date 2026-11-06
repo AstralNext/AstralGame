@@ -103,7 +103,10 @@ class PeerRpcRouter {
     _inboundSub = null;
     _instanceId = null;
     _steam = false;
-    await sub?.cancel();
+    // FRB 的 Rust 流是 `async*` + `await for(ReceivePort)`：源端口未关闭时
+    // `cancel()` 返回的 Future 永远不会完成（Steam sink 是常驻的全局对象）。
+    // 取消一旦发起就不会再派发事件，因此只发起、不等待，避免退出房间被卡死。
+    if (sub != null) unawaited(sub.cancel());
     if (label != null) {
       appLogger.d('[PeerRpcRouter] 已停止 $label');
     }

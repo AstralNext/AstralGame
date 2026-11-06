@@ -95,7 +95,9 @@ Future<rust_steam.SteamStatusInfo> awaitSteamReady({
     return await completer.future;
   } finally {
     timer.cancel();
-    await sub.cancel();
+    // FRB 的 Rust 流是 `async*` + `await for(ReceivePort)`：只有 Rust 侧关闭
+    // sink 后 `cancel()` 才会完成。这里不等待它，避免未就绪路径把调用方卡死。
+    unawaited(sub.cancel());
   }
 }
 

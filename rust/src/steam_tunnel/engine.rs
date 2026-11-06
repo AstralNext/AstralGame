@@ -144,17 +144,25 @@ pub(crate) fn room_info() -> SteamRoomInfo {
 }
 
 pub(crate) fn subscribe_app_inbound(sink: StreamSink<AppInboundEventC>) {
-    if let Ok(mut guard) = INBOUND.lock() {
-        *guard = Some(sink);
-    }
+    // 替换时旧 sink 会在此处 drop：FRB 的 StreamSink 在最后一个克隆被释放时
+    // 才向 Dart 发送关闭消息，Dart 侧旧订阅的 `async*` 生成器收到关闭后才会退出，
+    // 否则它的 `cancel()` Future 永远不会完成（退出房间会卡死）。
+    let _old = INBOUND.lock().ok().and_then(|mut guard| guard.replace(sink));
+}
+
+/// 关闭入站订阅：房间结束时不再向 Dart 推送事件，并让旧订阅正常收尾。
+pub(crate) fn close_app_inbound() {
+    // 取出并 drop 最后一个 sink 克隆，FRB 会据此关闭 Dart 侧流。
+    let _old = INBOUND.lock().ok().and_then(|mut guard| guard.take());
 }
 
 /// 订阅 Steam 状态变化（登录 / 断线 / SDR 就绪 / 房间）；订阅时立即推送快照。
 pub(crate) fn subscribe_status(sink: StreamSink<SteamStatusInfo>) {
     let _ = ensure_boot();
-    if let Ok(mut guard) = STATUS_SINK.lock() {
-        *guard = Some(sink);
-    }
+    let _old = STATUS_SINK
+        .lock()
+        .ok()
+        .and_then(|mut guard| guard.replace(sink));
     emit_status();
 }
 
@@ -779,6 +787,8 @@ impl Engine {
             s.message = reason.to_string();
         });
         publish_room(SteamRoomInfo::default());
+        // 房间结束：关闭入站订阅，避免 Dart 侧旧订阅的 cancel() 永远挂起。
+        close_app_inbound();
     }
 
     fn tick(&mut self) {
