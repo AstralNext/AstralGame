@@ -1,8 +1,25 @@
-# AstralGame UI 修复手册
+# AstralGame UI 修复手册（已归档）
 
-> 适用范围：Flutter 客户端 UI（`lib/ui`、`lib/config`）
-> 核心目标：消除服务器页“检测/刷新”按钮的悬空感，统一页面骨架、间距、状态表达与空状态。
-> 使用方式：按 P0 → P1 → P2 顺序执行，每个修复项独立提交；每项做完对照“验收标准”。
+> **状态：已归档（2026-11-06）。本文件是早期 UI 改造的一次性执行清单，清单内的改造已全部落地，不再作为可执行手册维护。**
+>
+> 保留此文件**仅作历史参考**。不要再按它逐项执行：下面的行号、文件路径与示例代码已与当前代码不一致，照抄会编译失败或改错位置。已知失效点：
+>
+> | 章节 | 失效描述 | 当前实际情况 |
+> | --- | --- | --- |
+> | §7.1 / §7.2 / §7.4 | 要求迁移调用点后删除 `lib/ui/widgets/empty_state_widget.dart` | 该文件早已删除，全仓库无 `EmptyStateWidget` 引用，本节已无可执行内容 |
+> | §4.2 第 1 条 | 要求修改 `lib/data/services/screen_state_service.dart` 的 `_narrowThreshold` | 该文件从未存在，项目也没有 `ScreenStateService`；断点统一在 `lib/config/app_dimensions.dart` 的 `AppBreakpoints`，窄屏判断由各页面的 `LayoutBuilder`/宽度比较完成 |
+> | §8.2 第 2 条 | 称握手帧魔数、字段偏移来自 `peer_conn.rs` | `rust/src/peer_conn.rs` 已随网络层重构删除；目前仅 `lib/data/services/server_probe_service.dart` 保留 `easytierHandshakeMagic` 常量 |
+> | §9.2 | `bottom_nav.dart` 位于 `lib/ui/widgets/` | 已迁移到 `lib/ui/widgets/navigation/bottom_nav.dart` |
+> | §2 / §6 全部行号引用 | `servers_main_page.dart:149-172`、`:347-350`、`:145` 等 | 该文件已重写（现 800+ 行），这些行号会指向无关代码，只能按语义重新定位 |
+> | §2.4 Step 1 | `PageHeader` 示例含 `title`、`horizontalPadding` 参数 | 现 `PageHeader` 不再显示页面标题（参数为 `subtitle` / `actions` / `padding`），照抄示例无法编译 |
+> | §3.1 | 「每个一级 Tab 自己使用 `PageHeader`」并展示标题 | 标题职责已由页面自身/`SectionHeader` 承担，`PageHeader` 只承载副标题与右侧操作 |
+> | §5.1 | 要求把 `servers_main_page.dart` 的 `Colors.orange` 换成语义色 | 已完成（`_getLatencyColor` 已使用色板语义色），该节无需再动 |
+> | §10 | 按 P0/P1/P2 拆分提交的建议 | 属于当时的执行过程记录，提交已合并进主线，不再适用 |
+>
+> 需要继续做 UI 调整时，请以当前代码与现行约定为准，不要引用本文件的行号或示例代码。
+
+> 适用范围（历史）：Flutter 客户端 UI（`lib/ui`、`lib/config`）
+> 核心目标（历史）：消除服务器页“检测/刷新”按钮的悬空感，统一页面骨架、间距、状态表达与空状态。
 
 ---
 
@@ -63,6 +80,8 @@
 ### 2.4 实施步骤
 
 #### Step 1：新增通用页头组件
+
+> **已失效**：`PageHeader` 已存在且被重写（不再显示标题，参数为 `subtitle`/`actions`/`padding`）。下面的示例代码仅作历史记录，照抄无法编译。
 
 新建 `lib/ui/widgets/page_header.dart`：
 
@@ -350,6 +369,8 @@ abstract final class AppDimensions {
 
 1. `lib/data/services/screen_state_service.dart`：
    `static const double _narrowThreshold = AppBreakpoints.narrow;`
+
+   > **已失效**：该文件从未存在。断点已统一在 `lib/config/app_dimensions.dart` 的 `AppBreakpoints`。
 2. `lib/ui/shell/shell.dart:300`：
    `final isCompact = screenWidth < AppBreakpoints.narrow;`
 3. `lib/ui/pages/servers/servers_main_page.dart:145`：
@@ -506,6 +527,8 @@ PopupMenuItem(
 
 保留 `EmptyState`（`lib/ui/widgets/empty_state.dart`），删除 `EmptyStateWidget`。
 
+> **已完成，本节留作历史**：`empty_state_widget.dart` 已删除，全仓库无 `EmptyStateWidget` 引用。
+
 ### 7.2 迁移映射
 
 | 旧 `EmptyStateWidget` | 新 `EmptyState` |
@@ -558,6 +581,8 @@ PopupMenuItem(
 
 1. 不要重新引入基于 URL 哈希的模拟探测结果，也不要恢复伪造版本号。
 2. 握手帧的字段偏移与魔数来自 `peer_conn.rs`（魔数 `0xd1e1a5e1`、协议版本 `1`），改动前先对照服务端源码。
+
+   > **已失效**：`rust/src/peer_conn.rs` 已删除，魔数只在 `lib/data/services/server_probe_service.dart` 中保留。
 3. UDP 超时不得判定为“非 EasyTier 服务器”，否则会把丢包误报成兼容性问题。
 4. 新增的探测协议（如 quic/wg）需要单独实现握手，未实现时一律返回 `null`。
 
@@ -654,6 +679,8 @@ ConstrainedBox(
 ```
 
 ### 9.2 底部导航
+
+> **路径已变**：`bottom_nav.dart` 现在位于 `lib/ui/widgets/navigation/bottom_nav.dart`。
 
 `BottomNav` 固定 `height: 64/72`，`ThemeData.navigationBarTheme.height` 也固定 72。建议移除显式 height，让 `NavigationBar` 按内容与系统字号自行撑开；如必须限制，使用：
 
