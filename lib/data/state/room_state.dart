@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:astral_game/data/models/active_room_session.dart';
 import 'package:astral_game/data/models/bookmark.dart';
 import 'package:astral_game/data/services/bookmark_store.dart';
+import 'package:astral_game/data/state/connection_phase.dart';
 import 'package:astral_game/utils/logger.dart';
 import 'package:signals/signals_core.dart';
 
@@ -17,7 +18,14 @@ import 'package:signals/signals_core.dart';
 class RoomState {
   BookmarkStore? _store;
 
-  final isConnected = signal<bool>(false);
+  /// 连接状态机的唯一真源；UI 只读它（及其派生 getter）。
+  final connection = ConnectionStateController();
+
+  /// 已连接 = 传输真正可用（并非「实例已启动」）。
+  late final isConnected = computed<bool>(
+    () => connection.phaseSignal.value == ConnectionPhase.connected,
+  );
+
   final session = signal<ActiveRoomSession?>(null);
 
   /// 强制结束提示（VPN 失败 / 房主离线等），UI 消费后应 [clearForceEndNotice]。
@@ -58,7 +66,11 @@ class RoomState {
   }
 
   void setConnected(bool value, {bool clearSession = true}) {
-    isConnected.value = value;
+    if (value) {
+      connection.markConnected();
+    } else {
+      connection.reset();
+    }
     if (!value) {
       if (clearSession) {
         session.value = null;

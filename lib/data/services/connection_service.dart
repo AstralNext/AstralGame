@@ -19,6 +19,7 @@ import 'package:astral_game/data/services/room_assist_service.dart';
 import 'package:astral_game/data/services/share_code_service.dart';
 import 'package:astral_game/data/services/steam_transport_service.dart';
 import 'package:astral_game/data/services/vpn_manager.dart';
+import 'package:astral_game/data/state/connection_phase.dart';
 import 'package:astral_game/data/state/room_state.dart';
 import 'package:astral_game/data/state/settings_state.dart';
 import 'package:astral_game/utils/logger.dart';
@@ -103,14 +104,20 @@ class ConnectionService {
       '虚拟网卡（TUN）创建失败，无法建立联机网络。请检查网络权限后重试：'
       'Windows 请以管理员身份运行，Linux 请确认已授予网络能力。';
 
-  /// 是否正在建立连接。
-  ///
-  /// 用信号而非普通 bool，让「创建/加入」等 UI 能实时切到 busy 态；
-  /// [_connect] 的 finally 保证失败、取消、成功都会复位为 false。
-  final isConnecting = signal(false);
+  /// 是否正在建立连接；由 [RoomState.connection] 派生，不再是独立状态。
+  late final isConnecting = computed<bool>(
+    () => _roomState.connection.phaseSignal.value == ConnectionPhase.linking,
+  );
 
-  /// 已有短码/会话，EasyTier 仍在连接中（供房间卡「连接中」提示）。
-  final isLinking = signal(false);
+  /// 已有会话、传输仍在连接中（供房间卡「连接中」提示）。
+  late final isLinking = computed<bool>(
+    () =>
+        _roomState.connection.phaseSignal.value == ConnectionPhase.linking &&
+        _roomState.session.value != null,
+  );
+
+  /// 防重入标记：只约束 [_connect] 自身，不对外暴露。
+  bool _connectInFlight = false;
 
   /// 递增以作废进行中的乐观连接（例如用户在连接中点了离开）。
   final _link = ConnectionLinkEpoch();
@@ -228,7 +235,7 @@ class ConnectionService {
     );
     _roomState.setSession(session);
     final epoch = _link.begin();
-    isLinking.value = true;
+    _roomState.connection.beginLinking();
 
     var linked = false;
     try {
@@ -251,8 +258,9 @@ class ConnectionService {
       }
       rethrow;
     } finally {
-      if (_isLinkActive(epoch)) {
-        isLinking.value = false;
+      if (_isLinkActive(epoch) &&
+          _roomState.connection.phase == ConnectionPhase.linking) {
+        _roomState.connection.reset();
       }
     }
   }
@@ -499,7 +507,7 @@ class ConnectionService {
     );
     _roomState.setSession(session);
     final epoch = _link.begin();
-    isLinking.value = true;
+    _roomState.connection.beginLinking();
 
     // 加入即续期：后台向短码服务登记本房间（服务端按房间指纹复用同一码并
     // 滑动续期，顺带拿回管理令牌用于心跳），不阻塞进房。
@@ -527,8 +535,9 @@ class ConnectionService {
       }
       rethrow;
     } finally {
-      if (_isLinkActive(epoch)) {
-        isLinking.value = false;
+      if (_isLinkActive(epoch) &&
+          _roomState.connection.phase == ConnectionPhase.linking) {
+        _roomState.connection.reset();
       }
     }
   }
@@ -593,18 +602,23 @@ class ConnectionService {
     String? gameId,
     required int epoch,
   }) async {
-    if (isConnecting.value) {
+    if (_connectInFlight) {
       appLogger.w('[ConnectionService] 已有连接正在进行中，跳过');
       return false;
     }
-    isConnecting.value = true;
+    _connectInFlight = true;
     final connectStartedAt = DateTime.now();
     // 健康检查的后台撤销标记：TUN/VPN 失败提前抛出时，让并行的服务器连通检查立刻退出。
     var checksAborted = false;
     String? createdInstanceId;
     try {
       if (_nodeManagement.isRunning) {
-        await disconnect(clearSession: false, abortLink: false);
+        // 拆旧实例但保留本次新尝试的 linking 阶段，避免界面闪回空闲页。
+        await disconnect(
+          clearSession: false,
+          abortLink: false,
+          preservePhase: true,
+        );
       }
       if (RuntimePlatform.isAndroid) {
         _vpnManager.startListening();
@@ -812,7 +826,7 @@ class ConnectionService {
       if (translated != e) throw translated;
       return false;
     } finally {
-      isConnecting.value = false;
+      _connectInFlight = false;
     }
   }
 
@@ -822,9 +836,13 @@ class ConnectionService {
     String? forceEndNotice,
     bool clearSession = true,
     bool abortLink = true,
+    bool preservePhase = false,
   }) async {
     if (abortLink) {
       _link.abort();
+    }
+    if (!preservePhase) {
+      _roomState.connection.beginDisconnecting();
     }
     final session = _roomState.session.value;
     if (session?.isSteamTransport == true) {
@@ -838,9 +856,6 @@ class ConnectionService {
     await _roomAssist.stopAll();
     await _gameInject.stop();
     await _openGames.stop();
-    if (abortLink) {
-      isLinking.value = false;
-    }
 
     _disarmGuestPresenceWatch();
     final instanceId = _nodeManagement.instanceId;
@@ -857,7 +872,11 @@ class ConnectionService {
       }
     }
     _nodeManagement.setStopped();
-    _roomState.setConnected(false, clearSession: clearSession);
+    if (!preservePhase) {
+      _roomState.setConnected(false, clearSession: clearSession);
+    } else if (clearSession) {
+      _roomState.setSession(null);
+    }
     if (forceEndNotice != null && forceEndNotice.isNotEmpty) {
       _roomState.setForceEndNotice(forceEndNotice);
     }
