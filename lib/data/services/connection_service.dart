@@ -119,6 +119,9 @@ class ConnectionService {
   /// 防重入标记：只约束 [_connect] 自身，不对外暴露。
   bool _connectInFlight = false;
 
+  /// 一次用户级连接尝试是否已被认领（同步置位，跨 await 有效）。
+  bool _attemptClaimed = false;
+
   /// 递增以作废进行中的乐观连接（例如用户在连接中点了离开）。
   final _link = ConnectionLinkEpoch();
 
@@ -181,87 +184,116 @@ class ConnectionService {
   /// 最近一次离线邀请串（短码服务失败时的回退）。
   String? lastOfflineInvite;
 
+  /// 本次尝试开始时是否已经处于 connected（用于失败后恢复旧连接）。
+  bool _attemptStartedFromConnected = false;
+
+  /// 认领一次连接尝试；linking / disconnecting 期间重复调用会被明确拒绝。
+  void _beginConnectionAttempt() {
+    final phase = _roomState.connection.phase;
+    if (_attemptClaimed ||
+        phase == ConnectionPhase.linking ||
+        phase == ConnectionPhase.disconnecting) {
+      throw const ConnectionBusyException();
+    }
+    _attemptClaimed = true;
+    _attemptStartedFromConnected = phase == ConnectionPhase.connected;
+    _roomState.connection.beginLinking();
+  }
+
+  /// 释放尝试；仍未进入 connected 的（失败/取消）按旧连接是否还在决定去向。
+  void _endConnectionAttempt() {
+    _attemptClaimed = false;
+    final wasConnected = _attemptStartedFromConnected;
+    _attemptStartedFromConnected = false;
+    if (_roomState.connection.phase != ConnectionPhase.linking) return;
+    // 在拆掉旧传输之前就失败（例如校验参数不通过）：旧连接仍然可用。
+    if (wasConnected && _nodeManagement.isRunning) {
+      _roomState.connection.markConnected();
+    } else {
+      _roomState.connection.reset();
+    }
+  }
+
   /// 创建房间：先发短码并写入会话（UI 立刻可见），再开 EasyTier。
   Future<ActiveRoomSession> createAndConnect({
     required String gameId,
     required String gameName,
     String? displayName,
   }) async {
-    lastOfflineInvite = null;
-    if (_steamModeActive) {
-      return _createSteamRoom(
+    _beginConnectionAttempt();
+    try {
+      lastOfflineInvite = null;
+      if (_steamModeActive) {
+        return await _createSteamRoom(
+          gameId: gameId,
+          gameName: gameName,
+          displayName: displayName,
+        );
+      }
+      final hostPeers = _p2pConfig.enabledPeers();
+      if (hostPeers.isEmpty) {
+        throw StateError('请先在服务器列表中启用至少一个服务器，再创建房间');
+      }
+      final networkName = 'ag_${_randomId(10)}';
+      final secret = _p2pConfig.generateRoomCode(length: 16);
+      final label = (displayName == null || displayName.trim().isEmpty)
+          ? gameName
+          : displayName.trim();
+
+      final payload = RoomInvitePayload(
         gameId: gameId,
         gameName: gameName,
-        displayName: displayName,
-      );
-    }
-    final hostPeers = _p2pConfig.enabledPeers();
-    if (hostPeers.isEmpty) {
-      throw StateError('请先在服务器列表中启用至少一个服务器，再创建房间');
-    }
-    final networkName = 'ag_${_randomId(10)}';
-    final secret = _p2pConfig.generateRoomCode(length: 16);
-    final label = (displayName == null || displayName.trim().isEmpty)
-        ? gameName
-        : displayName.trim();
-
-    final payload = RoomInvitePayload(
-      gameId: gameId,
-      gameName: gameName,
-      networkName: networkName,
-      networkSecret: secret,
-      peers: hostPeers,
-      displayName: label,
-    );
-    lastOfflineInvite = encodeOfflineInvite(payload);
-
-    String? shortCode;
-    try {
-      final created = await _shareCodes.createOrReuse(payload);
-      shortCode = created.code;
-    } catch (e) {
-      appLogger.w('[ConnectionService] 短码服务不可用，改用离线邀请: $e');
-    }
-
-    final session = ActiveRoomSession(
-      isHost: true,
-      gameId: gameId,
-      gameName: gameName,
-      networkName: networkName,
-      networkSecret: secret,
-      displayName: label,
-      shortCode: shortCode,
-      peers: hostPeers,
-    );
-    _roomState.setSession(session);
-    final epoch = _link.begin();
-    _roomState.connection.beginLinking();
-
-    var linked = false;
-    try {
-      await _connectAndStartServices(
         networkName: networkName,
-        secret: secret,
-        purpose: 'create',
-        gameId: gameId,
-        isHost: true,
-        epoch: epoch,
+        networkSecret: secret,
+        peers: hostPeers,
+        displayName: label,
       );
-      linked = true;
-      await _appSettings.setLastRoomPayload(payload);
-      return session;
-    } on ConnectionAbortedException {
-      rethrow;
-    } catch (e) {
-      if (!linked && _isLinkActive(epoch)) {
-        await disconnect();
+      lastOfflineInvite = encodeOfflineInvite(payload);
+
+      String? shortCode;
+      try {
+        final created = await _shareCodes.createOrReuse(payload);
+        shortCode = created.code;
+      } catch (e) {
+        appLogger.w('[ConnectionService] 短码服务不可用，改用离线邀请: $e');
       }
-      rethrow;
+
+      final session = ActiveRoomSession(
+        isHost: true,
+        gameId: gameId,
+        gameName: gameName,
+        networkName: networkName,
+        networkSecret: secret,
+        displayName: label,
+        shortCode: shortCode,
+        peers: hostPeers,
+      );
+      _roomState.setSession(session);
+      final epoch = _link.begin();
+
+      var linked = false;
+      try {
+        await _connectAndStartServices(
+          networkName: networkName,
+          secret: secret,
+          purpose: 'create',
+          gameId: gameId,
+          isHost: true,
+          epoch: epoch,
+        );
+        linked = true;
+        await _appSettings.setLastRoomPayload(payload);
+        return session;
+      } on ConnectionAbortedException {
+        rethrow;
+      } catch (e) {
+        if (!linked && _isLinkActive(epoch)) {
+          await disconnect();
+        }
+        rethrow;
+      }
     } finally {
-      if (_isLinkActive(epoch) &&
-          _roomState.connection.phase == ConnectionPhase.linking) {
-        _roomState.connection.reset();
-      }
+      _endConnectionAttempt();
     }
   }
 
@@ -297,7 +329,12 @@ class ConnectionService {
       await _steam.stop();
       rethrow;
     }
-    await _startGameAssist(gameId: gameId, isHost: true);
+    // 游戏辅助是增值能力，失败只记日志，不阻断组网。
+    try {
+      await _startGameAssist(gameId: gameId, isHost: true);
+    } catch (e) {
+      appLogger.w('[ConnectionService] Steam 辅助服务启动失败: $e');
+    }
 
     final payload = RoomInvitePayload(
       gameId: gameId,
@@ -388,9 +425,14 @@ class ConnectionService {
       hostSteamId: hostId,
     );
     _roomState.setSession(session);
+    // 辅助服务失败不影响「传输可用」这一判断，不能反过来把连接判失败。
+    try {
+      await _startGameAssist(gameId: payload.gameId, isHost: false);
+    } catch (e) {
+      appLogger.w('[ConnectionService] Steam 辅助服务启动失败: $e');
+    }
     _roomState.setConnected(true, clearSession: false);
     _armGuestPresenceWatch();
-    await _startGameAssist(gameId: payload.gameId, isHost: false);
     appLogger.i(
       '[ConnectionService] 已加入 Steam 组网房间: host=$hostId '
       'vip=${status.virtualIp}',
@@ -413,8 +455,16 @@ class ConnectionService {
   }
 
   Future<ActiveRoomSession> joinWithInviteInput(String raw) async {
-    final resolved = await resolveInvitePayload(raw);
-    return joinWithPayload(resolved.payload, shortCode: resolved.shortCode);
+    _beginConnectionAttempt();
+    try {
+      final resolved = await resolveInvitePayload(raw);
+      return await _joinWithPayload(
+        resolved.payload,
+        shortCode: resolved.shortCode,
+      );
+    } finally {
+      _endConnectionAttempt();
+    }
   }
 
   /// 当前应分享的一条 URL（短码优先，否则离线）。
@@ -451,16 +501,28 @@ class ConnectionService {
 
   /// 加入房间：6 位 32 进制短码。
   Future<ActiveRoomSession> joinWithShortCode(String code) async {
-    final normalized = normalizeShareCode(code);
-    final payload = await _shareCodes.fetch(normalized);
-    return joinWithPayload(payload, shortCode: normalized);
+    _beginConnectionAttempt();
+    try {
+      final normalized = normalizeShareCode(code);
+      final payload = await _shareCodes.fetch(normalized);
+      return await _joinWithPayload(payload, shortCode: normalized);
+    } finally {
+      _endConnectionAttempt();
+    }
   }
 
   /// 从任意 [RoomInvitePayload] 加入；收藏功能用它跳过短码服务。
   Future<ActiveRoomSession> joinWithPayload(
     RoomInvitePayload payload, {
     String? shortCode,
-  }) => _joinWithPayload(payload, shortCode: shortCode);
+  }) async {
+    _beginConnectionAttempt();
+    try {
+      return await _joinWithPayload(payload, shortCode: shortCode);
+    } finally {
+      _endConnectionAttempt();
+    }
+  }
 
   /// 依据当前会话生成一条完整 payload（用于「收藏当前房间」）。
   RoomInvitePayload? payloadFromCurrentSession() {
@@ -507,7 +569,6 @@ class ConnectionService {
     );
     _roomState.setSession(session);
     final epoch = _link.begin();
-    _roomState.connection.beginLinking();
 
     // 加入即续期：后台向短码服务登记本房间（服务端按房间指纹复用同一码并
     // 滑动续期，顺带拿回管理令牌用于心跳），不阻塞进房。
@@ -534,11 +595,6 @@ class ConnectionService {
         await disconnect();
       }
       rethrow;
-    } finally {
-      if (_isLinkActive(epoch) &&
-          _roomState.connection.phase == ConnectionPhase.linking) {
-        _roomState.connection.reset();
-      }
     }
   }
 
@@ -719,8 +775,6 @@ class ConnectionService {
         return false;
       }
       _nodeManagement.setRunning(createdInstanceId);
-      _roomState.setConnected(true);
-      _armGuestPresenceWatch();
 
       // 全平台：实例起来了但连不上任何服务器时，房间等于没有网络。
       // 只在真的配置了服务器时检查，避免把「无服务器」误判成连接失败。
@@ -798,6 +852,9 @@ class ConnectionService {
           throw ConnectionFailureException(serverError);
         }
       }
+      // 传输真正可用（TUN/VPN 就绪 + 服务器连通检查通过）才算 connected。
+      _roomState.setConnected(true);
+      _armGuestPresenceWatch();
       appLogger.i(
         '[ConnectionService] $purpose 连接就绪，耗时 '
         '${DateTime.now().difference(connectStartedAt).inMilliseconds}ms',
@@ -1252,6 +1309,14 @@ class ConnectionFailureException implements Exception {
 
   @override
   String toString() => message;
+}
+
+/// 已有连接尝试正在进行，拒绝第二次建联（不是连接失败）。
+class ConnectionBusyException implements Exception {
+  const ConnectionBusyException();
+
+  @override
+  String toString() => '正在连接中，请稍候…';
 }
 
 /// 用户在乐观连接完成前离开/取消。
