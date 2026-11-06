@@ -139,136 +139,141 @@ class _BottomNavState extends State<BottomNav> with TickerProviderStateMixin {
       child: Row(
         children: [
           Expanded(
-            child: GlassCapsule(
-              radius: BorderRadius.circular(AppDimensions.radiusPill),
-              child: Material(
-                type: MaterialType.transparency,
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final count = widget.navigationItems.length;
-                    if (count == 0) return const SizedBox.shrink();
-                    final itemWidth = constraints.maxWidth / count;
-                    // 用“动画终点”的稳定宽度决定标签是否可能显示，
-                    // 避免行动胶囊收缩时标签整批闪现/消失。
-                    final stableItemWidth =
-                        (size.width - 40 - targetSlotWidth) / count;
-                    final labelsCapable =
-                        !isSmallWindow &&
-                        stableItemWidth >= 54 &&
-                        textScale < 1.8;
-                    // 宽度动画过程中让标签连续淡入淡出，图标位移也跟随，
-                    // 不再从 64 高度瞬间跳成 24。
-                    final labelScaleFade = ((2.0 - textScale) / 0.5).clamp(
-                      0.0,
-                      1.0,
-                    );
-                    final labelProgress = labelsCapable
-                        ? ((itemWidth - 50) / 14).clamp(0.0, 1.0) *
-                              labelScaleFade
-                        : 0.0;
+            // Scaffold 给 bottomNavigationBar 的高度上限是整窗高度（且外壳用了
+            // extendBody），导航项里的 Column 会一路撑满，把玻璃胶囊拉成一整屏。
+            // 与右侧行动胶囊一样锁到 barHeight，玻璃只占底栏这一行。
+            child: SizedBox(
+              height: barHeight,
+              child: GlassCapsule(
+                radius: BorderRadius.circular(AppDimensions.radiusPill),
+                child: Material(
+                  type: MaterialType.transparency,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final count = widget.navigationItems.length;
+                      if (count == 0) return const SizedBox.shrink();
+                      final itemWidth = constraints.maxWidth / count;
+                      // 用“动画终点”的稳定宽度决定标签是否可能显示，
+                      // 避免行动胶囊收缩时标签整批闪现/消失。
+                      final stableItemWidth =
+                          (size.width - 40 - targetSlotWidth) / count;
+                      final labelsCapable =
+                          !isSmallWindow &&
+                          stableItemWidth >= 54 &&
+                          textScale < 1.8;
+                      // 宽度动画过程中让标签连续淡入淡出，图标位移也跟随，
+                      // 不再从 64 高度瞬间跳成 24。
+                      final labelScaleFade = ((2.0 - textScale) / 0.5).clamp(
+                        0.0,
+                        1.0,
+                      );
+                      final labelProgress = labelsCapable
+                          ? ((itemWidth - 50) / 14).clamp(0.0, 1.0) *
+                                labelScaleFade
+                          : 0.0;
 
-                    return ConstrainedBox(
-                      constraints: BoxConstraints(minHeight: barHeight),
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        // 按住后左右拖动：指示器跟手，松手吸附到最近的 Tab。
-                        onHorizontalDragStart: (details) => _liquid.beginDrag(
-                          _dragPosition(
-                            details.localPosition.dx,
-                            itemWidth,
-                            constraints.maxWidth,
+                      return ConstrainedBox(
+                        constraints: BoxConstraints(minHeight: barHeight),
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          // 按住后左右拖动：指示器跟手，松手吸附到最近的 Tab。
+                          onHorizontalDragStart: (details) => _liquid.beginDrag(
+                            _dragPosition(
+                              details.localPosition.dx,
+                              itemWidth,
+                              constraints.maxWidth,
+                            ),
                           ),
-                        ),
-                        onHorizontalDragUpdate: (details) => _liquid.updateDrag(
-                          _dragPosition(
-                            details.localPosition.dx,
-                            itemWidth,
-                            constraints.maxWidth,
-                          ),
-                        ),
-                        onHorizontalDragEnd: (details) {
-                          final velocity =
-                              details.velocity.pixelsPerSecond.dx / itemWidth;
-                          _liquid.endDrag(_isRtl ? -velocity : velocity);
-                        },
-                        onHorizontalDragCancel: () => _liquid.endDrag(0),
-                        child: AnimatedBuilder(
-                          animation: _liquid.listenable,
-                          builder: (context, _) {
-                            final position = _liquid.renderPosition;
-                            final liquid = _liquid.liquidAmount;
-                            final speed = _liquid.velocityRatio;
-                            final direction = _liquid.position.velocity.sign;
-                            // 距离决定基础拉伸，速度额外拉出一点尾巴。
-                            final stretch =
-                                _maxStretch *
-                                    liquid *
-                                    (_liquid.dragging ? 1.0 : 0.78) +
-                                0.18 * speed;
-                            final squash = _maxSquash * liquid + 0.10 * speed;
-                            final baseWidth = itemWidth - 12;
-                            final baseHeight = barHeight - 12;
-                            final rawCenter =
-                                position * itemWidth +
-                                itemWidth / 2 -
-                                direction * itemWidth * 0.02 * speed;
-                            final center = _isRtl
-                                ? constraints.maxWidth - rawCenter
-                                : rawCenter;
+                          onHorizontalDragUpdate: (details) =>
+                              _liquid.updateDrag(
+                                _dragPosition(
+                                  details.localPosition.dx,
+                                  itemWidth,
+                                  constraints.maxWidth,
+                                ),
+                              ),
+                          onHorizontalDragEnd: (details) {
+                            final velocity =
+                                details.velocity.pixelsPerSecond.dx / itemWidth;
+                            _liquid.endDrag(_isRtl ? -velocity : velocity);
+                          },
+                          onHorizontalDragCancel: () => _liquid.endDrag(0),
+                          child: AnimatedBuilder(
+                            animation: _liquid.listenable,
+                            builder: (context, _) {
+                              final position = _liquid.renderPosition;
+                              final liquid = _liquid.liquidAmount;
+                              final speed = _liquid.velocityRatio;
+                              final direction = _liquid.position.velocity.sign;
+                              // 距离决定基础拉伸，速度额外拉出一点尾巴。
+                              final stretch =
+                                  _maxStretch *
+                                      liquid *
+                                      (_liquid.dragging ? 1.0 : 0.78) +
+                                  0.18 * speed;
+                              final squash = _maxSquash * liquid + 0.10 * speed;
+                              final baseWidth = itemWidth - 12;
+                              final baseHeight = barHeight - 12;
+                              final rawCenter =
+                                  position * itemWidth +
+                                  itemWidth / 2 -
+                                  direction * itemWidth * 0.02 * speed;
+                              final center = _isRtl
+                                  ? constraints.maxWidth - rawCenter
+                                  : rawCenter;
 
-                            return Stack(
-                              clipBehavior: Clip.none,
-                              children: [
-                                // 指示器只走绘制：位置、拉伸、按压都不触发布局。
-                                Positioned.fill(
-                                  child: IgnorePointer(
-                                    child: CustomPaint(
-                                      painter: LiquidNavPainter(
-                                        axis: Axis.horizontal,
-                                        center: center,
-                                        crossExtent: baseHeight,
-                                        baseLength: baseWidth,
-                                        lengthFactor: 1 + stretch,
-                                        crossFactor: 1 - squash,
-                                        lift: _liquid.liftAmount,
-                                        palette: palette,
+                              return Stack(
+                                clipBehavior: Clip.none,
+                                children: [
+                                  // 指示器只走绘制：位置、拉伸、按压都不触发布局。
+                                  Positioned.fill(
+                                    child: IgnorePointer(
+                                      child: CustomPaint(
+                                        painter: LiquidNavPainter(
+                                          axis: Axis.horizontal,
+                                          center: center,
+                                          crossExtent: baseHeight,
+                                          baseLength: baseWidth,
+                                          lengthFactor: 1 + stretch,
+                                          crossFactor: 1 - squash,
+                                          lift: _liquid.liftAmount,
+                                          palette: palette,
+                                        ),
                                       ),
                                     ),
                                   ),
-                                ),
-                                Row(
-                                  children: [
-                                    for (var i = 0; i < count; i++)
-                                      Expanded(
-                                        child: _NavItem(
-                                          item: widget.navigationItems[i],
-                                          selected: i == widget.selectedIndex,
-                                          selectedness:
-                                              (1 - (position - i).abs()).clamp(
-                                                0.0,
-                                                1.0,
-                                              ),
-                                          labelProgress: labelProgress,
-                                          labelsCapable: labelsCapable,
-                                          pressed:
-                                              _liquid.pressedIndex == i &&
-                                              !reduceMotion,
-                                          showStatusDot: widget.statusDots
-                                              .contains(i),
-                                          onPressedChanged: (pressed) =>
-                                              _liquid.setPressed(i, pressed),
-                                          onTap: () => _liquid.tap(i),
+                                  Row(
+                                    children: [
+                                      for (var i = 0; i < count; i++)
+                                        Expanded(
+                                          child: _NavItem(
+                                            item: widget.navigationItems[i],
+                                            selected: i == widget.selectedIndex,
+                                            selectedness:
+                                                (1 - (position - i).abs())
+                                                    .clamp(0.0, 1.0),
+                                            labelProgress: labelProgress,
+                                            labelsCapable: labelsCapable,
+                                            pressed:
+                                                _liquid.pressedIndex == i &&
+                                                !reduceMotion,
+                                            showStatusDot: widget.statusDots
+                                                .contains(i),
+                                            onPressedChanged: (pressed) =>
+                                                _liquid.setPressed(i, pressed),
+                                            onTap: () => _liquid.tap(i),
+                                          ),
                                         ),
-                                      ),
-                                  ],
-                                ),
-                              ],
-                            );
-                          },
+                                    ],
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
                         ),
-                      ),
-                    );
-                  },
+                      );
+                    },
+                  ),
                 ),
               ),
             ),
