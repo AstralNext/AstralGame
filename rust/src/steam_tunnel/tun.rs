@@ -68,9 +68,7 @@ pub fn open_named(
     let name = adapter
         .get_name()
         .map_err(|e| format!("读取网卡名失败: {e}"))?;
-    adapter
-        .set_mtu(mtu)
-        .map_err(|e| format!("设置网卡 MTU 失败: {e}"))?;
+    set_mtu(&name, mtu)?;
     configure_interface(&name, ip)?;
 
     let session = Arc::new(
@@ -153,6 +151,28 @@ fn configure_interface(name: &str, ip: Ipv4Addr) -> Result<(), String> {
         "metric=0",
     ]);
     Ok(())
+}
+
+/// 设置网卡 MTU。
+///
+/// wintun 0.5.1 的 `Adapter::set_mtu` 内部直接 `Command::new("netsh").output()`，
+/// 没有传 `CREATE_NO_WINDOW`；本程序是 GUI 进程，子进程会新开一个控制台窗口，
+/// 表现为建房时闪一次黑框。这里改成自己调用带隐藏标志的 netsh。
+fn set_mtu(name: &str, mtu: usize) -> Result<(), String> {
+    let ok = netsh(&[
+        "interface",
+        "ipv4",
+        "set",
+        "subinterface",
+        &format!("\"{name}\""),
+        &format!("mtu={mtu}"),
+        "store=persistent",
+    ]);
+    if ok {
+        Ok(())
+    } else {
+        Err(format!("设置网卡 MTU 失败: {mtu}"))
+    }
 }
 
 /// 执行 netsh（隐藏控制台窗口，避免 GUI 进程弹黑框）。
