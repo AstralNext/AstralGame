@@ -31,6 +31,9 @@ class AppSettingsService {
   /// 联机模式：`easytier`（默认）/ `steam`。
   static const String _keyTransportMode = 'transport_mode';
 
+  /// 实验性功能开关（目前只控制 Steam 组网，仅 Windows 提供入口）。
+  static const String _keyExperimentalSteam = 'experimental_steam_mode';
+
   final SharedPreferences _prefs;
   final Directory? _supportDir;
 
@@ -244,6 +247,12 @@ class AppSettingsService {
       transportModeFromStorage(_prefs.getString(_keyTransportMode));
   Future<void> setTransportMode(TransportMode mode) async =>
       await _prefs.setString(_keyTransportMode, mode.storageValue);
+
+  /// 实验性功能开关（默认关闭）。
+  bool getExperimentalSteamEnabled() =>
+      _prefs.getBool(_keyExperimentalSteam) ?? false;
+  Future<void> setExperimentalSteamEnabled(bool value) async =>
+      await _prefs.setBool(_keyExperimentalSteam, value);
 
   // ---- 壁纸 ----
 

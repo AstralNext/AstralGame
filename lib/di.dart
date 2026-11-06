@@ -324,6 +324,7 @@ Future<void> setupDI() async {
       getIt<PeerRpcClient>(),
       getIt<PeerRpcRouter>(),
       getIt<EasyTierCoreEventBus>(),
+      getIt<SettingsState>(),
     ),
   );
   _registerDispose<ConnectionService>((s) => s.disconnect(), async: true);

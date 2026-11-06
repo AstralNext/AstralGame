@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:astral_game/config/app_theme_id.dart';
 import 'package:astral_game/data/models/transport_mode.dart';
 import 'package:astral_game/data/services/app_settings_service.dart';
@@ -35,6 +37,16 @@ class SettingsState {
   /// 联机模式：EasyTier 组网 / Steam 组网（SDR 虚拟局域网，Windows 实验性）。
   final transportMode = signal(TransportMode.easytier);
 
+  /// 实验性功能开关：目前只控制 Steam 组网，仅 Windows 提供入口，默认关闭。
+  final experimentalSteam = signal(false);
+
+  /// 启动时历史配置因平台/开关不可用而被回落的一次性提示。
+  final transportFallbackNotice = signal<String?>(null);
+
+  /// 传输模式可用性的统一判定入口（平台 + 实验性开关）。
+  TransportGate get transportGate =>
+      TransportGate.current(experimentalSteamEnabled: experimentalSteam.value);
+
   /// Windows：开机启动后直接驻留托盘。
   final startToTray = signal(false);
 
@@ -54,7 +66,18 @@ class SettingsState {
     isDhcpv6.value = _settings.getIsDhcpv6();
     virtualIp.value = _settings.getVirtualIp();
     virtualIpv6.value = _settings.getVirtualIpv6();
-    transportMode.value = _settings.getTransportMode();
+    // 非 Windows 没有开关入口，按关闭处理，避免历史值把 Steam 放出来。
+    experimentalSteam.value =
+        RuntimePlatform.isWindows && _settings.getExperimentalSteamEnabled();
+    final storedMode = _settings.getTransportMode();
+    final gatedMode = transportGate.fallback(storedMode);
+    transportMode.value = gatedMode;
+    if (gatedMode != storedMode) {
+      // 历史配置在当前环境不可用：回落 EasyTier、写回存储并说明一次原因。
+      unawaited(_settings.setTransportMode(gatedMode));
+      transportFallbackNotice.value =
+          '${transportGate.unavailableReason(storedMode) ?? '当前环境不支持所选联机模式'}，已回落为 EasyTier 组网';
+    }
     startToTray.value = _settings.getStartToTray();
     autoEnterRoom.value = _settings.getAutoEnterRoom();
     autoEnterBookmarkId.value = _settings.getAutoEnterBookmarkId();
@@ -75,6 +98,7 @@ class SettingsState {
       _settings.setVirtualIp(virtualIp.value),
       _settings.setVirtualIpv6(virtualIpv6.value),
       _settings.setTransportMode(transportMode.value),
+      _settings.setExperimentalSteamEnabled(experimentalSteam.value),
       _settings.setStartToTray(startToTray.value),
       _settings.setAutoEnterRoom(autoEnterRoom.value),
       _settings.setAutoEnterBookmarkId(autoEnterBookmarkId.value),

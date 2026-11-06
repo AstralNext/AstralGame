@@ -103,10 +103,12 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
       growable: false,
     );
 
-    _navTransportMode = getIt<SettingsState>().transportMode.value;
+    _navTransportMode = _gatedTransportMode();
     _buildNavigationItems();
     _transportModeEffect = effect(() {
-      final mode = getIt<SettingsState>().transportMode.value;
+      // 读取 transportGate 会一并订阅实验性开关：开关变化后立刻重建 Tab，
+      // Steam 不可用时服务器 Tab 立刻回到 EasyTier 形态。
+      final mode = _gatedTransportMode();
       if (!mounted || mode == _navTransportMode) return;
       _navTransportMode = mode;
       setState(_buildNavigationItems);
@@ -118,6 +120,13 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
       if (getIt<AppSettingsService>().needsProfileSetup()) {
         await showEditProfileDialog(context, onboarding: true);
         if (!mounted) return;
+      }
+      // 历史配置里的联机模式在当前环境不可用时，说明一次回落原因。
+      final settingsState = getIt<SettingsState>();
+      final fallbackNotice = settingsState.transportFallbackNotice.value;
+      if (fallbackNotice != null) {
+        settingsState.transportFallbackNotice.value = null;
+        showAppToast(context, fallbackNotice);
       }
       // Steam 模式：提前初始化 SteamAPI / SDR，把数秒的初始化移出「创建房间」点击。
       unawaited(getIt<ConnectionService>().prewarmSteamTransport());
@@ -344,6 +353,15 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
     }
   }
 
+  /// 当前环境实际生效的联机模式（统一判定入口在 [TransportGate]）。
+  ///
+  /// 历史配置或异常状态下读到的 Steam 若已不可用，这里直接回落 EasyTier，
+  /// 后续 UI 不需要各自再判断平台与开关。
+  TransportMode _gatedTransportMode() {
+    final state = getIt<SettingsState>();
+    return state.transportGate.fallback(state.transportMode.value);
+  }
+
   /// 依据联机模式重建一级 Tab。
   ///
   /// Steam 没有 EasyTier 服务器概念，服务器 Tab 直接换成对应驱动的
@@ -471,7 +489,7 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
     }
     if (_selectedIndex == _serversTabIndex) {
       // Steam 模式下该 Tab 展示驱动信息，没有服务器可刷新或添加。
-      if (getIt<SettingsState>().transportMode.value.isTunnelTransport) {
+      if (_navTransportMode.isTunnelTransport) {
         return const [];
       }
       final servers = getIt<ServerState>().servers.value;

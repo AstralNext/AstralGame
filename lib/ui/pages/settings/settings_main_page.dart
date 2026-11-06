@@ -263,6 +263,19 @@ class _SettingsMainPageState extends State<SettingsMainPage>
                         value: () => updateState.beta.value,
                         onChanged: updateState.setBeta,
                       ),
+                      // Steam 组网只在 Windows 存在，非 Windows 连开关入口都不给。
+                      if (settingsState.transportGate.canToggleExperimentalSteam)
+                        _switchRow(
+                          icon: Icons.biotech_outlined,
+                          title: '实验性功能',
+                          subtitle: () =>
+                              '开启后可在「网络」中选用 Steam 组网；关闭后仅保留 EasyTier',
+                          value: () => settingsState.experimentalSteam.value,
+                          onChanged: (v) => _onExperimentalSteamChanged(
+                            settingsState,
+                            v,
+                          ),
+                        ),
                       if (_isAndroid)
                         _switchRow(
                           icon: Icons.picture_in_picture_alt_outlined,
@@ -389,6 +402,7 @@ class _SettingsMainPageState extends State<SettingsMainPage>
     TransportMode mode,
   ) async {
     if (settingsState.transportMode.value == mode) return;
+    if (!settingsState.transportGate.isAvailable(mode)) return;
     settingsState.transportMode.value = mode;
     await settingsState.saveToPersistence();
     // 切到 Steam 后立刻开始初始化，用户回到首页建房时不用再等 SteamAPI/SDR。
@@ -400,6 +414,35 @@ class _SettingsMainPageState extends State<SettingsMainPage>
     });
   }
 
+  /// 切换「实验性功能」开关（目前只控制 Steam 组网）。
+  ///
+  /// 关闭时如果正处在 Steam 房间，直接拦下而不是顺手退出房间：此刻房间、
+  /// Peer RPC、节点轮询都还绑在 Steam 上，先关开关会让这些链路失去模式依据，
+  /// 退出流程也可能读到已失效的传输模式。让用户先正常退出最安全。
+  Future<void> _onExperimentalSteamChanged(
+    SettingsState settingsState,
+    bool enabled,
+  ) async {
+    if (enabled) {
+      settingsState.experimentalSteam.value = true;
+      await settingsState.saveToPersistence();
+      return;
+    }
+    final session = getIt<RoomState>().session.value;
+    if (session?.isSteamTransport == true) {
+      if (!mounted) return;
+      showAppToast(context, '当前正在 Steam 房间中，请先退出房间再关闭实验性功能');
+      return;
+    }
+    settingsState.experimentalSteam.value = false;
+    if (settingsState.transportMode.value == TransportMode.steam) {
+      settingsState.transportMode.value = TransportMode.easytier;
+    }
+    await settingsState.saveToPersistence();
+    if (!mounted) return;
+    showAppToast(context, '已关闭实验性功能，联机模式回落为 EasyTier');
+  }
+
   Widget _buildNetworkSection(SettingsState settingsState) {
     return Watch((context) {
       final roomState = getIt<RoomState>();
@@ -408,14 +451,19 @@ class _SettingsMainPageState extends State<SettingsMainPage>
       final virtualIpv6 = settingsState.virtualIpv6.value;
       final canEditNetwork = !roomState.isConnected.value;
       // Steam 组网的虚拟 IP 由房主统一分配，EasyTier 的 DHCP / P2P 设置不适用。
-      final transportMode = settingsState.transportMode.value;
+      // 可用性统一由 transportGate 判定：平台不支持或实验性开关关闭时，
+      // Steam 不会出现在选择器里，历史配置也会在这里被回落。
+      final gate = settingsState.transportGate;
+      final availableModes = gate.availableModes;
+      final transportMode = gate.fallback(settingsState.transportMode.value);
       final tunnelMode = transportMode.isTunnelTransport;
       String changeableHint(String text) =>
           canEditNetwork ? '$text，更改后需重启房间生效' : '$text，更改后需重启房间生效；连接中不可修改';
       return AstralSettingsFormCard(
         title: '网络',
         rows: [
-          if (isTunnelTransportSupported)
+          // 只有一个可选模式时不展示选择器：避免留下「选不动的死选项」。
+          if (availableModes.length > 1)
             (index, count) => AstralGroupedTile(
               icon: Icons.cloud_queue_rounded,
               label: '联机模式（网络驱动）',
@@ -428,7 +476,7 @@ class _SettingsMainPageState extends State<SettingsMainPage>
                   isDense: true,
                   borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
                   items: [
-                    for (final mode in TransportMode.values)
+                    for (final mode in availableModes)
                       DropdownMenuItem<TransportMode>(
                         value: mode,
                         child: Text(mode.menuLabel),

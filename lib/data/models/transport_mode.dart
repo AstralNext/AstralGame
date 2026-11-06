@@ -33,10 +33,6 @@ extension TransportModeX on TransportMode {
 
   /// 是否需要在 Windows 上使用独立的虚拟网卡驱动（非 EasyTier）。
   bool get isTunnelTransport => this == TransportMode.steam;
-
-  /// 当前平台是否支持该模式。
-  bool get isSupported =>
-      this == TransportMode.easytier || RuntimePlatform.isWindows;
 }
 
 TransportMode transportModeFromStorage(String? raw) {
@@ -48,5 +44,83 @@ TransportMode transportModeFromStorage(String? raw) {
   };
 }
 
-/// Steam 驱动目前仅在 Windows 提供（桌面端才有对应运行时）。
-bool get isTunnelTransportSupported => RuntimePlatform.isWindows;
+/// 传输模式判定所依赖的平台。
+///
+/// 单独建模而不是直接在判定里读 [RuntimePlatform]，是为了让「非 Windows」
+/// 分支可以在测试里注入。
+enum TransportPlatform {
+  windows,
+  macOS,
+  linux,
+  android,
+  ios,
+  other;
+
+  /// 当前进程所在平台。
+  static TransportPlatform get current => switch (
+    RuntimePlatform.operatingSystem
+  ) {
+    'windows' => TransportPlatform.windows,
+    'macos' => TransportPlatform.macOS,
+    'linux' => TransportPlatform.linux,
+    'android' => TransportPlatform.android,
+    'ios' => TransportPlatform.ios,
+    _ => TransportPlatform.other,
+  };
+}
+
+/// 传输模式可用性的唯一判定入口。
+///
+/// 所有决定「某个模式能否出现 / 能否使用」的地方都必须经过它：设置页下拉、
+/// 传输详情页、邀请与收藏解析、启动时的默认模式。以后新增平台或新增实验性
+/// 能力，只改这里即可。
+class TransportGate {
+  const TransportGate({
+    required this.platform,
+    required this.experimentalSteamEnabled,
+  });
+
+  /// 读取当前运行时状态。
+  factory TransportGate.current({required bool experimentalSteamEnabled}) =>
+      TransportGate(
+        platform: TransportPlatform.current,
+        experimentalSteamEnabled: experimentalSteamEnabled,
+      );
+
+  final TransportPlatform platform;
+
+  /// 「实验性功能」开关状态；非 Windows 上始终按关闭处理。
+  final bool experimentalSteamEnabled;
+
+  bool isAvailable(TransportMode mode) => switch (mode) {
+    TransportMode.easytier => true,
+    TransportMode.steam =>
+      platform == TransportPlatform.windows && experimentalSteamEnabled,
+  };
+
+  /// 当前环境允许出现在选择器里的模式。
+  List<TransportMode> get availableModes => [
+    for (final mode in TransportMode.values)
+      if (isAvailable(mode)) mode,
+  ];
+
+  /// 「实验性功能」开关本身是否可见（Steam 仅在 Windows 存在）。
+  bool get canToggleExperimentalSteam =>
+      platform == TransportPlatform.windows;
+
+  /// 模式不可用时的可读原因；可用时返回 null。
+  String? unavailableReason(TransportMode mode) {
+    if (isAvailable(mode)) return null;
+    return switch (mode) {
+      TransportMode.easytier => null,
+      // 非 Windows 上不出现任何 Steam 字样：用中性文案说明该模式不可用。
+      TransportMode.steam => platform == TransportPlatform.windows
+          ? 'Steam 组网是实验性功能，请先在「设置 → 应用」打开「实验性功能」'
+          : '当前平台不支持该联机模式',
+    };
+  }
+
+  /// 历史配置 / 邀请里的模式在当前环境不可用时，回落到 EasyTier。
+  TransportMode fallback(TransportMode mode) =>
+      isAvailable(mode) ? mode : TransportMode.easytier;
+}

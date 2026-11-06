@@ -1,5 +1,7 @@
 import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/data/models/transport_mode.dart';
+import 'package:astral_game/data/state/settings_state.dart';
+import 'package:astral_game/di.dart';
 import 'package:astral_game/ui/widgets/page_header.dart';
 import 'package:astral_game/ui/widgets/steam_transport_panel.dart';
 import 'package:flutter/material.dart';
@@ -18,6 +20,9 @@ class TransportInfoPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 统一判定入口：即使外部传入了 Steam，当前平台/开关不允许时也回落成
+    // EasyTier 分支，不会渲染 Steam 面板。
+    final effectiveMode = getIt<SettingsState>().transportGate.fallback(mode);
     final isNarrow = MediaQuery.sizeOf(context).width < AppBreakpoints.narrow;
     final startPad = isNarrow
         ? AppDimensions.pagePaddingHMobile
@@ -31,7 +36,7 @@ class TransportInfoPage extends StatelessWidget {
       children: [
         PageHeader(
           padding: EdgeInsetsDirectional.fromSTEB(startPad, 12, endPad, 8),
-          subtitle: '${mode.menuLabel} 组网状态',
+          subtitle: '${effectiveMode.menuLabel} 组网状态',
         ),
         Expanded(
           child: ListView(
@@ -46,7 +51,7 @@ class TransportInfoPage extends StatelessWidget {
                   : AppDimensions.pagePaddingBottom,
             ),
             children: [
-              switch (mode) {
+              switch (effectiveMode) {
                 TransportMode.steam => const SteamTransportPanel(),
                 TransportMode.easytier => const SizedBox.shrink(),
               },

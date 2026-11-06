@@ -20,6 +20,7 @@ import 'package:astral_game/data/services/share_code_service.dart';
 import 'package:astral_game/data/services/steam_transport_service.dart';
 import 'package:astral_game/data/services/vpn_manager.dart';
 import 'package:astral_game/data/state/room_state.dart';
+import 'package:astral_game/data/state/settings_state.dart';
 import 'package:astral_game/utils/logger.dart';
 import 'package:astral_game/utils/room_share.dart';
 import 'package:astral_game/utils/runtime_platform.dart';
@@ -44,6 +45,7 @@ class ConnectionService {
     this._peerRpc,
     this._peerRpcRouter,
     this._coreEvents,
+    this._settingsState,
   );
 
   final P2PConfigService _p2pConfig;
@@ -59,14 +61,18 @@ class ConnectionService {
   final PeerRpcClient _peerRpc;
   final PeerRpcRouter _peerRpcRouter;
   final EasyTierCoreEventBus _coreEvents;
+  final SettingsState _settingsState;
 
   /// Steam 组网（SDR 虚拟局域网）传输实现；EasyTier 模式不启用。
   final SteamTransportService _steam = SteamTransportService();
 
-  /// 当前设置是否要求走 Steam 组网（仅 Windows 桌面端支持）。
+  /// 当前设置是否要求走 Steam 组网。
+  ///
+  /// 统一走 [SettingsState.transportGate]：平台和「实验性功能」开关都在那里
+  /// 判定，避免这里再复制一份条件。
   bool get _steamModeActive =>
-      RuntimePlatform.isWindows &&
-      _appSettings.getTransportMode() == TransportMode.steam;
+      _appSettings.getTransportMode() == TransportMode.steam &&
+      _settingsState.transportGate.isAvailable(TransportMode.steam);
 
   /// 预热 Steam 客户端与 SDR 中继。
   ///
@@ -331,12 +337,6 @@ class ConnectionService {
     RoomInvitePayload payload, {
     String? shortCode,
   }) async {
-    if (!RuntimePlatform.isWindows) {
-      throw StateError('Steam 组网目前仅支持 Windows 桌面端。');
-    }
-    if (!_steamModeActive) {
-      throw StateError('该房间使用 Steam 组网模式，请先到「设置 → 网络 → 联机模式」切换为「Steam 组网」后重试。');
-    }
     final hostId = payload.hostSteamId?.trim() ?? '';
     if (hostId.isEmpty) {
       throw StateError('邀请缺少房主 SteamID，请让房主用新版重新分享。');
@@ -475,6 +475,12 @@ class ConnectionService {
     String? shortCode,
   }) async {
     if (payload.isSteamTransport) {
+      // 邀请 / 收藏 / 启动自动进房都汇到这里：模式不可用时给出可读原因，
+      // 不静默改走 EasyTier（Steam 房间没有 EasyTier 的 peer 信息，改了也进不去）。
+      final reason = _settingsState.transportGate.unavailableReason(
+        TransportMode.steam,
+      );
+      if (reason != null) throw StateError('$reason，无法加入该房间。');
       return _joinSteamRoom(payload, shortCode: shortCode);
     }
     final invitePeers = joinableInvitePeers(payload);
