@@ -2,6 +2,7 @@
 //!
 //! 简化版实现，提供基本的防火墙规则管理接口
 
+use flutter_rust_bridge::frb;
 use serde::{Deserialize, Serialize};
 
 #[cfg(target_os = "windows")]
@@ -1035,6 +1036,9 @@ pub fn remove_magic_wall_rule(rule_id: String) -> std::result::Result<(), String
 }
 
 /// 更新规则
+// 仅作为 add_magic_wall_rule 命中已存在规则时的内部实现；Dart 侧无独立入口，
+// 不再导出到 FFI（避免出现"更新"与"添加"两条等价路径）。
+#[frb(ignore)]
 #[cfg(target_os = "windows")]
 pub fn update_magic_wall_rule(rule: MagicWallRule) -> std::result::Result<(), String> {
     println!("\n🔄 ============ 更新防火墙规则 ============");
@@ -1098,6 +1102,7 @@ pub fn remove_magic_wall_rule(_rule_id: String) -> std::result::Result<(), Strin
     Err("魔法墙仅支持 Windows 平台".to_string())
 }
 
+#[frb(ignore)]
 #[cfg(not(target_os = "windows"))]
 pub fn update_magic_wall_rule(_rule: MagicWallRule) -> std::result::Result<(), String> {
     Err("魔法墙仅支持 Windows 平台".to_string())
@@ -1115,6 +1120,8 @@ pub fn get_magic_wall_status() -> std::result::Result<MagicWallStatus, String> {
 // ============= 通用函数 =============
 
 /// 创建默认规则示例
+// 示例数据生成器，从未被 Dart 侧或 Rust 侧使用，不再导出到 FFI。
+#[frb(ignore)]
 pub fn create_default_magic_wall_rules() -> Vec<MagicWallRule> {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

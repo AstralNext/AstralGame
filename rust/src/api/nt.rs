@@ -1,3 +1,5 @@
+use flutter_rust_bridge::frb;
+
 #[cfg(target_os = "windows")]
 use std::ffi::OsStr;
 #[cfg(target_os = "windows")]
@@ -7,12 +9,15 @@ use windows::core::PCWSTR;
 #[cfg(target_os = "windows")]
 use windows::Win32::Storage::FileSystem::QueryDosDeviceW;
 
+// 仅供 magic_wall 内部把 DOS 路径转成 NT 路径使用；Dart 侧无调用方，不再导出到 FFI。
 #[cfg(not(target_os = "windows"))]
+#[frb(ignore)]
 pub fn get_nt_path(_dos_path: &str) -> Option<String> {
     None
 }
 
 #[cfg(target_os = "windows")]
+#[frb(ignore)]
 pub fn get_nt_path(dos_path: &str) -> Option<String> {
     // 提取盘符（如 C:）
     let prefix = &dos_path[..2]; // e.g., "C:"

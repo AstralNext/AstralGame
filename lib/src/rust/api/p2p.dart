@@ -9,14 +9,11 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 // These functions are ignored because they are not marked as `pub`: `close_raw_fd`, `collect_relay_hops`, `emit_core_log`, `ensure_runtime`, `event_to_message`, `find_wintun_adapters`, `forget_tun_fd`, `get_instance_info`, `lookup_app_rpc_ready`, `lookup_app_rpc`, `lookup_native_instance`, `parse_instance_id`, `peer_conn_info_to_string`, `pubkey_b64_from_credential_secret`, `remember_tun_fd`, `resolve_wintun_interface`, `set_interface_metric_blocking`, `spawn_event_forwarder`, `spawn_instance_event_forwarder`, `spawn_set_nic_metric_task`, `tracing_log_lagged`, `tun_fds`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `CORE_LOG_SINK`, `MANAGER`, `RT`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `deref`, `deref`, `deref`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `initialize`, `initialize`, `initialize`
-// These functions are ignored (category: IgnoreBecauseExplicitAttribute): `network_status_from_info`, `peer_route_pairs_from_info`
+// These functions are ignored (category: IgnoreBecauseExplicitAttribute): `easytier_version`, `network_status_from_info`, `peer_route_pairs_from_info`
 
 /// Dart 侧订阅内核日志流；后订阅覆盖前订阅。
 Stream<CoreLogEventC> subscribeCoreLogs() =>
     RustLib.instance.api.crateApiP2PSubscribeCoreLogs();
-
-Future<String> easytierVersion() =>
-    RustLib.instance.api.crateApiP2PEasytierVersion();
 
 Future<bool> isEasytierRunning({required String instanceId}) =>
     RustLib.instance.api.crateApiP2PIsEasytierRunning(instanceId: instanceId);

@@ -135,6 +135,9 @@ pub fn create_multicast_sender(
 }
 
 /// 创建并启动一个组播发送器（带自定义绑定地址）
+// 遗留参数化入口：现有调用场景都走 create_multicast_sender（绑定 0.0.0.0:0），
+// Dart 侧无调用方，不再导出到 FFI。
+#[frb(ignore)]
 pub fn create_multicast_sender_with_bind(
     multicast_addr: String,
     port: u16,
@@ -198,6 +201,8 @@ pub fn stop_all_multicast_senders() -> Result<(), String> {
 }
 
 /// 获取所有正在运行的组播发送器数量
+// 仅供 Rust 内部/调试使用：Dart 侧无任何调用方，不再导出到 FFI。
+#[frb(ignore)]
 pub fn get_multicast_sender_count() -> usize {
     MULTICAST_RT.block_on(async move {
         let senders = MULTICAST_SENDERS.lock().await;
@@ -206,6 +211,8 @@ pub fn get_multicast_sender_count() -> usize {
 }
 
 /// 检查指定发送器是否正在运行
+// 仅供 Rust 内部/调试使用：Dart 侧无任何调用方，不再导出到 FFI。
+#[frb(ignore)]
 pub fn is_multicast_sender_running(index: usize) -> bool {
     MULTICAST_RT.block_on(async move {
         let senders = MULTICAST_SENDERS.lock().await;
@@ -421,11 +428,6 @@ pub fn start_udp_multicast_lan_listener(
         );
         Ok(index)
     })
-}
-
-/// 兼容旧名：MC MOTD 组播监听。
-pub fn start_minecraft_lan_listener(multicast_addr: String, port: u16) -> Result<usize, String> {
-    start_udp_multicast_lan_listener(multicast_addr, port, "minecraft_motd".into())
 }
 
 /// 拉取当前发现到的本机开放游戏（自动丢掉 20s 未再见的条目）。

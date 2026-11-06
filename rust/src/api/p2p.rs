@@ -6,6 +6,7 @@ use easytier::instance::factory::{native_cli_instance_manager, NativeInstanceMan
 pub use easytier::proto;
 pub use easytier::proto::api::instance::{PeerRoutePair, Route};
 pub use easytier::proto::common::NatType;
+use flutter_rust_bridge::frb;
 use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::sync::OnceLock;
@@ -400,6 +401,10 @@ fn spawn_event_forwarder(
     })
 }
 
+/// EasyTier 内核版本号。
+// 遗留诊断接口：Dart 侧无调用方，且产品上不展示内核版本（避免被当成协议版本），
+// 不再导出到 FFI。
+#[frb(ignore)]
 pub fn easytier_version() -> Result<String, String> {
     Ok(easytier::VERSION.to_string())
 }

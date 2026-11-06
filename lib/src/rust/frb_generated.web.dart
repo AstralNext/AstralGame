@@ -10,7 +10,6 @@ import 'api/firewall.dart';
 import 'api/forward.dart';
 import 'api/magic_wall.dart';
 import 'api/multicast.dart';
-import 'api/nt.dart';
 import 'api/p2p.dart';
 import 'api/process.dart';
 import 'api/steam.dart';
@@ -198,9 +197,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<LanGameDiscovery> dco_decode_list_lan_game_discovery(dynamic raw);
-
-  @protected
-  List<MagicWallRule> dco_decode_list_magic_wall_rule(dynamic raw);
 
   @protected
   List<NodeHopStats> dco_decode_list_node_hop_stats(dynamic raw);
@@ -434,11 +430,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<LanGameDiscovery> sse_decode_list_lan_game_discovery(
-    SseDeserializer deserializer,
-  );
-
-  @protected
-  List<MagicWallRule> sse_decode_list_magic_wall_rule(
     SseDeserializer deserializer,
   );
 
@@ -735,12 +726,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_lan_game_discovery(
     List<LanGameDiscovery> self,
-    SseSerializer serializer,
-  );
-
-  @protected
-  void sse_encode_list_magic_wall_rule(
-    List<MagicWallRule> self,
     SseSerializer serializer,
   );
 

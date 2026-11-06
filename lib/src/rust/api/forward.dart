@@ -9,7 +9,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 // These functions are ignored because they are not marked as `pub`: `handle_connection`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `FORWARD_RT`, `FORWARD_SERVERS`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `deref`, `deref`, `initialize`, `initialize`
-// These functions are ignored (category: IgnoreBecauseExplicitAttribute): `new`
+// These functions are ignored (category: IgnoreBecauseExplicitAttribute): `get_forward_server_count`, `is_forward_server_running`, `new`
 
 /// 创建并启动一个端口转发服务器
 /// 返回服务器索引，用于后续操作
@@ -33,14 +33,6 @@ Future<void> stopAllForwardServers() =>
 Future<(BigInt, BigInt, BigInt)> getForwardServerStats({
   required BigInt index,
 }) => RustLib.instance.api.crateApiForwardGetForwardServerStats(index: index);
-
-/// 获取所有正在运行的服务器数量
-Future<BigInt> getForwardServerCount() =>
-    RustLib.instance.api.crateApiForwardGetForwardServerCount();
-
-/// 检查指定服务器是否正在运行
-Future<bool> isForwardServerRunning({required BigInt index}) =>
-    RustLib.instance.api.crateApiForwardIsForwardServerRunning(index: index);
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<ForwardServer>>
 abstract class ForwardServer implements RustOpaqueInterface {

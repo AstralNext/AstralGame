@@ -22,13 +22,10 @@ pub struct ServerStats {
     bytes_received: Arc<AtomicU64>,
 }
 
-impl Default for ServerStats {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl ServerStats {
+    // 不实现 Default：该类型只作为 opaque 句柄在 Rust 内部构造，
+    // 实现 Default 会让 FRB 额外导出一个无意义的 `default_()` FFI。
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self {
             connections: Arc::new(AtomicUsize::new(0)),
@@ -244,6 +241,8 @@ pub fn get_forward_server_stats(index: usize) -> Result<(usize, u64, u64), Strin
 }
 
 /// 获取所有正在运行的服务器数量
+// 仅供 Rust 内部/调试使用：Dart 侧无任何调用方，不再导出到 FFI。
+#[frb(ignore)]
 pub fn get_forward_server_count() -> usize {
     FORWARD_RT.block_on(async move {
         let servers = FORWARD_SERVERS.lock().await;
@@ -252,6 +251,8 @@ pub fn get_forward_server_count() -> usize {
 }
 
 /// 检查指定服务器是否正在运行
+// 仅供 Rust 内部/调试使用：Dart 侧无任何调用方，不再导出到 FFI。
+#[frb(ignore)]
 pub fn is_forward_server_running(index: usize) -> bool {
     FORWARD_RT.block_on(async move {
         let servers = FORWARD_SERVERS.lock().await;

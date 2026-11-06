@@ -9,7 +9,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 // These functions are ignored because they are not marked as `pub`: `bind_udp_reuse`, `extract_tag`, `is_own_inject_payload`, `is_own_source`, `local_ipv4_set`, `now_unix_ms`, `parse_lan_payload`, `parse_minecraft_motd`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `LAN_DISCOVERIES`, `LAN_LISTENERS`, `LanGameListener`, `MULTICAST_RT`, `MULTICAST_SENDERS`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `deref`, `deref`, `deref`, `deref`, `initialize`, `initialize`, `initialize`, `initialize`
-// These functions are ignored (category: IgnoreBecauseExplicitAttribute): `new`, `with_bind_addr`
+// These functions are ignored (category: IgnoreBecauseExplicitAttribute): `create_multicast_sender_with_bind`, `get_multicast_sender_count`, `is_multicast_sender_running`, `new`, `with_bind_addr`
 
 /// 创建并启动一个组播发送器
 /// 返回发送器索引，用于后续操作
@@ -25,21 +25,6 @@ Future<BigInt> createMulticastSender({
   intervalMs: intervalMs,
 );
 
-/// 创建并启动一个组播发送器（带自定义绑定地址）
-Future<BigInt> createMulticastSenderWithBind({
-  required String multicastAddr,
-  required int port,
-  required String bindAddr,
-  required List<int> data,
-  required BigInt intervalMs,
-}) => RustLib.instance.api.crateApiMulticastCreateMulticastSenderWithBind(
-  multicastAddr: multicastAddr,
-  port: port,
-  bindAddr: bindAddr,
-  data: data,
-  intervalMs: intervalMs,
-);
-
 /// 停止指定索引的组播发送器
 Future<void> stopMulticastSender({required BigInt index}) =>
     RustLib.instance.api.crateApiMulticastStopMulticastSender(index: index);
@@ -47,16 +32,6 @@ Future<void> stopMulticastSender({required BigInt index}) =>
 /// 停止所有组播发送器
 Future<void> stopAllMulticastSenders() =>
     RustLib.instance.api.crateApiMulticastStopAllMulticastSenders();
-
-/// 获取所有正在运行的组播发送器数量
-Future<BigInt> getMulticastSenderCount() =>
-    RustLib.instance.api.crateApiMulticastGetMulticastSenderCount();
-
-/// 检查指定发送器是否正在运行
-Future<bool> isMulticastSenderRunning({required BigInt index}) => RustLib
-    .instance
-    .api
-    .crateApiMulticastIsMulticastSenderRunning(index: index);
 
 /// 启动通用 UDP 组播监听；`parser` 决定如何从载荷提取游戏端口。
 ///
@@ -69,15 +44,6 @@ Future<BigInt> startUdpMulticastLanListener({
   multicastAddr: multicastAddr,
   port: port,
   parser: parser,
-);
-
-/// 兼容旧名：MC MOTD 组播监听。
-Future<BigInt> startMinecraftLanListener({
-  required String multicastAddr,
-  required int port,
-}) => RustLib.instance.api.crateApiMulticastStartMinecraftLanListener(
-  multicastAddr: multicastAddr,
-  port: port,
 );
 
 /// 拉取当前发现到的本机开放游戏（自动丢掉 20s 未再见的条目）。
