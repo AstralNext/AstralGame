@@ -1,16 +1,12 @@
 import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/config/theme.dart';
-import 'package:astral_game/data/models/game_catalog.dart';
 import 'package:astral_game/data/services/connection_service.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
 import 'package:astral_game/data/state/room_state.dart';
-import 'package:astral_game/data/state/settings_state.dart';
 import 'package:astral_game/di.dart';
 import 'package:astral_game/ui/widgets/dashboard_home_panel.dart';
-import 'package:astral_game/ui/widgets/dashboard_members_skeleton.dart';
+import 'package:astral_game/ui/widgets/room_members_section.dart';
 import 'package:astral_game/ui/widgets/room_open_games_panel.dart';
-import 'package:astral_game/ui/widgets/section_header.dart';
-import 'package:astral_game/ui/widgets/user_list_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:signals/signals_flutter.dart';
 
@@ -81,8 +77,6 @@ class _MembersPane extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.astralPalette;
-    final textTheme = Theme.of(context).textTheme;
-    final settingsState = getIt<SettingsState>();
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -97,73 +91,9 @@ class _MembersPane extends StatelessWidget {
           AppDimensions.space16,
           AppDimensions.space12,
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Watch((context) {
-              final session = roomState.session.value;
-              final game = session == null
-                  ? null
-                  : GameCatalog.byId(session.gameId);
-              final title = [
-                if (game != null) game.displayName,
-                '成员',
-              ].join(' · ');
-              final nodes = nodeManagement.userNodes.value;
-              final compact = settingsState.memberListCompact.value;
-              return SectionHeader(
-                title: title,
-                count: nodes.isEmpty ? null : nodes.length,
-                tone: SectionHeaderTone.accent,
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      compact ? '简洁' : '详细',
-                      style: textTheme.labelSmall?.copyWith(
-                        color: palette.textTertiary,
-                      ),
-                    ),
-                    const SizedBox(width: AppDimensions.space4),
-                    Switch.adaptive(
-                      value: compact,
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      onChanged: (value) {
-                        settingsState.memberListCompact.value = value;
-                        settingsState.saveToPersistence();
-                      },
-                    ),
-                  ],
-                ),
-              );
-            }),
-            const SizedBox(height: AppDimensions.space12),
-            Expanded(
-              child: Watch(
-                (context) {
-                  // 无条件读取，确保 computed 始终订阅成员列表。
-                  final nodes = nodeManagement.userNodes.value;
-                  final compact = settingsState.memberListCompact.value;
-                  if (nodes.isEmpty) {
-                    return const DashboardMembersSkeleton();
-                  }
-                  return UserListWidget(
-                    users: nodes,
-                    nodeManagement: nodeManagement,
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    compact: compact,
-                    isLocalOf: (node) =>
-                        nodeManagement.isLocalPeer(node.peerId),
-                  );
-                },
-                dependencies: [
-                  nodeManagement.userNodes,
-                  nodeManagement.currentInstanceId,
-                  settingsState.memberListCompact,
-                ],
-              ),
-            ),
-          ],
+        child: RoomMembersPanel(
+          roomState: roomState,
+          nodeManagement: nodeManagement,
         ),
       ),
     );

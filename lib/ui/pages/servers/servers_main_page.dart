@@ -69,12 +69,8 @@ class _ServersMainPageState extends State<ServersMainPage> {
     }
   }
 
-  Color _getLatencyColor(int latencyMs) {
-    final palette = context.astralPalette;
-    if (latencyMs <= 80) return palette.online;
-    if (latencyMs <= 160) return palette.warning;
-    return palette.error;
-  }
+  Color _getLatencyColor(int latencyMs) =>
+      latencyColor(context.astralPalette, latencyMs.toDouble());
 
   String _statusLabel(ServerStatus status) {
     switch (status) {

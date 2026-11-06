@@ -78,12 +78,8 @@ class _DashboardUserItemState extends State<DashboardUserItem> {
     );
   }
 
-  Color _latencyColor(double latencyMs) {
-    final palette = context.astralPalette;
-    if (latencyMs < 100) return palette.online;
-    if (latencyMs < 300) return palette.warning;
-    return palette.error;
-  }
+  Color _latencyColor(double latencyMs) =>
+      latencyColor(context.astralPalette, latencyMs);
 
   Future<void> _copyIp(
     BuildContext context, {

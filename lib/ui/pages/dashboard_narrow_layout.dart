@@ -1,17 +1,12 @@
 import 'package:astral_game/config/app_dimensions.dart';
-import 'package:astral_game/config/theme.dart';
-import 'package:astral_game/data/models/game_catalog.dart';
 import 'package:astral_game/data/services/connection_service.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
 import 'package:astral_game/data/services/open_games_service.dart';
 import 'package:astral_game/data/state/room_state.dart';
-import 'package:astral_game/data/state/settings_state.dart';
 import 'package:astral_game/di.dart';
-import 'package:astral_game/ui/pages/dashboard_user_item.dart';
 import 'package:astral_game/ui/widgets/dashboard_home_panel.dart';
-import 'package:astral_game/ui/widgets/dashboard_members_skeleton.dart';
+import 'package:astral_game/ui/widgets/room_members_section.dart';
 import 'package:astral_game/ui/widgets/room_open_games_panel.dart';
-import 'package:astral_game/ui/widgets/section_header.dart';
 import 'package:flutter/material.dart';
 import 'package:signals/signals_flutter.dart';
 
@@ -108,7 +103,7 @@ class DashboardNarrowLayout extends StatelessWidget {
               AppDimensions.pagePaddingH,
               AppDimensions.listBottomWithNav(context),
             ),
-            sliver: _MembersBlock(
+            sliver: RoomMembersSliver(
               roomState: roomState,
               nodeManagement: nodeManagement,
             ),
@@ -177,92 +172,5 @@ class _NarrowOpenGamesSlot extends StatelessWidget {
         ),
       );
     });
-  }
-}
-
-class _MembersBlock extends StatelessWidget {
-  const _MembersBlock({required this.roomState, required this.nodeManagement});
-
-  final RoomState roomState;
-  final NodeManagementService nodeManagement;
-
-  @override
-  Widget build(BuildContext context) {
-    return Watch(
-      (context) {
-        final session = roomState.session.value;
-        final game = session == null ? null : GameCatalog.byId(session.gameId);
-        final title = [if (game != null) game.displayName, '成员'].join(' · ');
-        final nodes = nodeManagement.userNodes.value;
-        final theme = Theme.of(context).textTheme;
-        final palette = context.astralPalette;
-        final settingsState = getIt<SettingsState>();
-        final compact = settingsState.memberListCompact.value;
-
-        // 第 0 项：标题行；1..N：用户项。SliverList.builder 懒构建。
-        return SliverList.builder(
-          itemCount: nodes.isEmpty ? 1 : nodes.length + 1,
-          itemBuilder: (context, index) {
-            if (index == 0) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  SectionHeader(
-                    title: title,
-                    count: nodes.isEmpty ? null : nodes.length,
-                    tone: SectionHeaderTone.accent,
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          compact ? '简洁' : '详细',
-                          style: theme.labelSmall?.copyWith(
-                            color: palette.textTertiary,
-                          ),
-                        ),
-                        const SizedBox(width: AppDimensions.space4),
-                        Switch.adaptive(
-                          value: compact,
-                          materialTapTargetSize:
-                              MaterialTapTargetSize.shrinkWrap,
-                          onChanged: (value) {
-                            settingsState.memberListCompact.value = value;
-                            settingsState.saveToPersistence();
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: AppDimensions.space8),
-                  if (nodes.isEmpty) const DashboardMembersSkeleton(),
-                ],
-              );
-            }
-
-            final i = index - 1;
-            final node = nodes[i];
-            return Column(
-              children: [
-                if (i > 0) const Divider(height: 1, indent: 72),
-                DashboardUserItem(
-                  key: ValueKey<int>(node.peerId),
-                  node: node,
-                  nodeManagement: nodeManagement,
-                  grouped: true,
-                  index: i,
-                  count: nodes.length,
-                  isLocal: nodeManagement.isLocalPeer(node.peerId),
-                  compact: compact,
-                ),
-              ],
-            );
-          },
-        );
-      },
-      dependencies: [
-        nodeManagement.userNodes,
-        nodeManagement.currentInstanceId,
-      ],
-    );
   }
 }

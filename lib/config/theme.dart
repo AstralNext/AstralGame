@@ -30,6 +30,22 @@ abstract final class AppInteraction {
   static const disabledOpacity = 0.5;
 }
 
+/// 延迟配色阈值（毫秒），全站统一，避免同一成员在服务器页与房间页一绿一黄。
+abstract final class LatencyTone {
+  /// ≤ 该值为绿色（良好）。
+  static const double goodMs = 80;
+
+  /// ≤ 该值为黄色（一般）；超过为红色（较差）。
+  static const double fairMs = 160;
+}
+
+/// 按 [LatencyTone] 把延迟映射成语义色。
+Color latencyColor(AppThemePalette palette, double latencyMs) {
+  if (latencyMs <= LatencyTone.goodMs) return palette.online;
+  if (latencyMs <= LatencyTone.fairMs) return palette.warning;
+  return palette.error;
+}
+
 /// 主题切换与水滴揭示动画参数。
 abstract final class AppThemeAnimation {
   static const revealCurve = Curves.easeOutCubic;
