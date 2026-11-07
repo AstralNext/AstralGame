@@ -86,6 +86,28 @@ pub struct SteamLobbyInfo {
     pub joinable: bool,
 }
 
+/// 组网诊断快照：双机验收时用来确认大厅与隔离字段的真实值。
+#[derive(Clone, Default)]
+pub struct SteamLobbyDiag {
+    /// 当前大厅 id；未建房时为空。
+    pub lobby_id: String,
+    /// 从 Steam 大厅 data 读回的 `ag_game` 实际值。
+    pub game_id: String,
+    /// 从 Steam 大厅 data 读回的 `ag_ver` 实际值。
+    pub version: String,
+    /// 从 Steam 大厅 data 读回的 `ag_gate` 实际值。
+    pub gate: String,
+    pub joinable: bool,
+    pub members: u32,
+    pub capacity: u32,
+    /// 是否房主。
+    pub is_host: bool,
+    /// Steam 覆盖层是否开启（决定原生邀请面板是否可用）。
+    pub overlay_enabled: bool,
+    /// 覆盖层不可用时的说明；可用时为空。
+    pub overlay_hint: String,
+}
+
 /// 当前 Steam 组网房间信息。
 #[derive(Clone, Default)]
 pub struct SteamRoomInfo {
@@ -285,10 +307,56 @@ pub async fn steam_lobby_set_joinable(joinable: bool) -> Result<(), String> {
 }
 
 /// 打开 Steam 原生好友邀请界面。
-pub async fn steam_lobby_invite_dialog() -> Result<(), String> {
+///
+/// 覆盖层被禁用时不会静默调用，直接返回可展示给用户的失败原因。
+pub async fn steam_lobby_invite_dialog() -> Result<String, String> {
     #[cfg(target_os = "windows")]
     {
         steam_tunnel::invite_dialog().await
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(unsupported())
+    }
+}
+
+/// 直接邀请指定好友进入当前大厅（不依赖覆盖层）。
+///
+/// 返回成功文案只代表 Steam 受理了请求，不代表对方已收到或接受。
+pub async fn steam_lobby_invite_friend(friend_steam_id: String) -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let friend = friend_steam_id
+            .trim()
+            .parse::<u64>()
+            .map_err(|_| "无效的 SteamID".to_string())?;
+        steam_tunnel::invite_friend(friend).await
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = friend_steam_id;
+        Err(unsupported())
+    }
+}
+
+/// 组网诊断：大厅 id、`ag_*` 实际值、可加入状态、人数与覆盖层状态。
+pub async fn steam_lobby_diag() -> Result<SteamLobbyDiag, String> {
+    #[cfg(target_os = "windows")]
+    {
+        steam_tunnel::lobby_diag().await
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(unsupported())
+    }
+}
+
+/// 诊断用：把引擎切到客人分支，注入一个「房主已离线超过宽限期」的成员并跑
+/// 真实 `prune`，验证客人侧宽限过滤。需要 `ASTRAL_STEAM_DEBUG=1`。
+pub async fn steam_debug_guest_roster_probe() -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        steam_tunnel::debug_guest_roster_probe().await
     }
     #[cfg(not(target_os = "windows"))]
     {

@@ -29,7 +29,9 @@ use super::proto::{self, Frame, RosterEntry};
 use super::roster_policy::{self, MemberView};
 use super::tun::{self, TunRoom};
 use crate::api::p2p::{AppCallResultC, AppInboundEventC, AppInboundKindC};
-use crate::api::steam::{SteamLobbyInfo, SteamMemberInfo, SteamRoomInfo, SteamStatusInfo};
+use crate::api::steam::{
+    SteamLobbyDiag, SteamLobbyInfo, SteamMemberInfo, SteamRoomInfo, SteamStatusInfo,
+};
 use crate::frb_generated::StreamSink;
 
 /// 初始化失败后的重试间隔：避免设置页轮询把失败刷成忙等。
@@ -86,6 +88,10 @@ enum Cmd {
     DebugGhost {
         reply: oneshot::Sender<Result<String, String>>,
     },
+    /// 诊断用：切到客人分支，注入离线超宽限期的房主并跑真实 prune。
+    DebugGuestRoster {
+        reply: oneshot::Sender<Result<String, String>>,
+    },
     LobbyLeave {
         reply: oneshot::Sender<Result<(), String>>,
     },
@@ -94,7 +100,16 @@ enum Cmd {
         reply: oneshot::Sender<Result<(), String>>,
     },
     LobbyInviteDialog {
-        reply: oneshot::Sender<Result<(), String>>,
+        reply: oneshot::Sender<Result<String, String>>,
+    },
+    /// 直接邀请指定好友进大厅（不依赖覆盖层）。
+    LobbyInviteFriend {
+        friend_steam_id: u64,
+        reply: oneshot::Sender<Result<String, String>>,
+    },
+    /// 组网诊断快照。
+    LobbyDiag {
+        reply: oneshot::Sender<Result<SteamLobbyDiag, String>>,
     },
     Stop,
     AppCall {
@@ -522,12 +537,42 @@ pub(crate) async fn set_lobby_joinable(joinable: bool) -> Result<(), String> {
 
 /// 打开 Steam 原生好友邀请界面。
 ///
-/// vendored `steamworks` 没有 `InviteUserToLobby` 封装，这里是首版唯一可用的
-/// 程序入口：依赖 Steam overlay，无法程序化选择好友，也拿不到邀请状态。
-pub(crate) async fn invite_dialog() -> Result<(), String> {
+/// 覆盖层未开启时 `activate_invite_dialog` 没有任何可见效果，因此引擎会先
+/// 检查 `IsOverlayEnabled`，不可用直接返回可展示给用户的失败原因。
+pub(crate) async fn invite_dialog() -> Result<String, String> {
     let tx = tx_handle()?;
     let (reply_tx, reply_rx) = oneshot::channel();
     tx.send(Cmd::LobbyInviteDialog { reply: reply_tx })
+        .map_err(|e| format!("Steam 线程不可用: {e}"))?;
+    await_lobby(reply_rx, Duration::from_secs(5)).await
+}
+
+/// 直接邀请指定好友进入当前大厅（不依赖覆盖层）。
+pub(crate) async fn invite_friend(friend_steam_id: u64) -> Result<String, String> {
+    let tx = tx_handle()?;
+    let (reply_tx, reply_rx) = oneshot::channel();
+    tx.send(Cmd::LobbyInviteFriend {
+        friend_steam_id,
+        reply: reply_tx,
+    })
+    .map_err(|e| format!("Steam 线程不可用: {e}"))?;
+    await_lobby(reply_rx, Duration::from_secs(5)).await
+}
+
+/// 组网诊断快照。
+pub(crate) async fn lobby_diag() -> Result<SteamLobbyDiag, String> {
+    let tx = tx_handle()?;
+    let (reply_tx, reply_rx) = oneshot::channel();
+    tx.send(Cmd::LobbyDiag { reply: reply_tx })
+        .map_err(|e| format!("Steam 线程不可用: {e}"))?;
+    await_lobby(reply_rx, Duration::from_secs(5)).await
+}
+
+/// 诊断用：客人侧宽限过滤（注入房主离线超宽限期，跑真实 prune）。
+pub(crate) async fn debug_guest_roster_probe() -> Result<String, String> {
+    let tx = tx_handle()?;
+    let (reply_tx, reply_rx) = oneshot::channel();
+    tx.send(Cmd::DebugGuestRoster { reply: reply_tx })
         .map_err(|e| format!("Steam 线程不可用: {e}"))?;
     await_lobby(reply_rx, Duration::from_secs(5)).await
 }
@@ -696,6 +741,8 @@ struct Engine {
 
     /// 当前所在的 Steam 大厅；关房时必须先 `set_lobby_joinable(false)` 再离开。
     lobby_id: Option<u64>,
+    /// 自己最后一次设置的可加入状态（Steam 没有读取接口，诊断用）。
+    lobby_joinable: bool,
     lobby_cache: lobby::LobbyCache,
     lobby_tx: mpsc::Sender<LobbyEvent>,
     lobby_rx: mpsc::Receiver<LobbyEvent>,
@@ -810,6 +857,7 @@ impl Engine {
             nickname: String::new(),
             game_id: String::new(),
             lobby_id: None,
+            lobby_joinable: false,
             lobby_cache: lobby::LobbyCache::default(),
             lobby_tx,
             lobby_rx,
@@ -911,6 +959,9 @@ impl Engine {
                     .client
                     .matchmaking()
                     .set_lobby_joinable(LobbyId::from_raw(lobby_id), joinable);
+                if ok {
+                    self.lobby_joinable = joinable;
+                }
                 debug_log(
                     "lobby_set_joinable",
                     format!("lobby={lobby_id} joinable={joinable} ok={ok}"),
@@ -926,11 +977,56 @@ impl Engine {
                     let _ = reply.send(Err("当前没有 Steam 大厅".to_string()));
                     return;
                 };
+                let overlay = self.client.utils().is_overlay_enabled();
+                debug_log(
+                    "lobby_invite_dialog",
+                    format!("lobby={lobby_id} overlay={overlay} called={overlay}"),
+                );
+                if !overlay {
+                    // 覆盖层不可用时 activate_invite_dialog 不会有任何可见效果，
+                    // 与其静默调用，不如明确告诉用户原因和替代路径。
+                    let _ = reply.send(Err(
+                        "需要开启 Steam 覆盖层才能邀请好友（Steam → 设置 → 游戏中 → 启用 Steam 覆盖层）。\
+                         也可以让好友用「加入 → 搜索房间」进入。"
+                            .to_string(),
+                    ));
+                    return;
+                }
                 self.client
                     .friends()
                     .activate_invite_dialog(LobbyId::from_raw(lobby_id));
-                debug_log("lobby_invite_dialog", format!("lobby={lobby_id}"));
-                let _ = reply.send(Ok(()));
+                let _ = reply.send(Ok(
+                    "已请求唤起 Steam 邀请面板（只打开面板，不代表已发送邀请）".to_string()
+                ));
+            }
+            Cmd::LobbyInviteFriend {
+                friend_steam_id,
+                reply,
+            } => {
+                let Some(lobby_id) = self.lobby_id else {
+                    let _ = reply.send(Err("当前没有 Steam 大厅".to_string()));
+                    return;
+                };
+                let accepted = self.client.matchmaking().invite_user_to_lobby(
+                    LobbyId::from_raw(lobby_id),
+                    SteamId::from_raw(friend_steam_id),
+                );
+                debug_log(
+                    "lobby_invite_friend",
+                    format!("lobby={lobby_id} friend={friend_steam_id} accepted={accepted}"),
+                );
+                let _ = reply.send(if accepted {
+                    Ok("Steam 已受理大厅邀请；对方是否可见取决于在线状态与好友关系".to_string())
+                } else {
+                    Err("Steam 未受理该邀请：请确认对方在好友列表中，或改用邀请面板 / 搜索房间"
+                        .to_string())
+                });
+            }
+            Cmd::LobbyDiag { reply } => {
+                let _ = reply.send(self.lobby_diag());
+            }
+            Cmd::DebugGuestRoster { reply } => {
+                let _ = reply.send(self.debug_guest_roster_probe());
             }
             Cmd::Stop => self.shutdown_room("Steam 组网已停止"),
             Cmd::AppCall {
@@ -1086,14 +1182,23 @@ impl Engine {
             return;
         };
         let mm = self.client.matchmaking();
-        mm.set_lobby_list_filter(LobbyListFilter {
-            string: Some(vec![StringFilter(
-                LobbyKey::new(lobby::KEY_GAME),
-                game_id.as_str(),
-                StringFilterKind::Equal,
-            )]),
-            ..Default::default()
-        });
+        // 测试开关：Steam 端 `ag_game` 过滤正常时，本地二次校验永远筛不掉东西，
+        // 等于没被执行过。置位后不加服务端过滤，让所有大厅都进本地校验。
+        let force_local = std::env::var("ASTRAL_STEAM_FORCE_LOCAL_VALIDATE")
+            .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
+            .unwrap_or(false);
+        if force_local {
+            mm.set_lobby_list_filter(LobbyListFilter::default());
+        } else {
+            mm.set_lobby_list_filter(LobbyListFilter {
+                string: Some(vec![StringFilter(
+                    LobbyKey::new(lobby::KEY_GAME),
+                    game_id.as_str(),
+                    StringFilterKind::Equal,
+                )]),
+                ..Default::default()
+            });
+        }
         let tx = self.lobby_tx.clone();
         mm.request_lobby_list(move |res| {
             let mapped = res
@@ -1101,7 +1206,10 @@ impl Engine {
                 .map_err(|e| format!("搜索 Steam 大厅失败: {e:?}"));
             let _ = tx.send(LobbyEvent::Listed(mapped));
         });
-        debug_log("lobby_search_start", format!("game={game_id}"));
+        debug_log(
+            "lobby_search_start",
+            format!("game={game_id} force_local={force_local}"),
+        );
         self.pending_lobby = Some(PendingLobby {
             op: LobbyOp::Search { game_id },
             reply: LobbyReply::Many(reply),
@@ -1241,6 +1349,7 @@ impl Engine {
                 mm.set_lobby_data(lid, lobby::KEY_HOST, &host_id);
                 mm.set_lobby_data(lid, lobby::KEY_PLAYERS, &players);
                 let joinable = mm.set_lobby_joinable(lid, true);
+                self.lobby_joinable = joinable;
                 let readback = mm.lobby_data(lid, lobby::KEY_GAME).unwrap_or_default();
                 let ver_readback = mm.lobby_data(lid, lobby::KEY_VER).unwrap_or_default();
                 let gate_readback = mm.lobby_data(lid, lobby::KEY_GATE).unwrap_or_default();
@@ -1624,6 +1733,7 @@ impl Engine {
             let lid = LobbyId::from_raw(lobby_id);
             let mm = self.client.matchmaking();
             let hidden = mm.set_lobby_joinable(lid, false);
+            self.lobby_joinable = false;
             mm.leave_lobby(lid);
             debug_log(
                 "lobby_leave",
@@ -2568,6 +2678,106 @@ impl Engine {
         Ok(format!(
             "幽灵成员已摘除：成员数 {injected}（含注入）-> {after}，roster={}",
             self.roster.len()
+        ))
+    }
+
+    /// 组网诊断快照：一次性给出大厅 id、`ag_*` 实读值、可加入状态、成员数与
+    /// 覆盖层状态，双机验收时直接核对这些值。
+    ///
+    /// Steam 没有读取 joinable 的接口，这里回放本机最后一次写入的值。
+    fn lobby_diag(&self) -> Result<SteamLobbyDiag, String> {
+        let overlay = self.client.utils().is_overlay_enabled();
+        let overlay_hint = if overlay {
+            String::new()
+        } else {
+            "Steam 覆盖层未开启：原生邀请面板不可用，可用好友 SteamID 直接邀请或搜索房间"
+                .to_string()
+        };
+        let Some(lobby_id) = self.lobby_id else {
+            return Ok(SteamLobbyDiag {
+                overlay_enabled: overlay,
+                overlay_hint,
+                ..Default::default()
+            });
+        };
+        let mm = self.client.matchmaking();
+        let lid = LobbyId::from_raw(lobby_id);
+        let game = mm.lobby_data(lid, lobby::KEY_GAME).unwrap_or_default();
+        let version = mm.lobby_data(lid, lobby::KEY_VER).unwrap_or_default();
+        let gate = mm.lobby_data(lid, lobby::KEY_GATE).unwrap_or_default();
+        let members = mm.lobby_member_count(lid) as u32;
+        let capacity = mm.lobby_member_limit(lid).unwrap_or(0) as u32;
+        debug_log(
+            "lobby_diag",
+            format!(
+                "lobby={lobby_id} game={game} ver={version} gate={gate} joinable={} \
+                 members={members}/{capacity} overlay={overlay}",
+                self.lobby_joinable
+            ),
+        );
+        Ok(SteamLobbyDiag {
+            lobby_id: lobby_id.to_string(),
+            game_id: game,
+            version,
+            gate,
+            joinable: self.lobby_joinable,
+            members,
+            capacity,
+            is_host: self.role == Role::Host,
+            overlay_enabled: overlay,
+            overlay_hint,
+        })
+    }
+
+    /// 诊断用：把引擎临时切到客人分支，注入一个「房主已离线超过宽限期」的
+    /// 条目并跑一次真实的 [`Engine::prune`]，确认客人侧宽限过滤会清空 roster。
+    ///
+    /// 只在 `ASTRAL_STEAM_DEBUG=1` 时由 Dart 侧按钮触发；结束后恢复原状态。
+    fn debug_guest_roster_probe(&mut self) -> Result<String, String> {
+        if !*STEAM_DEBUG {
+            return Err("需要 ASTRAL_STEAM_DEBUG=1 才能运行诊断".to_string());
+        }
+        let saved_role = self.role;
+        let saved_roster = std::mem::take(&mut self.roster);
+        let saved_offline = std::mem::take(&mut self.guest_offline_since);
+
+        let host_sid = 76561190000000002u64;
+        let expired = Instant::now() - roster_policy::OFFLINE_GRACE - Duration::from_secs(1);
+        self.role = Role::Guest;
+        self.roster = vec![RosterEntry {
+            peer_id: 1,
+            steam_id: host_sid,
+            nickname: "ghost-host".to_string(),
+            vip: proto::HOST_VIP,
+            online: false,
+            is_host: true,
+            latency_ms: 0,
+            via_relay: false,
+            bytes_in: 0,
+            bytes_out: 0,
+        }];
+        let before = self.roster.len();
+        self.guest_offline_since.insert(host_sid, expired);
+        self.prune();
+        let after = self.roster.len();
+        let removed = self.roster.iter().all(|e| e.steam_id != host_sid);
+        debug_log(
+            "debug_guest_roster_probe",
+            format!("before={before} after={after} removed={removed}"),
+        );
+
+        // 恢复真实状态，诊断不能污染正在进行的房间。
+        self.role = saved_role;
+        self.roster = saved_roster;
+        self.guest_offline_since = saved_offline;
+
+        if !removed || after != 0 {
+            return Err(format!(
+                "诊断失败：客人侧宽限过滤未清空 roster（{before} -> {after}）"
+            ));
+        }
+        Ok(format!(
+            "客人侧宽限过滤生效：房主离线超宽限期后 roster {before} -> {after}，已清空"
         ))
     }
 

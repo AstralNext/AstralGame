@@ -238,6 +238,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   (BigInt, BigInt, BigInt) dco_decode_record_usize_u_64_u_64(dynamic raw);
 
   @protected
+  SteamLobbyDiag dco_decode_steam_lobby_diag(dynamic raw);
+
+  @protected
   SteamLobbyInfo dco_decode_steam_lobby_info(dynamic raw);
 
   @protected
@@ -485,6 +488,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   (BigInt, BigInt, BigInt) sse_decode_record_usize_u_64_u_64(
     SseDeserializer deserializer,
   );
+
+  @protected
+  SteamLobbyDiag sse_decode_steam_lobby_diag(SseDeserializer deserializer);
 
   @protected
   SteamLobbyInfo sse_decode_steam_lobby_info(SseDeserializer deserializer);
@@ -806,6 +812,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_record_usize_u_64_u_64(
     (BigInt, BigInt, BigInt) self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_steam_lobby_diag(
+    SteamLobbyDiag self,
     SseSerializer serializer,
   );
 

@@ -16,9 +16,9 @@ mod roster_policy;
 pub(crate) mod tun;
 
 pub(crate) use engine::{
-    app_call, app_notify, app_reply, clear_pending_lobby_invite, create_lobby, debug_ghost_probe,
-    invite_dialog,
-    join_lobby, leave_lobby, my_peer_id, peek_lobby, peer_pending_lobby_invite, peer_ping,
+    app_call, app_notify, app_reply, clear_pending_lobby_invite, create_lobby,
+    debug_ghost_probe, debug_guest_roster_probe, invite_dialog, invite_friend, join_lobby,
+    leave_lobby, lobby_diag, my_peer_id, peek_lobby, peer_pending_lobby_invite, peer_ping,
     room_info, search, set_lobby_joinable, start, status, stop, subscribe_app_inbound,
     subscribe_status,
 };

@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 import 'p2p.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`
 
 /// 读取当前 Steam 状态；首次调用会拉起后台线程。
 Future<SteamStatusInfo> steamStatus() =>
@@ -90,8 +90,27 @@ Future<void> steamLobbySetJoinable({required bool joinable}) =>
     RustLib.instance.api.crateApiSteamSteamLobbySetJoinable(joinable: joinable);
 
 /// 打开 Steam 原生好友邀请界面。
-Future<void> steamLobbyInviteDialog() =>
+///
+/// 覆盖层被禁用时不会静默调用，直接返回可展示给用户的失败原因。
+Future<String> steamLobbyInviteDialog() =>
     RustLib.instance.api.crateApiSteamSteamLobbyInviteDialog();
+
+/// 直接邀请指定好友进入当前大厅（不依赖覆盖层）。
+///
+/// 返回成功文案只代表 Steam 受理了请求，不代表对方已收到或接受。
+Future<String> steamLobbyInviteFriend({required String friendSteamId}) =>
+    RustLib.instance.api.crateApiSteamSteamLobbyInviteFriend(
+      friendSteamId: friendSteamId,
+    );
+
+/// 组网诊断：大厅 id、`ag_*` 实际值、可加入状态、人数与覆盖层状态。
+Future<SteamLobbyDiag> steamLobbyDiag() =>
+    RustLib.instance.api.crateApiSteamSteamLobbyDiag();
+
+/// 诊断用：把引擎切到客人分支，注入一个「房主已离线超过宽限期」的成员并跑
+/// 真实 `prune`，验证客人侧宽限过滤。需要 `ASTRAL_STEAM_DEBUG=1`。
+Future<String> steamDebugGuestRosterProbe() =>
+    RustLib.instance.api.crateApiSteamSteamDebugGuestRosterProbe();
 
 /// 读取待处理的好友邀请大厅 id（Dart 侧轮询）。
 Future<String?> steamPendingLobbyInvite() =>
@@ -161,6 +180,78 @@ Future<PlatformInt64> steamPeerPing({
 /// 订阅入站应用 RPC 事件。
 Stream<AppInboundEventC> steamSubscribeAppInbound() =>
     RustLib.instance.api.crateApiSteamSteamSubscribeAppInbound();
+
+/// 组网诊断快照：双机验收时用来确认大厅与隔离字段的真实值。
+class SteamLobbyDiag {
+  const SteamLobbyDiag({
+    required this.lobbyId,
+    required this.gameId,
+    required this.version,
+    required this.gate,
+    required this.joinable,
+    required this.members,
+    required this.capacity,
+    required this.isHost,
+    required this.overlayEnabled,
+    required this.overlayHint,
+  });
+
+  /// 当前大厅 id；未建房时为空。
+  final String lobbyId;
+
+  /// 从 Steam 大厅 data 读回的 `ag_game` 实际值。
+  final String gameId;
+
+  /// 从 Steam 大厅 data 读回的 `ag_ver` 实际值。
+  final String version;
+
+  /// 从 Steam 大厅 data 读回的 `ag_gate` 实际值。
+  final String gate;
+  final bool joinable;
+  final int members;
+  final int capacity;
+
+  /// 是否房主。
+  final bool isHost;
+
+  /// Steam 覆盖层是否开启（决定原生邀请面板是否可用）。
+  final bool overlayEnabled;
+
+  /// 覆盖层不可用时的说明；可用时为空。
+  final String overlayHint;
+
+  static Future<SteamLobbyDiag> default_() =>
+      RustLib.instance.api.crateApiSteamSteamLobbyDiagDefault();
+
+  @override
+  int get hashCode =>
+      lobbyId.hashCode ^
+      gameId.hashCode ^
+      version.hashCode ^
+      gate.hashCode ^
+      joinable.hashCode ^
+      members.hashCode ^
+      capacity.hashCode ^
+      isHost.hashCode ^
+      overlayEnabled.hashCode ^
+      overlayHint.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SteamLobbyDiag &&
+          runtimeType == other.runtimeType &&
+          lobbyId == other.lobbyId &&
+          gameId == other.gameId &&
+          version == other.version &&
+          gate == other.gate &&
+          joinable == other.joinable &&
+          members == other.members &&
+          capacity == other.capacity &&
+          isHost == other.isHost &&
+          overlayEnabled == other.overlayEnabled &&
+          overlayHint == other.overlayHint;
+}
 
 /// 一条 Steam 大厅搜索结果 / 当前大厅。
 class SteamLobbyInfo {

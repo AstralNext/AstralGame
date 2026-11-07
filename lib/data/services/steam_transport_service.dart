@@ -138,7 +138,23 @@ class SteamTransportService {
       rust_steam.steamLobbySetJoinable(joinable: joinable);
 
   /// 打开 Steam 原生好友邀请界面。
-  Future<void> openInviteDialog() => rust_steam.steamLobbyInviteDialog();
+  ///
+  /// 覆盖层未开启时会直接抛错（原因可展示给用户），不会静默调用。
+  Future<String> openInviteDialog() => rust_steam.steamLobbyInviteDialog();
+
+  /// 直接邀请指定好友进入当前大厅（不依赖覆盖层）。
+  ///
+  /// 返回成功文案只代表 Steam 受理了请求，不代表对方已收到或接受。
+  Future<String> inviteFriend(String friendSteamId) =>
+      rust_steam.steamLobbyInviteFriend(friendSteamId: friendSteamId);
+
+  /// 组网诊断：大厅 id、`ag_*` 实际值、可加入状态、成员数与覆盖层状态。
+  Future<rust_steam.SteamLobbyDiag> lobbyDiag() =>
+      rust_steam.steamLobbyDiag();
+
+  /// 诊断：切到客人分支注入离线房主并跑真实 prune（需要调试开关）。
+  Future<String> debugGuestRosterProbe() =>
+      rust_steam.steamDebugGuestRosterProbe();
 
   /// 好友从 Steam 点「加入」或应用被 `+connect_lobby` 拉起时的大厅 id。
   Future<String?> pendingInvite() => rust_steam.steamPendingLobbyInvite();

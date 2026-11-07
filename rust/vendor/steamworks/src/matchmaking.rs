@@ -111,6 +111,16 @@ impl Matchmaking {
         }
     }
 
+    /// 直接邀请指定好友进入大厅（不依赖 Steam 覆盖层）。
+    ///
+    /// 对应 `ISteamMatchmaking::InviteUserToLobby`。返回 `true` 只代表 Steam
+    /// 受理了这次请求，不保证对方收到或接受，也拿不到后续状态。
+    pub fn invite_user_to_lobby(&self, lobby: LobbyId, friend: SteamId) -> bool {
+        unsafe {
+            sys::SteamAPI_ISteamMatchmaking_InviteUserToLobby(self.mm, lobby.0, friend.raw())
+        }
+    }
+
     /// Tries to join the lobby with the given ID
     pub fn join_lobby<F>(&self, lobby: LobbyId, cb: F)
     where
