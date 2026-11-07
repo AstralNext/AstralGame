@@ -23,6 +23,7 @@ use steamworks::{
 use tokio::sync::oneshot;
 
 use super::proto::{self, Frame, RosterEntry};
+use super::roster_policy::{self, MemberView};
 use super::tun::{self, TunRoom};
 use crate::api::p2p::{AppCallResultC, AppInboundEventC, AppInboundKindC};
 use crate::api::steam::{SteamMemberInfo, SteamRoomInfo, SteamStatusInfo};
@@ -83,6 +84,31 @@ lazy_static! {
     static ref INBOUND: Mutex<Option<StreamSink<AppInboundEventC>>> = Mutex::new(None);
     static ref STATUS_SINK: Mutex<Option<StreamSink<SteamStatusInfo>>> = Mutex::new(None);
     static ref BOOT_FAILED_AT: Mutex<Option<Instant>> = Mutex::new(None);
+    /// 复现专用日志开关：`ASTRAL_STEAM_DEBUG=1|true|yes` 时落盘。
+    static ref STEAM_DEBUG: bool = std::env::var("ASTRAL_STEAM_DEBUG")
+        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
+        .unwrap_or(false);
+}
+
+/// 复现期日志：仅调试开关打开时写入临时目录，默认路径
+/// `%TEMP%\astral-steam-debug.log`。用于双账号现场取证，不影响正常行为。
+fn debug_log(event: &str, detail: impl AsRef<str>) {
+    if !*STEAM_DEBUG {
+        return;
+    }
+    use std::io::Write;
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let path = std::env::temp_dir().join("astral-steam-debug.log");
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+    {
+        let _ = writeln!(f, "{ts} {event} {}", detail.as_ref());
+    }
 }
 
 fn emit_status() {
@@ -751,6 +777,10 @@ impl Engine {
                 self.reconnect_at = None;
             }
             Err(e) => {
+                debug_log(
+                    "connect_fail",
+                    format!("host={} err={e:?}", self.host_steam_id),
+                );
                 self.message = format!("连接 Steam 房主失败: {e:?}");
                 self.reconnect_at = Some(Instant::now() + RECONNECT_DELAY);
             }
@@ -758,6 +788,7 @@ impl Engine {
     }
 
     fn shutdown_room(&mut self, reason: &str) {
+        debug_log("shutdown_room", format!("reason={reason}"));
         if let Some(tun) = self.tun.take() {
             tun.shutdown();
         }
@@ -878,6 +909,14 @@ impl Engine {
             m.last_seen = Instant::now();
         }
         self.message = reason.to_string();
+        debug_log(
+            "member_offline",
+            format!(
+                "sid={steam_id} reason={reason} retained={} total={}",
+                self.members.contains_key(&steam_id),
+                self.members.len()
+            ),
+        );
         if self.role == Role::Host {
             self.broadcast_roster();
         }
@@ -1054,6 +1093,7 @@ impl Engine {
             self.remove_member(steam_id, "成员连接已关闭");
         }
         if host_closed {
+            debug_log("host_closed", format!("host={}", self.host_steam_id));
             self.host_conn = None;
             self.host_via_relay = false;
             self.hello_sent = false;
@@ -1204,6 +1244,14 @@ impl Engine {
                     return;
                 };
                 if hello.token != self.join_token || hello.steam_id != from_steam {
+                    debug_log(
+                        "hello_reject",
+                        format!(
+                            "sid={from_steam} token_match={} id_match={}",
+                            hello.token == self.join_token,
+                            hello.steam_id == from_steam
+                        ),
+                    );
                     let body = proto::kick("房间密码不匹配");
                     let bytes = proto::encode(
                         proto::KIND_CONTROL,
@@ -1217,6 +1265,10 @@ impl Engine {
                     return;
                 }
                 let (peer_id, vip) = self.assign_member(from_steam);
+                debug_log(
+                    "hello_ok",
+                    format!("sid={from_steam} peer={peer_id} vip={vip}"),
+                );
                 self.members.insert(
                     from_steam,
                     Member {
@@ -1270,6 +1322,13 @@ impl Engine {
                     }
                 }
                 self.message = format!("已加入 Steam 房间，本机虚拟 IP {}", welcome.vip);
+                debug_log(
+                    "welcome",
+                    format!(
+                        "peer={} vip={} host={}",
+                        welcome.peer_id, welcome.vip, self.host_steam_id
+                    ),
+                );
                 self.start_deadline = None;
                 self.publish(true);
                 if let Some(tx) = self.start_reply.take() {
@@ -1324,6 +1383,7 @@ impl Engine {
                     } else {
                         format!("已被房主移出房间：{reason}")
                     };
+                    debug_log("kick", format!("from={from_steam} reason={reason}"));
                     self.shutdown_room(&reason);
                 }
             }
@@ -1336,6 +1396,7 @@ impl Engine {
                         &reason
                     });
                 } else {
+                    debug_log("bye", format!("sid={from_steam} role=host"));
                     self.remove_member(from_steam, "成员已离开");
                 }
             }
@@ -1519,6 +1580,7 @@ impl Engine {
             );
             if self.send_to_host(&bytes, SendFlags::RELIABLE) {
                 self.hello_sent = true;
+                debug_log("hello_sent", format!("host={}", self.host_steam_id));
             }
         }
 
@@ -1579,6 +1641,7 @@ impl Engine {
         if let Some(deadline) = self.start_deadline {
             if Instant::now() >= deadline {
                 let msg = "连接房主超时：请确认对方已开启房间且 Steam 网络可用".to_string();
+                debug_log("start_timeout", format!("host={}", self.host_steam_id));
                 self.shutdown_room(&msg);
             }
         }
@@ -1593,18 +1656,19 @@ impl Engine {
         self.assign_cache
             .retain(|_, (_, _, at)| now.duration_since(*at) < Duration::from_secs(30));
         if self.role == Role::Host {
-            let stale: Vec<u64> = self
+            let views: Vec<MemberView> = self
                 .members
                 .iter()
-                .filter(|(sid, m)| {
-                    !m.is_host
-                        && m.online
-                        && *sid != &self.self_steam_id
-                        && now.duration_since(m.last_seen) > Duration::from_secs(30)
+                .map(|(sid, m)| MemberView {
+                    steam_id: *sid,
+                    is_self: *sid == self.self_steam_id,
+                    is_host: m.is_host,
+                    online: m.online,
+                    last_seen: m.last_seen,
                 })
-                .map(|(sid, _)| *sid)
                 .collect();
-            for sid in stale {
+            for sid in roster_policy::prune_plan(&views, now) {
+                debug_log("prune_timeout", format!("sid={sid}"));
                 self.remove_member(sid, "成员心跳超时");
             }
         }
@@ -1616,6 +1680,21 @@ impl Engine {
         }
         self.last_publish = Instant::now();
         let members = self.collect_members();
+        debug_log(
+            "publish",
+            format!(
+                "role={} total={} online={} roster={} active={}",
+                match self.role {
+                    Role::Idle => "idle",
+                    Role::Host => "host",
+                    Role::Guest => "guest",
+                },
+                self.members.len(),
+                self.members.values().filter(|m| m.online).count(),
+                self.roster.iter().filter(|e| e.online).count(),
+                self.role != Role::Idle
+            ),
+        );
         let count = members.len() as u32;
         let host = self.role == Role::Host;
         let active = self.role != Role::Idle;
@@ -1653,7 +1732,23 @@ impl Engine {
     fn collect_members(&self) -> Vec<SteamMemberInfo> {
         let mut out: Vec<SteamMemberInfo> = Vec::new();
         if self.role == Role::Host {
+            let views: Vec<MemberView> = self
+                .members
+                .iter()
+                .map(|(sid, m)| MemberView {
+                    steam_id: *sid,
+                    is_self: *sid == self.self_steam_id,
+                    is_host: m.is_host,
+                    online: m.online,
+                    last_seen: m.last_seen,
+                })
+                .collect();
+            let visible: HashSet<u64> =
+                roster_policy::visible_members(&views).into_iter().collect();
             for m in self.members.values() {
+                if !visible.contains(&m.steam_id) {
+                    continue;
+                }
                 let (bytes_in, bytes_out) = if m.steam_id == self.self_steam_id {
                     (self.rx_bytes, self.tx_bytes)
                 } else {

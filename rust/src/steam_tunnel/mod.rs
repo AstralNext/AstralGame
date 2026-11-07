@@ -11,6 +11,7 @@
 
 mod engine;
 pub(crate) mod proto;
+mod roster_policy;
 pub(crate) mod tun;
 
 pub(crate) use engine::{
