@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:astral_game/config/theme.dart';
 
 import 'package:astral_game/data/models/active_room_session.dart';
@@ -9,6 +10,8 @@ import 'package:astral_game/data/services/game_assist_rules_service.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
 
 import 'package:astral_game/data/services/share_code_service.dart';
+import 'package:astral_game/data/services/steam_transport_service.dart';
+import 'package:astral_game/src/rust/api/steam.dart';
 import 'package:astral_game/data/state/room_state.dart';
 import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/config/constants.dart';
@@ -21,6 +24,7 @@ import 'package:astral_game/ui/widgets/confirm_dialog.dart';
 import 'package:astral_game/ui/widgets/create_room_dialog.dart';
 import 'package:astral_game/ui/widgets/dashboard_home_panel.dart';
 import 'package:astral_game/ui/widgets/share_room_dialog.dart';
+import 'package:astral_game/ui/widgets/steam_lobby_browser_dialog.dart';
 import 'package:astral_game/utils/error_text.dart';
 import 'package:astral_game/utils/room_share.dart';
 import 'package:flutter/material.dart';
@@ -42,6 +46,99 @@ class _DashboardPageState extends State<DashboardPage> {
   final ConnectionService _connectionService = getIt<ConnectionService>();
 
   final RoomState _roomState = getIt<RoomState>();
+
+  /// 好友邀请轮询：Steam 的 `GameLobbyJoinRequested` / `+connect_lobby` 只会
+  /// 在 Rust 侧挂起一个大厅 id，需要一个常驻消费者。
+  Timer? _steamInviteTimer;
+  bool _steamInviteBusy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_connectionService.steamModeActive) {
+      _steamInviteTimer = Timer.periodic(
+        const Duration(seconds: 3),
+        (_) => unawaited(_pollSteamInvite()),
+      );
+      unawaited(_pollSteamInvite());
+    }
+  }
+
+  @override
+  void dispose() {
+    _steamInviteTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _pollSteamInvite() async {
+    if (_steamInviteBusy || _connectionService.isConnecting.value) return;
+    _steamInviteBusy = true;
+    try {
+      final lobbyId = await _connectionService.steamTransport.pendingInvite();
+      if (lobbyId == null || lobbyId.isEmpty) return;
+      await _connectionService.steamTransport.clearPendingInvite();
+      if (!mounted) return;
+      // 先只读元数据：double 门槛要补密码，否则进了大厅也过不了 HELLO 校验。
+      final info = await _connectionService.steamTransport.peekLobby(lobbyId);
+      String? extra;
+      if (info.gate == kSteamLobbyGateDouble) {
+        extra = await _askSteamInvitePassword(info);
+        if (extra == null) return;
+      }
+      await _connectionService.joinSteamLobby(
+        lobbyId: lobbyId,
+        gameId: info.gameId,
+        gameName: info.name,
+        extraPassword: extra,
+        displayName: info.name,
+      );
+      if (!mounted) return;
+      showAppToast(context, '已加入好友的房间「${info.name}」');
+    } catch (e) {
+      if (mounted) showAppToast(context, '好友邀请加入失败：$e');
+    } finally {
+      _steamInviteBusy = false;
+    }
+  }
+
+  Future<String?> _askSteamInvitePassword(SteamLobbyInfo info) {
+    final controller = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      barrierColor: astralDialogBarrierColor,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('好友邀请'),
+        content: SizedBox(
+          width: 380,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('「${info.name}」设置了额外密码，请输入后加入。'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: '额外密码'),
+                onSubmitted: (v) => Navigator.pop(dialogContext, v.trim()),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, controller.text.trim()),
+            child: const Text('加入'),
+          ),
+        ],
+      ),
+    ).then((value) => (value == null || value.isEmpty) ? null : value);
+  }
 
   Future<void> _handleShareRoom() async {
     final session = _roomState.session.value;
@@ -185,13 +282,16 @@ class _DashboardPageState extends State<DashboardPage> {
       context,
       catalog: catalog,
       onRequestAdapt: _openGameAdaptIssue,
+      steamMode: _connectionService.steamModeActive,
     );
     if (selected == null) return;
 
     try {
       await _connectionService.createAndConnect(
-        gameId: selected.id,
-        gameName: selected.displayName,
+        gameId: selected.game.id,
+        gameName: selected.game.displayName,
+        gate: selected.gate,
+        extraPassword: selected.extraPassword,
       );
       if (!mounted) return;
       showAppToast(context, '已开房，去分享发给好友');
@@ -205,6 +305,24 @@ class _DashboardPageState extends State<DashboardPage> {
   Future<void> _handleJoinRoom() async {
     if (_connectionService.isConnecting.value) {
       if (mounted) showAppToast(context, '正在连接中，请稍候…');
+      return;
+    }
+    // Steam 模式没有短码，直接进大厅搜索。
+    if (_connectionService.steamModeActive) {
+      await getIt<GameAssistRulesService>().ensureLocalLoaded();
+      if (!mounted) return;
+      final catalog = GameCatalog.pickerItems;
+      if (catalog.isEmpty) {
+        showAppToast(context, '游戏目录未加载');
+        return;
+      }
+      final session = await showSteamLobbyBrowser(
+        context,
+        connection: _connectionService,
+        catalog: catalog,
+      );
+      if (!mounted || session == null) return;
+      showAppToast(context, '已加入「${session.gameName}」房间');
       return;
     }
     final codeController = TextEditingController();

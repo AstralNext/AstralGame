@@ -1,19 +1,31 @@
 import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/models/game_catalog.dart';
+import 'package:astral_game/data/services/steam_transport_service.dart';
 import 'package:flutter/material.dart';
 
+/// 建房结果：游戏 + Steam 门槛设置（非 Steam 模式下门槛字段不生效）。
+typedef CreateRoomResult = ({
+  GameInfo game,
+  String gate,
+  String? extraPassword,
+});
+
 /// 创建房间：大弹窗列表。选中游戏后返回；取消返回 null。
-Future<GameInfo?> showCreateRoomDialog(
+Future<CreateRoomResult?> showCreateRoomDialog(
   BuildContext context, {
   required List<GameInfo> catalog,
   required void Function(String searchedName) onRequestAdapt,
+  bool steamMode = false,
 }) {
-  return showDialog<GameInfo>(
+  return showDialog<CreateRoomResult>(
     context: context,
     barrierColor: astralDialogBarrierColor,
-    builder: (context) =>
-        _CreateRoomDialog(catalog: catalog, onRequestAdapt: onRequestAdapt),
+    builder: (context) => _CreateRoomDialog(
+      catalog: catalog,
+      onRequestAdapt: onRequestAdapt,
+      steamMode: steamMode,
+    ),
   );
 }
 
@@ -21,10 +33,12 @@ class _CreateRoomDialog extends StatefulWidget {
   const _CreateRoomDialog({
     required this.catalog,
     required this.onRequestAdapt,
+    this.steamMode = false,
   });
 
   final List<GameInfo> catalog;
   final void Function(String searchedName) onRequestAdapt;
+  final bool steamMode;
 
   @override
   State<_CreateRoomDialog> createState() => _CreateRoomDialogState();
@@ -33,7 +47,12 @@ class _CreateRoomDialog extends StatefulWidget {
 class _CreateRoomDialogState extends State<_CreateRoomDialog> {
   late GameInfo _selected;
   final _searchController = TextEditingController();
+  final _passwordController = TextEditingController();
   var _query = '';
+
+  /// Steam 门槛：默认基础口令，禁止无门槛。
+  var _gate = kSteamLobbyGateBasic;
+  String? _gateError;
 
   @override
   void initState() {
@@ -44,7 +63,51 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
   @override
   void dispose() {
     _searchController.dispose();
+    _passwordController.dispose();
     super.dispose();
+  }
+
+  /// 全公开必须显式二次确认；其余门槛直接返回。
+  Future<void> _submit() async {
+    final gate = _gate;
+    String? extra;
+    if (gate == kSteamLobbyGateDouble) {
+      extra = _passwordController.text.trim();
+      if (extra.isEmpty) {
+        setState(() => _gateError = '额外密码不能为空');
+        return;
+      }
+    }
+    if (gate == kSteamLobbyGateOpen) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        barrierColor: astralDialogBarrierColor,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('确认完全公开？'),
+          content: const Text(
+            '完全公开的房间不需要任何密码，任何正在搜索该游戏的人都可能进来。'
+            '如果你只是和朋友联机，请改用「基础口令」或「额外密码」。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('返回修改'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('仍然完全公开'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
+    if (!mounted) return;
+    Navigator.pop(context, (
+      game: _selected,
+      gate: gate,
+      extraPassword: extra,
+    ));
   }
 
   List<GameInfo> _filtered() {
@@ -177,6 +240,78 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
                       },
                     ),
             ),
+            if (widget.steamMode)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppDimensions.space20,
+                  AppDimensions.space4,
+                  AppDimensions.space20,
+                  AppDimensions.space8,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '房间门槛',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(
+                          value: kSteamLobbyGateBasic,
+                          label: Text('基础口令'),
+                          icon: Icon(Icons.lock_outline, size: 16),
+                        ),
+                        ButtonSegment(
+                          value: kSteamLobbyGateDouble,
+                          label: Text('额外密码'),
+                          icon: Icon(Icons.key, size: 16),
+                        ),
+                        ButtonSegment(
+                          value: kSteamLobbyGateOpen,
+                          label: Text('完全公开'),
+                          icon: Icon(Icons.public, size: 16),
+                        ),
+                      ],
+                      selected: {_gate},
+                      showSelectedIcon: false,
+                      onSelectionChanged: (v) => setState(() {
+                        _gate = v.first;
+                        _gateError = null;
+                      }),
+                    ),
+                    const SizedBox(height: 8),
+                    if (_gate == kSteamLobbyGateDouble)
+                      TextField(
+                        controller: _passwordController,
+                        obscureText: true,
+                        decoration: InputDecoration(
+                          labelText: '额外密码',
+                          hintText: '告诉好友的密码',
+                          errorText: _gateError,
+                          isDense: true,
+                        ),
+                        onChanged: (_) {
+                          if (_gateError != null) {
+                            setState(() => _gateError = null);
+                          }
+                        },
+                      )
+                    else
+                      Text(
+                        _gate == kSteamLobbyGateOpen
+                            ? '完全公开需要二次确认：任何搜到该游戏房间的人都能直接加入。'
+                            : '使用全工具统一基础口令，好友搜索该游戏即可加入。',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             Padding(
               padding: const EdgeInsets.fromLTRB(
                 AppDimensions.space16,
@@ -193,9 +328,7 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
                   ),
                   const SizedBox(width: 8),
                   FilledButton(
-                    onPressed: !selectionValid
-                        ? null
-                        : () => Navigator.pop(context, _selected),
+                    onPressed: !selectionValid ? null : _submit,
                     child: const Text('创建并连接'),
                   ),
                 ],

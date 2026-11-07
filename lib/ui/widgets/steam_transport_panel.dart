@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:astral_game/data/services/steam_transport_service.dart';
 import 'package:astral_game/src/rust/api/steam.dart';
@@ -121,7 +122,27 @@ class _SteamTransportPanelState extends State<SteamTransportPanel> {
             ok: room?.active == true,
           ),
         ),
-        for (final member in room?.members ?? const <SteamMemberInfo>[])
+        if (room?.active == true && room?.isHost == true)
+          (index, count) => AstralGroupedTile(
+            icon: Icons.person_add_alt_1_outlined,
+            label: '邀请好友',
+            subtitle: '通过 Steam 好友列表邀请（需要 Steam 覆盖层）',
+            index: index,
+            count: count,
+            onTap: _inviteFriends,
+          ),
+        if (room?.active == true && room?.isHost == true && _debugEnabled)
+          (index, count) => AstralGroupedTile(
+            icon: Icons.bug_report_outlined,
+            label: '诊断：幽灵成员清理',
+            subtitle: '注入离线超过宽限期的成员并跑一次真实 prune',
+            index: index,
+            count: count,
+            onTap: _ghostProbe,
+          ),
+        for (final member in (room?.members ?? const <SteamMemberInfo>[])
+            // 离线成员不渲染（本机除外）；宽限期结束后 Rust 侧会真正摘除。
+            .where((m) => m.online || m.isSelf))
           (index, count) => AstralGroupedTile(
             icon: member.isHost
                 ? Icons.workspace_premium_outlined
@@ -142,6 +163,37 @@ class _SteamTransportPanelState extends State<SteamTransportPanel> {
           ),
       ],
     );
+  }
+
+  /// 仅在 `ASTRAL_STEAM_DEBUG=1` 启动时显示诊断入口。
+  static final bool _debugEnabled = () {
+    final raw = Platform.environment['ASTRAL_STEAM_DEBUG']?.trim().toLowerCase();
+    return raw == '1' || raw == 'true' || raw == 'yes';
+  }();
+
+  Future<void> _ghostProbe() async {
+    String message;
+    try {
+      message = await _steam.debugGhostProbe();
+    } catch (e) {
+      message = '诊断失败：$e';
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+    await _refresh();
+  }
+
+  Future<void> _inviteFriends() async {
+    try {
+      await _steam.openInviteDialog();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('无法打开 Steam 邀请界面：$e')),
+      );
+    }
   }
 
   String _accountSubtitle() {
