@@ -117,7 +117,7 @@ Steam 只有两个入口：**大厅搜房**、**Steam 好友邀请**。
 
 因此第 3、4.2 节为必做项，不再作为可选项讨论。
 
-## 7. 游戏标识从哪来（仍待拍板）
+## 7. 游戏标识从哪来（已定：手动选）
 
 ### 方案 A：建房时手动选（当前模型）
 
@@ -132,13 +132,17 @@ Steam 只有两个入口：**大厅搜房**、**Steam 好友邀请**。
 - 代价：进程扫描与路径解析、非 Steam 游戏与反作弊兼容、误匹配处理，均需单独测试。
 - 拿不到时降级：回落到方案 A，并明示「未能自动识别，请手动选择」。
 
-结论：两条都留给用户拍板，本文不预设。
+已拍板：**采用方案 A（建房时手动选游戏）**，不做自动探测。写入 `ag_game` 前会规范化成
+小写 ASCII slug（`[a-z0-9_-]`，≤32 字节），保证服务端过滤与 HELLO 校验用同一套值。
 
-## 8. 公开房策略（仍待拍板）
+## 8. 公开房策略（已定）
 
 - 默认建议：强制至少基础密码，`ag_gate` 只允许 `basic` / `double`。
 - 若允许无门槛公开房（`open`），必须由房主显式开启并二次确认，列表用明显标识区分。
-- 是否保留 `open` 这一档，等用户结论。
+
+已拍板：保留 `open` 一档，但**默认是 `basic`**；选 `open` 必须二次确认。
+`basic` 的口令是全工具统一常量（`kSteamLobbyBasePassword`），`double` 在此基础上追加
+房主自设密码（`基础|额外`），两者都由 HELLO 的 `join_token` 校验。
 
 ## 9. 房名前缀编码（已废弃）
 
@@ -150,3 +154,27 @@ Steam 只有两个入口：**大厅搜房**、**Steam 好友邀请**。
 - Dart：列表过滤（非本游戏、版本不符、满员、`ag_name` 异常）逐条断言；进房前 `game_id` 校验失败文案。
 - 好友邀请：`GameLobbyJoinRequested` 回调 → 自动进房；应用未启动时 `+connect_lobby` 拉起后进房。
 - 双账号：建房→搜房→进房全链路；改 `ag_game` 后确认不会进错房。
+
+## 11. 实现状态与已知限制
+
+已实现（对应 `rust/src/steam_tunnel/{lobby,engine}.rs`）：
+
+- 建房：`create_lobby` → 写 `ag_game` / `ag_ver` / `ag_gate` / `ag_name` / `ag_host` / `ag_players`
+  → `set_lobby_joinable(true)`，任何一步失败都回滚离开大厅；
+- 搜房：`ag_game` 服务端字符串过滤 + 本地 `ag_game` / `ag_ver` / `ag_gate` 二次校验，
+  满员与自己的房间会被跳过；搜索失败时回放 5 分钟内缓存；
+- 进房：`steam_lobby_join` 校验大厅元数据后连房主，HELLO 带 `game_id` 由房主再校验一次；
+- 关房：`shutdown_room` 先 `set_lobby_joinable(false)` 再 `leave_lobby`；
+- 邀请：注册 `GameLobbyJoinRequested` / `GameRichPresenceJoinRequested`，解析启动参数
+  `+connect_lobby <id>`，Dart 每 3 秒轮询；收到邀请先 `steam_lobby_peek` 读门槛，
+  `double` 房间弹窗补密码后再加入；
+- 邀请入口：`activate_invite_dialog`（Steam 原生好友邀请界面）。
+
+限制（明确写明，不当作已支持）：
+
+1. **无法程序化邀请指定好友**：vendored `steamworks` 没有 `InviteUserToLobby` 封装。
+   首版只能打开 Steam 原生邀请界面，依赖 overlay；overlay 被禁用或玩家关了 Steam
+   覆盖层时，邀请入口不会有任何可见效果。
+2. **拿不到邀请状态**：不知道好友是否收到 / 接受邀请，界面上不展示「邀请已发送」。
+3. **单账号环境无法验证真实双机进房**：同一 Steam 账号可以建多个大厅并互相搜索，
+   但客人侧 `HELLO` 要求 `steam_id` 与连接方一致，因此真实「两台机器」链路仍需双账号实测。
