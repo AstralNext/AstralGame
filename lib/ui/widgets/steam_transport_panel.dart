@@ -8,6 +8,7 @@ import 'package:astral_game/data/services/connection_service.dart';
 import 'package:astral_game/data/services/game_assist_rules_service.dart';
 import 'package:astral_game/data/services/steam_selftest_service.dart';
 import 'package:astral_game/data/services/steam_transport_service.dart';
+import 'package:astral_game/data/state/settings_state.dart';
 import 'package:astral_game/di.dart';
 import 'package:astral_game/src/rust/api/steam.dart';
 import 'package:astral_game/ui/widgets/app_toast.dart';
@@ -195,9 +196,7 @@ class _SteamTransportPanelState extends State<SteamTransportPanel> {
           (index, count) => AstralGroupedTile(
             icon: Icons.play_circle_outline_rounded,
             label: '自检：客人跑一遍',
-            subtitle: _selfTestSubtitle(
-              '自动搜房 → 加入 → 校验握手 → 导出日志到桌面',
-            ),
+            subtitle: _selfTestSubtitle(_guestSelfTestIdle()),
             index: index,
             count: count,
             onTap: _canRunSelfTest ? () => _runSelfTest(host: false) : null,
@@ -268,6 +267,12 @@ class _SteamTransportPanelState extends State<SteamTransportPanel> {
     return idle;
   }
 
+  String _guestSelfTestIdle() {
+    final lobbyId = getIt<SettingsState>().steamSelfTestLobbyId?.trim() ?? '';
+    if (lobbyId.isEmpty) return '自动搜房 → 加入 → 校验握手 → 导出日志到桌面';
+    return '加入脚本指定的大厅 $lobbyId → 校验握手 → 导出日志到桌面';
+  }
+
   Future<void> _runSelfTest({required bool host}) async {
     setState(() {
       _selfTestRunning = true;
@@ -278,6 +283,9 @@ class _SteamTransportPanelState extends State<SteamTransportPanel> {
     try {
       result = await SteamSelfTestService().run(
         host: host,
+        targetLobbyId: host
+            ? null
+            : getIt<SettingsState>().steamSelfTestLobbyId,
         onProgress: (message) {
           if (!mounted) return;
           setState(() => _selfTestStatus = message);

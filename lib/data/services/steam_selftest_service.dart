@@ -43,8 +43,12 @@ class SteamSelfTestService {
   }
 
   /// 跑一次自检。[host] 为真时建房等客人，否则搜房并加入。
+  ///
+  /// [targetLobbyId] 只对客人有效：由脚本粘贴的大厅 id，填了就直连该大厅，
+  /// 留空则按固定游戏标识搜房。
   Future<SteamSelfTestResult> run({
     required bool host,
+    String? targetLobbyId,
     required void Function(String message) onProgress,
   }) async {
     final startedAt = DateTime.now();
@@ -94,10 +98,13 @@ class SteamSelfTestService {
           success = true;
         }
       } else {
-        onProgress('正在搜索自检房…（最长 ${_waitTimeout.inSeconds} 秒）');
-        final joined = await _searchAndJoin(onProgress);
+        final target = targetLobbyId?.trim() ?? '';
+        final joined = target.isEmpty
+            ? await _searchAndJoin(onProgress)
+            : await _joinKnownLobby(target, onProgress);
+        lobbyId = target;
         if (!joined) {
-          failure = '未找到可加入的自检房';
+          failure = target.isEmpty ? '未找到可加入的自检房' : '加入指定大厅失败';
         } else {
           onProgress('已加入自检房，等待握手与传输就绪…');
           await Future<void>.delayed(const Duration(seconds: 3));
@@ -175,6 +182,7 @@ class SteamSelfTestService {
 
   /// 客人侧：反复搜索自检房并加入，直到成功或超时。
   Future<bool> _searchAndJoin(void Function(String) onProgress) async {
+    onProgress('正在搜索自检房…（最长 ${_waitTimeout.inSeconds} 秒）');
     final deadline = DateTime.now().add(_waitTimeout);
     while (DateTime.now().isBefore(deadline)) {
       List<SteamLobbyInfo> found;
@@ -201,6 +209,26 @@ class SteamSelfTestService {
       await Future<void>.delayed(const Duration(seconds: 3));
     }
     return false;
+  }
+
+  /// 客人侧：脚本里粘贴了大厅 id 时直接加入该大厅（不再搜房）。
+  Future<bool> _joinKnownLobby(
+    String lobbyId,
+    void Function(String) onProgress,
+  ) async {
+    onProgress('正在加入指定大厅 $lobbyId…');
+    try {
+      await _steam.joinLobby(
+        lobbyId: lobbyId,
+        gameId: gameId,
+        joinToken: joinToken,
+        nickname: '自检客人',
+      );
+      return true;
+    } catch (e) {
+      onProgress('加入失败：$e');
+      return false;
+    }
   }
 
   Future<String> _readLogSlice(File file, int start) async {
@@ -242,7 +270,30 @@ class SteamSelfTestService {
     required ({bool ok, String detail}) handshake,
     required String logText,
   }) {
+    final gameHint = diag != null && diag.gameId.isNotEmpty
+        ? '（ag_game=${diag.gameId}）'
+        : '';
+    final overlayText = diag == null
+        ? '未知'
+        : (diag.overlayEnabled ? '已开启' : '未开启');
+    final inviteText = diag == null
+        ? '未知'
+        : (diag.inviteDialogCalled ? '调用过' : '未调用');
     final b = StringBuffer()
+      // 结论区：5 行以内，纯文本，方便直接判断，不必读事件流。
+      ..writeln('===== 结论 =====')
+      ..writeln('结果: ${success ? '成功' : '失败（${failure ?? '未知'}）'}')
+      ..writeln(
+        '角色: ${host ? '房主' : '客人'} | 大厅 id: '
+        '${lobbyId.isEmpty ? '—' : lobbyId}$gameHint',
+      )
+      ..writeln(
+        '进房: ${room.active ? '是' : '否'} | 成员: ${room.memberCount} 人 | '
+        '传输: ${status.relayReady ? 'SDR 就绪' : 'SDR 未就绪'}'
+        ' · ${room.active ? '隧道活跃' : '隧道未激活'}',
+      )
+      ..writeln('覆盖层: $overlayText | 邀请面板: $inviteText')
+      ..writeln('===== 明细 =====')
       ..writeln('Astral Steam 双机自检')
       ..writeln('角色: ${host ? '房主' : '客人'}')
       ..writeln('开始: ${_fmt(startedAt)}')

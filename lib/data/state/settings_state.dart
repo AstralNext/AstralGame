@@ -43,6 +43,32 @@ class SettingsState {
   /// 启动时历史配置因平台/开关不可用而被回落的一次性提示。
   final transportFallbackNotice = signal<String?>(null);
 
+  /// 本次是否由「双机自检」脚本拉起（`--steam-selftest`）：只影响本次运行，
+  /// 不写回存储，用来直接露出 Steam Tab 和自检入口。
+  final steamSelfTestLaunch = signal(false);
+
+  /// 自检客人脚本里粘贴的大厅 id；空表示走搜房。
+  String? steamSelfTestLobbyId;
+
+  /// 解析自检脚本的启动参数。
+  ///
+  /// 必须在 [loadFromPersistence] 之后调用：这里只改内存，覆盖平台/存储的回落，
+  /// 退出程序后仍是用户原来的配置。
+  void applySelfTestLaunch(List<String> args) {
+    if (!args.contains('--steam-selftest')) return;
+    if (!RuntimePlatform.isWindows) return;
+    for (final arg in args) {
+      if (arg.startsWith('--selftest-lobby=')) {
+        final id = arg.substring('--selftest-lobby='.length).trim();
+        steamSelfTestLobbyId = id.isEmpty ? null : id;
+      }
+    }
+    steamSelfTestLaunch.value = true;
+    experimentalSteam.value = true;
+    transportMode.value = TransportMode.steam;
+    transportFallbackNotice.value = null;
+  }
+
   /// 传输模式可用性的统一判定入口（平台 + 实验性开关）。
   TransportGate get transportGate =>
       TransportGate.current(experimentalSteamEnabled: experimentalSteam.value);

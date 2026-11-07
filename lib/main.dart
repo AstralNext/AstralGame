@@ -10,6 +10,7 @@ import 'package:astral_game/utils/runtime_platform.dart';
 import 'package:astral_game/utils/single_instance_guard.dart';
 import 'package:home_widget/home_widget.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
+import 'package:astral_game/data/state/settings_state.dart';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -57,6 +58,9 @@ Future<void> main(List<String> args) async {
     // 冷启动兜底：Linux 的 app_links 插件在窗口创建时才注册，拿不到首个
     // command-line；Windows/macOS 的链接也可能以参数形式传入。先解析一遍。
     getIt<JoinLinkService>().considerLaunchArguments(args);
+
+    // 自检脚本（--steam-selftest）：本次运行直接露出 Steam Tab 与自检入口。
+    getIt<SettingsState>().applySelfTestLaunch(args);
 
     getIt<NodeManagementService>().initUserInfo();
 

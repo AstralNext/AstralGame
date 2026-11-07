@@ -104,6 +104,10 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
     );
 
     _navTransportMode = _gatedTransportMode();
+    // 自检脚本拉起时直接落到 Steam Tab。
+    if (getIt<SettingsState>().steamSelfTestLaunch.value) {
+      _selectedIndex = _serversTabIndex;
+    }
     _buildNavigationItems();
     _transportModeEffect = effect(() {
       // 读取 transportGate 会一并订阅实验性开关：开关变化后立刻重建 Tab，
