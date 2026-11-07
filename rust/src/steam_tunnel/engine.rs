@@ -18,15 +18,18 @@ use steamworks::networking_types::{
     SendFlags,
 };
 use steamworks::{
-    AppId, CallbackHandle, Client, SteamId, SteamServersConnected, SteamServersDisconnected,
+    AppId, CallbackHandle, Client, GameLobbyJoinRequested, GameRichPresenceJoinRequested, LobbyId,
+    LobbyKey, LobbyListFilter, LobbyType, Matchmaking, SteamId, SteamServersConnected,
+    SteamServersDisconnected, StringFilter, StringFilterKind,
 };
 use tokio::sync::oneshot;
 
+use super::lobby::{self, Gate, LobbySnapshot};
 use super::proto::{self, Frame, RosterEntry};
 use super::roster_policy::{self, MemberView};
 use super::tun::{self, TunRoom};
 use crate::api::p2p::{AppCallResultC, AppInboundEventC, AppInboundKindC};
-use crate::api::steam::{SteamMemberInfo, SteamRoomInfo, SteamStatusInfo};
+use crate::api::steam::{SteamLobbyInfo, SteamMemberInfo, SteamRoomInfo, SteamStatusInfo};
 use crate::frb_generated::StreamSink;
 
 /// 初始化失败后的重试间隔：避免设置页轮询把失败刷成忙等。
@@ -40,6 +43,10 @@ const DEDUP_WINDOW: Duration = Duration::from_secs(2);
 /// 重连间隔。
 const RECONNECT_DELAY: Duration = Duration::from_secs(3);
 const CONTROL_VPORT_CACHE: i32 = proto::VPORT;
+/// 单次大厅操作（创建 / 搜索 / 加入）的上限。
+const LOBBY_TIMEOUT: Duration = Duration::from_secs(20);
+/// 大厅默认人数上限。
+const DEFAULT_LOBBY_CAP: u32 = 8;
 
 enum Cmd {
     Start {
@@ -47,7 +54,47 @@ enum Cmd {
         host_steam_id: String,
         join_token: String,
         nickname: String,
+        game_id: String,
         reply: oneshot::Sender<Result<SteamRoomInfo, String>>,
+    },
+    LobbyCreate {
+        game_id: String,
+        name: String,
+        gate: String,
+        max_members: u32,
+        join_token: String,
+        nickname: String,
+        reply: oneshot::Sender<Result<SteamLobbyInfo, String>>,
+    },
+    LobbySearch {
+        game_id: String,
+        reply: oneshot::Sender<Result<Vec<SteamLobbyInfo>, String>>,
+    },
+    LobbyJoin {
+        lobby_id: u64,
+        game_id: String,
+        join_token: String,
+        nickname: String,
+        reply: oneshot::Sender<Result<SteamLobbyInfo, String>>,
+    },
+    /// 只读大厅元数据：加入后立刻离开，用于邀请进房前确认门槛。
+    LobbyPeek {
+        lobby_id: u64,
+        reply: oneshot::Sender<Result<SteamLobbyInfo, String>>,
+    },
+    /// 诊断用：注入一个「早已离线」的成员，跑一次真实 prune。
+    DebugGhost {
+        reply: oneshot::Sender<Result<String, String>>,
+    },
+    LobbyLeave {
+        reply: oneshot::Sender<Result<(), String>>,
+    },
+    LobbySetJoinable {
+        joinable: bool,
+        reply: oneshot::Sender<Result<(), String>>,
+    },
+    LobbyInviteDialog {
+        reply: oneshot::Sender<Result<(), String>>,
     },
     Stop,
     AppCall {
@@ -88,6 +135,59 @@ lazy_static! {
     static ref STEAM_DEBUG: bool = std::env::var("ASTRAL_STEAM_DEBUG")
         .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
         .unwrap_or(false);
+    /// 待处理的好友邀请大厅 id：来自 `GameLobbyJoinRequested` 或启动参数
+    /// `+connect_lobby <id>`，由 Dart 轮询后清空。
+    static ref PENDING_INVITE: Mutex<Option<u64>> = Mutex::new(None);
+}
+
+/// Steam 大厅回调结果：Steam 回调只在 `run_callbacks()` 里派发，闭包把结果
+/// 塞进通道，引擎在同一 tick 的 `poll_lobby_events()` 里回收。
+enum LobbyEvent {
+    Created(Result<u64, String>),
+    Joined(Result<u64, String>),
+    Listed(Result<Vec<u64>, String>),
+}
+
+enum LobbyOp {
+    Create {
+        game_id: String,
+        gate: String,
+        name: String,
+        join_token: String,
+        nickname: String,
+    },
+    Join {
+        game_id: String,
+        join_token: String,
+        nickname: String,
+    },
+    Peek {
+        game_id: String,
+    },
+    Search {
+        game_id: String,
+    },
+}
+
+enum LobbyReply {
+    One(oneshot::Sender<Result<SteamLobbyInfo, String>>),
+    Many(oneshot::Sender<Result<Vec<SteamLobbyInfo>, String>>),
+}
+
+struct PendingLobby {
+    op: LobbyOp,
+    reply: LobbyReply,
+    deadline: Instant,
+}
+
+/// 客人「大厅已加入、隧道还没拿到 Welcome」的过渡态。
+///
+/// 大厅 API 要等隧道真正可用才返回，所以把 start_room 的回执接过来，
+/// 每个 tick 检查一次（`start_room` 的回执来自 WELCOME 或超时）。
+struct LobbyForward {
+    rx: oneshot::Receiver<Result<SteamRoomInfo, String>>,
+    reply: Option<oneshot::Sender<Result<SteamLobbyInfo, String>>>,
+    info: SteamLobbyInfo,
 }
 
 /// 复现期日志：仅调试开关打开时写入临时目录，默认路径
@@ -276,6 +376,7 @@ pub(crate) async fn start(
     host_steam_id: String,
     join_token: String,
     nickname: String,
+    game_id: String,
 ) -> Result<SteamStatusInfo, String> {
     let tx = tx_handle()?;
     let (reply_tx, reply_rx) = oneshot::channel();
@@ -284,6 +385,7 @@ pub(crate) async fn start(
         host_steam_id,
         join_token,
         nickname,
+        game_id,
         reply: reply_tx,
     })
     .map_err(|e| format!("Steam 线程不可用: {e}"))?;
@@ -305,6 +407,145 @@ pub(crate) fn stop() -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// 等待大厅操作的异步回执。
+async fn await_lobby<T>(
+    rx: oneshot::Receiver<Result<T, String>>,
+    timeout: Duration,
+) -> Result<T, String> {
+    match tokio::time::timeout(timeout, rx).await {
+        Ok(Ok(v)) => v,
+        Ok(Err(_)) => Err("Steam 线程已退出".to_string()),
+        Err(_) => Err("Steam 大厅操作超时，请重试".to_string()),
+    }
+}
+
+/// 创建公开大厅并直接开房（写 `ag_*` 标签 + 开 P2P 监听）。
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn create_lobby(
+    game_id: String,
+    name: String,
+    gate: String,
+    max_members: u32,
+    join_token: String,
+    nickname: String,
+) -> Result<SteamLobbyInfo, String> {
+    let tx = tx_handle()?;
+    let (reply_tx, reply_rx) = oneshot::channel();
+    tx.send(Cmd::LobbyCreate {
+        game_id,
+        name,
+        gate,
+        max_members,
+        join_token,
+        nickname,
+        reply: reply_tx,
+    })
+    .map_err(|e| format!("Steam 线程不可用: {e}"))?;
+    await_lobby(reply_rx, LOBBY_TIMEOUT + START_TIMEOUT).await
+}
+
+/// 搜索本游戏的大厅（服务端 `ag_game` 过滤 + 本地二次校验）。
+pub(crate) async fn search(game_id: String) -> Result<Vec<SteamLobbyInfo>, String> {
+    let tx = tx_handle()?;
+    let (reply_tx, reply_rx) = oneshot::channel();
+    tx.send(Cmd::LobbySearch {
+        game_id,
+        reply: reply_tx,
+    })
+    .map_err(|e| format!("Steam 线程不可用: {e}"))?;
+    await_lobby(reply_rx, LOBBY_TIMEOUT).await
+}
+
+/// 加入大厅并连上房主；成功时隧道已可用。
+pub(crate) async fn join_lobby(
+    lobby_id: u64,
+    game_id: String,
+    join_token: String,
+    nickname: String,
+) -> Result<SteamLobbyInfo, String> {
+    let tx = tx_handle()?;
+    let (reply_tx, reply_rx) = oneshot::channel();
+    tx.send(Cmd::LobbyJoin {
+        lobby_id,
+        game_id,
+        join_token,
+        nickname,
+        reply: reply_tx,
+    })
+    .map_err(|e| format!("Steam 线程不可用: {e}"))?;
+    await_lobby(reply_rx, LOBBY_TIMEOUT + START_TIMEOUT).await
+}
+
+/// 诊断用：验证「离线超过宽限期的成员会被真正摘除」。
+pub(crate) async fn debug_ghost_probe() -> Result<String, String> {
+    let tx = tx_handle()?;
+    let (reply_tx, reply_rx) = oneshot::channel();
+    tx.send(Cmd::DebugGhost { reply: reply_tx })
+        .map_err(|e| format!("Steam 线程不可用: {e}"))?;
+    await_lobby(reply_rx, Duration::from_secs(5)).await
+}
+
+/// 只读大厅元数据（加入后立刻离开），用于邀请进房前确认门槛。
+pub(crate) async fn peek_lobby(lobby_id: u64) -> Result<SteamLobbyInfo, String> {
+    let tx = tx_handle()?;
+    let (reply_tx, reply_rx) = oneshot::channel();
+    tx.send(Cmd::LobbyPeek {
+        lobby_id,
+        reply: reply_tx,
+    })
+    .map_err(|e| format!("Steam 线程不可用: {e}"))?;
+    await_lobby(reply_rx, LOBBY_TIMEOUT).await
+}
+
+/// 离开当前大厅（同时停止隧道）。
+pub(crate) async fn leave_lobby() -> Result<(), String> {
+    let tx = tx_handle()?;
+    let (reply_tx, reply_rx) = oneshot::channel();
+    tx.send(Cmd::LobbyLeave { reply: reply_tx })
+        .map_err(|e| format!("Steam 线程不可用: {e}"))?;
+    await_lobby(reply_rx, Duration::from_secs(5)).await
+}
+
+/// 设置大厅是否可被搜索到。
+pub(crate) async fn set_lobby_joinable(joinable: bool) -> Result<(), String> {
+    let tx = tx_handle()?;
+    let (reply_tx, reply_rx) = oneshot::channel();
+    tx.send(Cmd::LobbySetJoinable {
+        joinable,
+        reply: reply_tx,
+    })
+    .map_err(|e| format!("Steam 线程不可用: {e}"))?;
+    await_lobby(reply_rx, Duration::from_secs(5)).await
+}
+
+/// 打开 Steam 原生好友邀请界面。
+///
+/// vendored `steamworks` 没有 `InviteUserToLobby` 封装，这里是首版唯一可用的
+/// 程序入口：依赖 Steam overlay，无法程序化选择好友，也拿不到邀请状态。
+pub(crate) async fn invite_dialog() -> Result<(), String> {
+    let tx = tx_handle()?;
+    let (reply_tx, reply_rx) = oneshot::channel();
+    tx.send(Cmd::LobbyInviteDialog { reply: reply_tx })
+        .map_err(|e| format!("Steam 线程不可用: {e}"))?;
+    await_lobby(reply_rx, Duration::from_secs(5)).await
+}
+
+/// 读取待处理的好友邀请大厅 id（Dart 轮询；读完需要显式清空）。
+pub(crate) fn peer_pending_lobby_invite() -> Option<String> {
+    let _ = ensure_boot();
+    PENDING_INVITE
+        .lock()
+        .ok()
+        .and_then(|g| *g)
+        .map(|id| id.to_string())
+}
+
+pub(crate) fn clear_pending_lobby_invite() {
+    if let Ok(mut g) = PENDING_INVITE.lock() {
+        *g = None;
+    }
 }
 
 pub(crate) async fn app_call(
@@ -428,6 +669,8 @@ struct Member {
     bytes_in: u64,
     bytes_out: u64,
     last_seen: Instant,
+    /// 首次观察到该成员离线的时刻；在线时为 `None`。
+    offline_since: Option<Instant>,
 }
 
 struct PendingEntry {
@@ -448,6 +691,16 @@ struct Engine {
     role: Role,
     join_token: String,
     nickname: String,
+    /// 本房间的游戏标识（`ag_game`）；HELLO 里带出去由房主二次校验。
+    game_id: String,
+
+    /// 当前所在的 Steam 大厅；关房时必须先 `set_lobby_joinable(false)` 再离开。
+    lobby_id: Option<u64>,
+    lobby_cache: lobby::LobbyCache,
+    lobby_tx: mpsc::Sender<LobbyEvent>,
+    lobby_rx: mpsc::Receiver<LobbyEvent>,
+    pending_lobby: Option<PendingLobby>,
+    lobby_forward: Option<LobbyForward>,
 
     tun: Option<TunRoom>,
     my_vip: Ipv4Addr,
@@ -470,6 +723,9 @@ struct Engine {
     start_deadline: Option<Instant>,
 
     roster: Vec<RosterEntry>,
+    /// 客人侧观察到的成员离线时刻：Roster 里只有 online 位，没有时间戳，
+    /// 这里本地计时，超宽限期仍未回来就不再显示。
+    guest_offline_since: HashMap<u64, Instant>,
 
     /// 客机发出通往房主 PING 的时刻。
     guest_ping_at: Option<Instant>,
@@ -514,6 +770,28 @@ impl Engine {
             client.register_callback(|_: SteamServersDisconnected| {
                 update_status(|s| s.logged_on = false);
             }),
+            // 好友在 Steam 里点「加入游戏」：直接把大厅 id 挂起，Dart 轮询后进房。
+            client.register_callback(|ev: GameLobbyJoinRequested| {
+                let lobby_id = ev.lobby_steam_id.raw();
+                debug_log(
+                    "invite_lobby_join",
+                    format!("lobby={lobby_id} friend={}", ev.friend_steam_id.raw()),
+                );
+                if lobby_id != 0 {
+                    if let Ok(mut pending) = PENDING_INVITE.lock() {
+                        *pending = Some(lobby_id);
+                    }
+                }
+            }),
+            // `invite_user_to_game` 走的是 connect string，不是 lobby 回调。
+            client.register_callback(|ev: GameRichPresenceJoinRequested| {
+                debug_log("invite_connect_string", format!("connect={}", ev.connect));
+                if let Some(lobby_id) = lobby::parse_connect_lobby(&ev.connect) {
+                    if let Ok(mut pending) = PENDING_INVITE.lock() {
+                        *pending = Some(lobby_id);
+                    }
+                }
+            }),
         ];
         // SDR 中继就绪状态：状态变化时立即回调，避免 waitReady 等 2s 轮询。
         client
@@ -521,6 +799,7 @@ impl Engine {
             .relay_network_status_callback(|status| {
                 apply_relay_ready(status.availability() == Ok(NetworkingAvailability::Current));
             });
+        let (lobby_tx, lobby_rx) = mpsc::channel();
         Self {
             client,
             sockets,
@@ -529,6 +808,13 @@ impl Engine {
             role: Role::Idle,
             join_token: String::new(),
             nickname: String::new(),
+            game_id: String::new(),
+            lobby_id: None,
+            lobby_cache: lobby::LobbyCache::default(),
+            lobby_tx,
+            lobby_rx,
+            pending_lobby: None,
+            lobby_forward: None,
             tun: None,
             my_vip: Ipv4Addr::UNSPECIFIED,
             my_peer_id: 0,
@@ -544,6 +830,7 @@ impl Engine {
             start_reply: None,
             start_deadline: None,
             roster: Vec::new(),
+            guest_offline_since: HashMap::new(),
             guest_ping_at: None,
             guest_host_latency_ms: 0,
             batch_up: HashMap::new(),
@@ -583,8 +870,68 @@ impl Engine {
                 host_steam_id,
                 join_token,
                 nickname,
+                game_id,
                 reply,
-            } => self.start_room(host, host_steam_id, join_token, nickname, reply),
+            } => {
+                // 与大厅里写入的 `ag_game` 保持同一套 slug，否则 HELLO 校验会误判。
+                self.game_id = lobby::normalize_game_id(&game_id).unwrap_or_default();
+                self.start_room(host, host_steam_id, join_token, nickname, reply)
+            }
+            Cmd::LobbyCreate {
+                game_id,
+                name,
+                gate,
+                max_members,
+                join_token,
+                nickname,
+                reply,
+            } => self.lobby_create(game_id, name, gate, max_members, join_token, nickname, reply),
+            Cmd::LobbySearch { game_id, reply } => self.lobby_search(game_id, reply),
+            Cmd::LobbyJoin {
+                lobby_id,
+                game_id,
+                join_token,
+                nickname,
+                reply,
+            } => self.lobby_join(lobby_id, game_id, join_token, nickname, reply),
+            Cmd::LobbyPeek { lobby_id, reply } => self.lobby_peek(lobby_id, reply),
+            Cmd::DebugGhost { reply } => {
+                let _ = reply.send(self.debug_ghost_probe());
+            }
+            Cmd::LobbyLeave { reply } => {
+                self.shutdown_room("已退出 Steam 大厅");
+                let _ = reply.send(Ok(()));
+            }
+            Cmd::LobbySetJoinable { joinable, reply } => {
+                let Some(lobby_id) = self.lobby_id else {
+                    let _ = reply.send(Err("当前没有 Steam 大厅".to_string()));
+                    return;
+                };
+                let ok = self
+                    .client
+                    .matchmaking()
+                    .set_lobby_joinable(LobbyId::from_raw(lobby_id), joinable);
+                debug_log(
+                    "lobby_set_joinable",
+                    format!("lobby={lobby_id} joinable={joinable} ok={ok}"),
+                );
+                let _ = reply.send(if ok {
+                    Ok(())
+                } else {
+                    Err("设置大厅可加入状态失败".to_string())
+                });
+            }
+            Cmd::LobbyInviteDialog { reply } => {
+                let Some(lobby_id) = self.lobby_id else {
+                    let _ = reply.send(Err("当前没有 Steam 大厅".to_string()));
+                    return;
+                };
+                self.client
+                    .friends()
+                    .activate_invite_dialog(LobbyId::from_raw(lobby_id));
+                debug_log("lobby_invite_dialog", format!("lobby={lobby_id}"));
+                let _ = reply.send(Ok(()));
+            }
             Cmd::Stop => self.shutdown_room("Steam 组网已停止"),
             Cmd::AppCall {
                 dst_peer_id,
@@ -673,6 +1020,487 @@ impl Engine {
         }
     }
 
+    /// 创建公开大厅：先重置旧房间，再异步建大厅，成功后开隧道并写 `ag_*` 标签。
+    #[allow(clippy::too_many_arguments)]
+    fn lobby_create(
+        &mut self,
+        game_id: String,
+        name: String,
+        gate: String,
+        max_members: u32,
+        join_token: String,
+        nickname: String,
+        reply: oneshot::Sender<Result<SteamLobbyInfo, String>>,
+    ) {
+        self.shutdown_room("切换 Steam 大厅");
+        let Some(game_id) = lobby::normalize_game_id(&game_id) else {
+            let _ = reply.send(Err("游戏标识为空，无法创建可被搜索的房间".to_string()));
+            return;
+        };
+        let gate = Gate::parse(&gate).unwrap_or(Gate::Basic);
+        let cap = if max_members == 0 {
+            DEFAULT_LOBBY_CAP
+        } else {
+            max_members.clamp(2, 250)
+        };
+        let room_name = if name.trim().is_empty() {
+            format!("{game_id} 的房间")
+        } else {
+            name.trim().to_string()
+        };
+        let tx = self.lobby_tx.clone();
+        self.client
+            .matchmaking()
+            .create_lobby(LobbyType::Public, cap, move |res| {
+                let mapped = res
+                    .map(|l| l.raw())
+                    .map_err(|e| format!("创建 Steam 大厅失败: {e:?}"));
+                let _ = tx.send(LobbyEvent::Created(mapped));
+            });
+        debug_log(
+            "lobby_create_start",
+            format!("game={game_id} gate={} cap={cap}", gate.as_str()),
+        );
+        self.pending_lobby = Some(PendingLobby {
+            op: LobbyOp::Create {
+                game_id,
+                gate: gate.as_str().to_string(),
+                name: room_name,
+                join_token,
+                nickname,
+            },
+            reply: LobbyReply::One(reply),
+            deadline: Instant::now() + LOBBY_TIMEOUT,
+        });
+        self.message = "正在创建 Steam 大厅…".to_string();
+    }
+
+    /// 搜索本游戏的大厅：服务端 `ag_game` 过滤，结果回来后再本地校验。
+    fn lobby_search(
+        &mut self,
+        game_id: String,
+        reply: oneshot::Sender<Result<Vec<SteamLobbyInfo>, String>>,
+    ) {
+        let Some(game_id) = lobby::normalize_game_id(&game_id) else {
+            let _ = reply.send(Err("缺少游戏标识，无法搜索房间".to_string()));
+            return;
+        };
+        let mm = self.client.matchmaking();
+        mm.set_lobby_list_filter(LobbyListFilter {
+            string: Some(vec![StringFilter(
+                LobbyKey::new(lobby::KEY_GAME),
+                game_id.as_str(),
+                StringFilterKind::Equal,
+            )]),
+            ..Default::default()
+        });
+        let tx = self.lobby_tx.clone();
+        mm.request_lobby_list(move |res| {
+            let mapped = res
+                .map(|list| list.into_iter().map(|l| l.raw()).collect::<Vec<_>>())
+                .map_err(|e| format!("搜索 Steam 大厅失败: {e:?}"));
+            let _ = tx.send(LobbyEvent::Listed(mapped));
+        });
+        debug_log("lobby_search_start", format!("game={game_id}"));
+        self.pending_lobby = Some(PendingLobby {
+            op: LobbyOp::Search { game_id },
+            reply: LobbyReply::Many(reply),
+            deadline: Instant::now() + LOBBY_TIMEOUT,
+        });
+    }
+
+    /// 加入大厅：先校验 `ag_*`，再连房主；隧道可用后才回执。
+    fn lobby_join(
+        &mut self,
+        lobby_id: u64,
+        game_id: String,
+        join_token: String,
+        nickname: String,
+        reply: oneshot::Sender<Result<SteamLobbyInfo, String>>,
+    ) {
+        if lobby_id == 0 {
+            let _ = reply.send(Err("无效的大厅 ID".to_string()));
+            return;
+        }
+        // 邀请进房时不知道游戏标识（邀请里只有大厅 id），允许为空：
+        // 此时只校验协议版本，游戏由大厅元数据自己说明。
+        let game_id = if game_id.trim().is_empty() {
+            String::new()
+        } else {
+            let Some(g) = lobby::normalize_game_id(&game_id) else {
+                let _ = reply.send(Err("缺少游戏标识，无法加入房间".to_string()));
+                return;
+            };
+            g
+        };
+        self.shutdown_room("切换 Steam 大厅");
+        let tx = self.lobby_tx.clone();
+        self.client
+            .matchmaking()
+            .join_lobby(LobbyId::from_raw(lobby_id), move |res| {
+                let mapped = res.map(|l| l.raw()).map_err(|_| {
+                    "加入 Steam 大厅失败（房间已关闭、已满员或 Steam 暂时不可用）".to_string()
+                });
+                let _ = tx.send(LobbyEvent::Joined(mapped));
+            });
+        debug_log("lobby_join_start", format!("lobby={lobby_id} game={game_id}"));
+        self.pending_lobby = Some(PendingLobby {
+            op: LobbyOp::Join {
+                game_id,
+                join_token,
+                nickname,
+            },
+            reply: LobbyReply::One(reply),
+            deadline: Instant::now() + LOBBY_TIMEOUT,
+        });
+    }
+
+    /// 加入大厅只为读元数据（门槛 / 游戏 / 人数），读完立刻离开。
+    fn lobby_peek(
+        &mut self,
+        lobby_id: u64,
+        reply: oneshot::Sender<Result<SteamLobbyInfo, String>>,
+    ) {
+        if lobby_id == 0 {
+            let _ = reply.send(Err("无效的大厅 ID".to_string()));
+            return;
+        }
+        let tx = self.lobby_tx.clone();
+        self.client
+            .matchmaking()
+            .join_lobby(LobbyId::from_raw(lobby_id), move |res| {
+                let mapped = res.map(|l| l.raw()).map_err(|_| {
+                    "大厅已关闭或已满员（Steam 无法加入）".to_string()
+                });
+                let _ = tx.send(LobbyEvent::Joined(mapped));
+            });
+        debug_log("lobby_peek_start", format!("lobby={lobby_id}"));
+        self.pending_lobby = Some(PendingLobby {
+            op: LobbyOp::Peek {
+                game_id: String::new(),
+            },
+            reply: LobbyReply::One(reply),
+            deadline: Instant::now() + LOBBY_TIMEOUT,
+        });
+    }
+
+    fn poll_lobby_events(&mut self) {
+        loop {
+            let Ok(ev) = self.lobby_rx.try_recv() else {
+                break;
+            };
+            match ev {
+                LobbyEvent::Created(res) => self.on_lobby_created(res),
+                LobbyEvent::Joined(res) => self.on_lobby_joined(res),
+                LobbyEvent::Listed(res) => self.on_lobby_listed(res),
+            }
+        }
+    }
+
+    fn on_lobby_created(&mut self, res: Result<u64, String>) {
+        let Some(PendingLobby {
+            op:
+                LobbyOp::Create {
+                    game_id,
+                    gate,
+                    name,
+                    join_token,
+                    nickname,
+                },
+            reply: LobbyReply::One(reply),
+            ..
+        }) = self.pending_lobby.take()
+        else {
+            return;
+        };
+        let lobby_id = match res {
+            Ok(id) => id,
+            Err(e) => {
+                debug_log("lobby_create_fail", format!("err={e}"));
+                self.message = e.clone();
+                let _ = reply.send(Err(e));
+                return;
+            }
+        };
+        // 先开隧道，再写标签：start_room 会重置上一个房间（含旧大厅），
+        // 此时 self.lobby_id 还没指向新大厅，不会被误伤。
+        let (tx, mut rx) = oneshot::channel();
+        self.start_room(true, String::new(), join_token, nickname, tx);
+        match rx.try_recv() {
+            Ok(Ok(room)) => {
+                self.lobby_id = Some(lobby_id);
+                self.game_id = game_id.clone();
+                let lid = LobbyId::from_raw(lobby_id);
+                let mm = self.client.matchmaking();
+                let host_id = self.self_steam_id.to_string();
+                let players = room.member_count.max(1).to_string();
+                mm.set_lobby_data(lid, lobby::KEY_GAME, &game_id);
+                mm.set_lobby_data(lid, lobby::KEY_VER, lobby::PROTOCOL_VERSION);
+                mm.set_lobby_data(lid, lobby::KEY_GATE, &gate);
+                mm.set_lobby_data(lid, lobby::KEY_NAME, &name);
+                mm.set_lobby_data(lid, lobby::KEY_HOST, &host_id);
+                mm.set_lobby_data(lid, lobby::KEY_PLAYERS, &players);
+                let joinable = mm.set_lobby_joinable(lid, true);
+                let readback = mm.lobby_data(lid, lobby::KEY_GAME).unwrap_or_default();
+                let ver_readback = mm.lobby_data(lid, lobby::KEY_VER).unwrap_or_default();
+                let gate_readback = mm.lobby_data(lid, lobby::KEY_GATE).unwrap_or_default();
+                let name_readback = mm.lobby_data(lid, lobby::KEY_NAME).unwrap_or_default();
+                let capacity = mm.lobby_member_limit(lid).unwrap_or(0) as u32;
+                let members = mm.lobby_member_count(lid) as u32;
+                debug_log(
+                    "lobby_create_ok",
+                    format!(
+                        "lobby={lobby_id} game={readback} ver={ver_readback} gate={gate_readback} \
+                         name={name_readback} joinable={joinable} members={members} cap={capacity}"
+                    ),
+                );
+                self.message = format!("Steam 大厅已开启（游戏 {game_id}）");
+                let _ = reply.send(Ok(SteamLobbyInfo {
+                    lobby_id: lobby_id.to_string(),
+                    game_id,
+                    name,
+                    gate,
+                    version: lobby::PROTOCOL_VERSION.to_string(),
+                    host_steam_id: host_id,
+                    players: room.member_count.max(1),
+                    capacity,
+                    joinable,
+                }));
+            }
+            Ok(Err(e)) => {
+                self.client
+                    .matchmaking()
+                    .leave_lobby(LobbyId::from_raw(lobby_id));
+                debug_log("lobby_create_tunnel_fail", format!("lobby={lobby_id} err={e}"));
+                let _ = reply.send(Err(e));
+            }
+            Err(_) => {
+                self.client
+                    .matchmaking()
+                    .leave_lobby(LobbyId::from_raw(lobby_id));
+                let _ = reply.send(Err("Steam 组网启动异常，已取消创建".to_string()));
+            }
+        }
+    }
+
+    fn on_lobby_joined(&mut self, res: Result<u64, String>) {
+        let Some(pending) = self.pending_lobby.take() else {
+            return;
+        };
+        let LobbyReply::One(reply) = pending.reply else {
+            return;
+        };
+        let lobby_id = match res {
+            Ok(id) => id,
+            Err(e) => {
+                debug_log("lobby_join_fail", format!("err={e}"));
+                self.message = e.clone();
+                let _ = reply.send(Err(e));
+                return;
+            }
+        };
+        let lid = LobbyId::from_raw(lobby_id);
+        let mm = self.client.matchmaking();
+        let pairs = read_lobby_pairs(&mm, lid);
+        let players = mm.lobby_member_count(lid) as u32;
+        let capacity = mm.lobby_member_limit(lid).unwrap_or(0) as u32;
+        let owner = mm.lobby_owner(lid).raw().to_string();
+        let Some(snapshot) = lobby::parse_snapshot(lobby_id, &pairs, players, capacity, &owner)
+        else {
+            mm.leave_lobby(lid);
+            debug_log(
+                "lobby_join_reject",
+                format!("lobby={lobby_id} reason=missing_meta pairs={}", pairs.len()),
+            );
+            let _ = reply.send(Err(
+                "房间信息不完整（缺少 ag_game / ag_ver / ag_gate），已取消加入".to_string()
+            ));
+            return;
+        };
+        let (game_id, join_token, nickname) = match pending.op {
+            LobbyOp::Peek { .. } => {
+                // 只读元数据：邀请链接不知道游戏标识，只校验协议版本。
+                if snapshot.version != lobby::PROTOCOL_VERSION {
+                    mm.leave_lobby(lid);
+                    let _ = reply.send(Err(format!(
+                        "房间协议版本 {} 与本机 {} 不一致",
+                        snapshot.version,
+                        lobby::PROTOCOL_VERSION
+                    )));
+                    return;
+                }
+                mm.leave_lobby(lid);
+                debug_log(
+                    "lobby_peek_ok",
+                    format!(
+                        "lobby={lobby_id} game={} gate={} players={}/{}",
+                        snapshot.game_id,
+                        snapshot.gate.as_str(),
+                        snapshot.players,
+                        snapshot.capacity
+                    ),
+                );
+                let _ = reply.send(Ok(lobby_info(&snapshot)));
+                return;
+            }
+            LobbyOp::Join {
+                game_id,
+                join_token,
+                nickname,
+            } => (game_id, join_token, nickname),
+            _ => {
+                mm.leave_lobby(lid);
+                return;
+            }
+        };
+        // 搜索进房时游戏标识已知，必须校验；邀请进房时为空，跳过。
+        if !game_id.is_empty() {
+            if let Err(e) = lobby::validate(&snapshot, &game_id) {
+                mm.leave_lobby(lid);
+                debug_log(
+                    "lobby_join_reject",
+                    format!(
+                        "lobby={lobby_id} reason={e} game={} ver={}",
+                        snapshot.game_id, snapshot.version
+                    ),
+                );
+                let _ = reply.send(Err(format!("无法加入房间：{e}")));
+                return;
+            }
+        }
+        let host_steam_id = snapshot.host_steam_id.clone();
+        let mut info = lobby_info(&snapshot);
+        let (tx, mut rx) = oneshot::channel();
+        self.start_room(false, host_steam_id, join_token, nickname, tx);
+        match rx.try_recv() {
+            Ok(Ok(room)) => {
+                self.lobby_id = Some(lobby_id);
+                self.game_id = game_id;
+                info.players = room.member_count.max(1);
+                let host = info.host_steam_id.clone();
+                debug_log("lobby_join_ok", format!("lobby={lobby_id} host={host}"));
+                let _ = reply.send(Ok(info));
+            }
+            Ok(Err(e)) => {
+                mm.leave_lobby(lid);
+                let _ = reply.send(Err(e));
+            }
+            Err(_) => {
+                // 隧道还在握手（WELCOME 未到）：把回执接过来，每个 tick 检查。
+                self.lobby_id = Some(lobby_id);
+                self.game_id = game_id;
+                self.lobby_forward = Some(LobbyForward {
+                    rx,
+                    reply: Some(reply),
+                    info,
+                });
+            }
+        }
+    }
+
+    fn on_lobby_listed(&mut self, res: Result<Vec<u64>, String>) {
+        let Some(PendingLobby {
+            op: LobbyOp::Search { game_id },
+            reply: LobbyReply::Many(reply),
+            ..
+        }) = self.pending_lobby.take()
+        else {
+            return;
+        };
+        let ids = match res {
+            Ok(ids) => ids,
+            Err(e) => {
+                // Steam 回调抖动时回放 TTL 内的旧结果，避免列表瞬间清空。
+                let cached = self.lobby_cache.fresh(Instant::now());
+                debug_log(
+                    "lobby_search_fallback",
+                    format!("err={e} cached={}", cached.len()),
+                );
+                let _ = reply.send(Err(if cached.is_empty() {
+                    e
+                } else {
+                    format!("{e}（下方为上次搜索的缓存结果）")
+                }));
+                return;
+            }
+        };
+        let raw_count = ids.len();
+        let mm = self.client.matchmaking();
+        let mut kept: Vec<LobbySnapshot> = Vec::new();
+        for id in ids {
+            if id == 0 || Some(id) == self.lobby_id {
+                continue;
+            }
+            let lid = LobbyId::from_raw(id);
+            let pairs = read_lobby_pairs(&mm, lid);
+            let players = mm.lobby_member_count(lid) as u32;
+            let capacity = mm.lobby_member_limit(lid).unwrap_or(0) as u32;
+            let owner = mm.lobby_owner(lid).raw().to_string();
+            let Some(snapshot) = lobby::parse_snapshot(id, &pairs, players, capacity, &owner)
+            else {
+                debug_log("lobby_skip", format!("lobby={id} reason=missing_meta"));
+                continue;
+            };
+            if let Err(e) = lobby::validate(&snapshot, &game_id) {
+                debug_log(
+                    "lobby_skip",
+                    format!(
+                        "lobby={id} reason={e} game={} ver={}",
+                        snapshot.game_id, snapshot.version
+                    ),
+                );
+                continue;
+            }
+            if capacity > 0 && players >= capacity {
+                debug_log("lobby_skip", format!("lobby={id} reason=full"));
+                continue;
+            }
+            kept.push(snapshot);
+        }
+        debug_log(
+            "lobby_search_ok",
+            format!(
+                "game={game_id} raw={raw_count} kept={} ids={:?}",
+                kept.len(),
+                kept.iter().map(|s| s.lobby_id).collect::<Vec<_>>()
+            ),
+        );
+        let out: Vec<SteamLobbyInfo> = kept.iter().map(lobby_info).collect();
+        self.lobby_cache.replace(kept, Instant::now());
+        let _ = reply.send(Ok(out));
+    }
+
+    /// 客人侧：等隧道握手完成再把大厅 API 的回执发出去。
+    fn poll_lobby_forward(&mut self) {
+        let Some(mut fwd) = self.lobby_forward.take() else {
+            return;
+        };
+        match fwd.rx.try_recv() {
+            Ok(Ok(room)) => {
+                let mut info = fwd.info.clone();
+                info.players = room.member_count.max(1);
+                debug_log("lobby_join_tunnel_ok", format!("lobby={}", info.lobby_id));
+                if let Some(reply) = fwd.reply.take() {
+                    let _ = reply.send(Ok(info));
+                }
+            }
+            Ok(Err(e)) => {
+                debug_log("lobby_join_tunnel_fail", format!("err={e}"));
+                if let Some(reply) = fwd.reply.take() {
+                    let _ = reply.send(Err(e));
+                }
+            }
+            Err(oneshot::error::TryRecvError::Empty) => {
+                self.lobby_forward = Some(fwd);
+            }
+            Err(oneshot::error::TryRecvError::Closed) => {
+                if let Some(reply) = fwd.reply.take() {
+                    let _ = reply.send(Err("Steam 组网已取消".to_string()));
+                }
+            }
+        }
+    }
+
     fn start_room(
         &mut self,
         host: bool,
@@ -733,6 +1561,7 @@ impl Engine {
                     bytes_in: 0,
                     bytes_out: 0,
                     last_seen: Instant::now(),
+                    offline_since: None,
                 },
             );
             self.message = "Steam 房间已开启，等待成员加入".to_string();
@@ -789,6 +1618,18 @@ impl Engine {
 
     fn shutdown_room(&mut self, reason: &str) {
         debug_log("shutdown_room", format!("reason={reason}"));
+        // 先让自己从搜索结果里消失，再真正离开；否则别人还会看到一间
+        // 已经没人的幽灵房，直到 Steam 自己清理。
+        if let Some(lobby_id) = self.lobby_id.take() {
+            let lid = LobbyId::from_raw(lobby_id);
+            let mm = self.client.matchmaking();
+            let hidden = mm.set_lobby_joinable(lid, false);
+            mm.leave_lobby(lid);
+            debug_log(
+                "lobby_leave",
+                format!("lobby={lobby_id} set_joinable_false={hidden}"),
+            );
+        }
         if let Some(tun) = self.tun.take() {
             tun.shutdown();
         }
@@ -797,6 +1638,7 @@ impl Engine {
         self.listen = None;
         self.members.clear();
         self.roster.clear();
+        self.guest_offline_since.clear();
         self.pending.clear();
         self.inbound_replies.clear();
         self.batch_up.clear();
@@ -827,6 +1669,9 @@ impl Engine {
 
     fn tick(&mut self) {
         self.client.run_callbacks();
+        // 大厅回调必须在 run_callbacks 之后立刻回收，避免结果积压一整个 tick。
+        self.poll_lobby_events();
+        self.poll_lobby_forward();
         self.poll_relay();
         self.poll_listener();
         self.poll_tun();
@@ -905,6 +1750,9 @@ impl Engine {
         }
         self.conns.remove(&steam_id);
         if let Some(m) = self.members.get_mut(&steam_id) {
+            if m.online {
+                m.offline_since = Some(Instant::now());
+            }
             m.online = false;
             m.last_seen = Instant::now();
         }
@@ -1243,16 +2091,28 @@ impl Engine {
                 let Some(hello) = proto::parse_hello(frame.payload) else {
                     return;
                 };
-                if hello.token != self.join_token || hello.steam_id != from_steam {
+                let game_matches = self.game_id.is_empty()
+                    || hello.game_id.eq_ignore_ascii_case(&self.game_id);
+                if hello.token != self.join_token
+                    || hello.steam_id != from_steam
+                    || !game_matches
+                {
                     debug_log(
                         "hello_reject",
                         format!(
-                            "sid={from_steam} token_match={} id_match={}",
+                            "sid={from_steam} token_match={} id_match={} game_match={game_matches} \
+                             guest_game={} host_game={}",
                             hello.token == self.join_token,
-                            hello.steam_id == from_steam
+                            hello.steam_id == from_steam,
+                            hello.game_id,
+                            self.game_id
                         ),
                     );
-                    let body = proto::kick("房间密码不匹配");
+                    let body = proto::kick(if game_matches {
+                        "房间密码不匹配"
+                    } else {
+                        "游戏标识不一致，无法加入该房间"
+                    });
                     let bytes = proto::encode(
                         proto::KIND_CONTROL,
                         0,
@@ -1287,6 +2147,7 @@ impl Engine {
                         bytes_in: 0,
                         bytes_out: 0,
                         last_seen: Instant::now(),
+                        offline_since: None,
                     },
                 );
                 let welcome = proto::WelcomeMsg {
@@ -1339,6 +2200,18 @@ impl Engine {
                 if let Some(entries) = proto::parse_roster(frame.payload) {
                     self.roster = entries;
                     if self.role == Role::Guest {
+                        let now = Instant::now();
+                        // 只对普通成员做本地离线计时：房主条目代表房间本身，
+                        // 房主断开由 host_closed 处理，不在这里过滤。
+                        for entry in &self.roster {
+                            if entry.is_host || entry.online {
+                                self.guest_offline_since.remove(&entry.steam_id);
+                            } else {
+                                self.guest_offline_since
+                                    .entry(entry.steam_id)
+                                    .or_insert(now);
+                            }
+                        }
                         // 房主不知道本机↔房主的 RTT，Roster 里房主条目恒为 0；
                         // 用客机自己测到的值回填，避免每 5s 被刷回 0ms。
                         for entry in self.roster.iter_mut().filter(|e| e.is_host) {
@@ -1570,6 +2443,7 @@ impl Engine {
                 steam_id: self.self_steam_id,
                 nickname: self.nickname.clone(),
                 version: proto::VERSION.to_string(),
+                game_id: self.game_id.clone(),
             });
             let bytes = proto::encode(
                 proto::KIND_CONTROL,
@@ -1647,8 +2521,79 @@ impl Engine {
         }
     }
 
+    /// 诊断用：往真实成员表里塞一个「离线超过宽限期」的成员，然后调用真正的
+    /// [`Engine::prune`]，观察它是否被摘除并广播。
+    ///
+    /// 只在 `ASTRAL_STEAM_DEBUG=1` 时由 Dart 侧按钮触发，正常流程不会调用。
+    fn debug_ghost_probe(&mut self) -> Result<String, String> {
+        if self.role != Role::Host {
+            return Err("只有房主可以运行幽灵成员诊断".to_string());
+        }
+        if !*STEAM_DEBUG {
+            return Err("需要 ASTRAL_STEAM_DEBUG=1 才能运行诊断".to_string());
+        }
+        let sid = 76561190000000001u64;
+        let now = Instant::now();
+        let before = self.members.len();
+        let expired = now - roster_policy::OFFLINE_GRACE - Duration::from_secs(1);
+        self.members.insert(
+            sid,
+            Member {
+                peer_id: 9001,
+                steam_id: sid,
+                nickname: "ghost-test".to_string(),
+                vip: Ipv4Addr::new(100, 100, 100, 254),
+                online: false,
+                is_host: false,
+                latency_ms: 0,
+                via_relay: false,
+                bytes_in: 0,
+                bytes_out: 0,
+                last_seen: expired,
+                offline_since: Some(expired),
+            },
+        );
+        let injected = self.members.len();
+        self.prune();
+        self.publish(true);
+        let after = self.members.len();
+        let still_there = self.members.contains_key(&sid);
+        debug_log(
+            "debug_ghost_probe",
+            format!("before={before} injected={injected} after={after} removed={}", !still_there),
+        );
+        if still_there {
+            return Err(format!("诊断失败：成员仍在表中（{injected} -> {after}）"));
+        }
+        Ok(format!(
+            "幽灵成员已摘除：成员数 {injected}（含注入）-> {after}，roster={}",
+            self.roster.len()
+        ))
+    }
+
     fn prune(&mut self) {
         let now = Instant::now();
+        // 大厅操作超时：明确回执失败，别让 Dart 侧一直转圈。
+        let lobby_expired = self
+            .pending_lobby
+            .as_ref()
+            .map(|p| now >= p.deadline)
+            .unwrap_or(false);
+        if lobby_expired {
+            if let Some(pending) = self.pending_lobby.take() {
+                debug_log("lobby_timeout", "deadline reached");
+                match pending.reply {
+                    LobbyReply::One(tx) => {
+                        let _ = tx.send(Err(
+                            "Steam 大厅操作超时，请检查 Steam 是否在线后重试".to_string()
+                        ));
+                    }
+                    LobbyReply::Many(tx) => {
+                        let _ = tx.send(Err("搜索房间超时，请重试".to_string()));
+                    }
+                }
+            }
+        }
         self.flood_seen
             .retain(|_, at| now.duration_since(*at) < DEDUP_WINDOW);
         self.pending
@@ -1665,12 +2610,50 @@ impl Engine {
                     is_host: m.is_host,
                     online: m.online,
                     last_seen: m.last_seen,
+                    offline_since: m.offline_since,
                 })
                 .collect();
+            let mut removed = false;
             for sid in roster_policy::prune_plan(&views, now) {
-                debug_log("prune_timeout", format!("sid={sid}"));
-                self.remove_member(sid, "成员心跳超时");
+                let was_online = self.members.get(&sid).map(|m| m.online).unwrap_or(false);
+                if was_online {
+                    // 在线心跳超时：先标离线并开启宽限期，给一次重连机会。
+                    debug_log("prune_timeout", format!("sid={sid} stage=offline"));
+                    self.remove_member(sid, "成员心跳超时");
+                } else {
+                    // 离线且超过宽限期：真正摘除，随后广播成员表。
+                    debug_log(
+                        "prune_remove",
+                        format!("sid={sid} grace={:?}", roster_policy::OFFLINE_GRACE),
+                    );
+                    self.conns.remove(&sid);
+                    self.members.remove(&sid);
+                    removed = true;
+                }
             }
+            if removed {
+                self.broadcast_roster();
+            }
+        } else if self.role == Role::Guest {
+            // 客人侧本地兜底：房主可能因丢包没把离线成员摘掉，这里按同一宽限期
+            // 过滤成员表，避免真·幽灵长期停留在客机列表里。
+            let expired: Vec<u64> = self
+                .guest_offline_since
+                .iter()
+                .filter(|(_, at)| now.duration_since(**at) >= roster_policy::OFFLINE_GRACE)
+                .map(|(sid, _)| *sid)
+                .collect();
+            if !expired.is_empty() {
+                for sid in &expired {
+                    debug_log("guest_prune_offline", format!("sid={sid}"));
+                    self.guest_offline_since.remove(sid);
+                }
+                self.roster.retain(|e| !expired.contains(&e.steam_id));
+            }
+            // 已不在成员表里的 id 不再需要计时器，避免 HashMap 无限增长。
+            let present: HashSet<u64> = self.roster.iter().map(|e| e.steam_id).collect();
+            self.guest_offline_since
+                .retain(|sid, _| present.contains(sid));
         }
     }
 
@@ -1741,12 +2724,18 @@ impl Engine {
                     is_host: m.is_host,
                     online: m.online,
                     last_seen: m.last_seen,
+                    offline_since: m.offline_since,
                 })
                 .collect();
             let visible: HashSet<u64> =
                 roster_policy::visible_members(&views).into_iter().collect();
             for m in self.members.values() {
                 if !visible.contains(&m.steam_id) {
+                    continue;
+                }
+                // 只把在线成员交给 UI / 节点列表（本机除外），离线成员留在
+                // 成员表里等宽限期到点后被 prune 摘除。
+                if !m.online && m.steam_id != self.self_steam_id {
                     continue;
                 }
                 let (bytes_in, bytes_out) = if m.steam_id == self.self_steam_id {
@@ -1771,6 +2760,11 @@ impl Engine {
         } else {
             for e in &self.roster {
                 let is_self = e.steam_id == self.self_steam_id;
+                // 离线成员在宽限期内保留在成员表里等待重连，但不进 UI；
+                // 超过宽限期的条目已在 `prune` 中本地过滤。
+                if !e.online && !is_self {
+                    continue;
+                }
                 out.push(SteamMemberInfo {
                     peer_id: e.peer_id,
                     steam_id: e.steam_id.to_string(),
@@ -1961,7 +2955,41 @@ fn is_dead_state(state: NetworkingConnectionState) -> bool {
     )
 }
 
+/// 读取大厅的全部 key/value（只取 `ag_*` 也用不上筛选，直接全量读回）。
+fn read_lobby_pairs(mm: &Matchmaking, lobby: LobbyId) -> Vec<(String, String)> {
+    let count = mm.lobby_data_count(lobby);
+    let mut out = Vec::with_capacity(count as usize);
+    for i in 0..count {
+        if let Some(pair) = mm.lobby_data_by_index(lobby, i) {
+            out.push(pair);
+        }
+    }
+    out
+}
+
+fn lobby_info(snapshot: &LobbySnapshot) -> SteamLobbyInfo {
+    SteamLobbyInfo {
+        lobby_id: snapshot.lobby_id.to_string(),
+        game_id: snapshot.game_id.clone(),
+        name: snapshot.name.clone(),
+        gate: snapshot.gate.as_str().to_string(),
+        version: snapshot.version.clone(),
+        host_steam_id: snapshot.host_steam_id.clone(),
+        players: snapshot.players,
+        capacity: snapshot.capacity,
+        joinable: true,
+    }
+}
+
 fn engine_thread(rx: Receiver<Cmd>) {
+    // Steam 通过 `+connect_lobby <id>` 拉起应用时，命令行里才有邀请信息；
+    // 在初始化前就记下来，Dart 订阅状态时能直接拿到。
+    if let Some(lobby_id) = lobby::parse_connect_lobby_args(std::env::args()) {
+        debug_log("invite_argv", format!("lobby={lobby_id}"));
+        if let Ok(mut pending) = PENDING_INVITE.lock() {
+            *pending = Some(lobby_id);
+        }
+    }
     let client = match Client::init_app(resolve_appid()) {
         Ok(c) => c,
         Err(e) => {

@@ -235,6 +235,8 @@ pub struct HelloMsg {
     pub steam_id: u64,
     pub nickname: String,
     pub version: String,
+    /// 大厅 `ag_game` 的游戏标识，由房主二次校验。
+    pub game_id: String,
 }
 
 #[derive(Clone, Debug)]
@@ -282,6 +284,7 @@ pub fn hello(msg: &HelloMsg) -> Vec<u8> {
     w.u64(msg.steam_id);
     w.str(&msg.nickname);
     w.str(&msg.version);
+    w.str(&msg.game_id);
     w.finish()
 }
 
@@ -336,6 +339,7 @@ pub fn parse_hello(data: &[u8]) -> Option<HelloMsg> {
         steam_id: r.u64()?,
         nickname: r.str()?,
         version: r.str()?,
+        game_id: r.str()?,
     })
 }
 

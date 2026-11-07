@@ -44,7 +44,7 @@ impl Default for SteamStatusInfo {
             is_host: false,
             virtual_ip: String::new(),
             member_count: 0,
-            message: "Steam 未初始化".to_string(),
+            message: "正在连接 Steam…".to_string(),
         }
     }
 }
@@ -64,6 +64,26 @@ pub struct SteamMemberInfo {
     pub via_relay: bool,
     pub bytes_in: u64,
     pub bytes_out: u64,
+}
+
+/// 一条 Steam 大厅搜索结果 / 当前大厅。
+#[derive(Clone, Default)]
+pub struct SteamLobbyInfo {
+    /// Steam 大厅 id（十进制字符串，避免 64 位精度问题）。
+    pub lobby_id: String,
+    /// `ag_game`：游戏标识（构建房间时手动选择）。
+    pub game_id: String,
+    /// `ag_name`：房间展示名。
+    pub name: String,
+    /// `ag_gate`：`basic` / `double` / `open`。
+    pub gate: String,
+    /// `ag_ver`：组网协议版本。
+    pub version: String,
+    /// 房主 SteamID。
+    pub host_steam_id: String,
+    pub players: u32,
+    pub capacity: u32,
+    pub joinable: bool,
 }
 
 /// 当前 Steam 组网房间信息。
@@ -140,14 +160,159 @@ pub async fn steam_start(
     host_steam_id: String,
     join_token: String,
     nickname: String,
+    game_id: String,
 ) -> Result<SteamStatusInfo, String> {
     #[cfg(target_os = "windows")]
     {
-        steam_tunnel::start(host, host_steam_id, join_token, nickname).await
+        steam_tunnel::start(host, host_steam_id, join_token, nickname, game_id).await
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (host, host_steam_id, join_token, nickname, game_id);
+        Err(unsupported())
+    }
+}
+
+/// 创建 Steam 公开大厅并直接开房（写 `ag_*` 标签、开启 P2P 监听）。
+#[allow(clippy::too_many_arguments)]
+pub async fn steam_lobby_create(
+    game_id: String,
+    name: String,
+    gate: String,
+    max_members: u32,
+    join_token: String,
+    nickname: String,
+) -> Result<SteamLobbyInfo, String> {
+    #[cfg(target_os = "windows")]
+    {
+        steam_tunnel::create_lobby(game_id, name, gate, max_members, join_token, nickname).await
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (game_id, name, gate, max_members, join_token, nickname);
+        Err(unsupported())
+    }
+}
+
+/// 搜索本游戏的大厅（服务端 `ag_game` 过滤 + 本地二次校验）。
+pub async fn steam_lobby_search(game_id: String) -> Result<Vec<SteamLobbyInfo>, String> {
+    #[cfg(target_os = "windows")]
+    {
+        steam_tunnel::search(game_id).await
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = game_id;
+        Err(unsupported())
+    }
+}
+
+/// 加入大厅并连上房主；返回时隧道已可用。
+pub async fn steam_lobby_join(
+    lobby_id: String,
+    game_id: String,
+    join_token: String,
+    nickname: String,
+) -> Result<SteamLobbyInfo, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let id = lobby_id
+            .trim()
+            .parse::<u64>()
+            .map_err(|_| "无效的大厅 ID".to_string())?;
+        steam_tunnel::join_lobby(id, game_id, join_token, nickname).await
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (lobby_id, game_id, join_token, nickname);
+        Err(unsupported())
+    }
+}
+
+/// 诊断用：往成员表注入一个「离线超过宽限期」的成员，跑一次真实 prune，
+/// 返回摘除前后的成员数。需要 `ASTRAL_STEAM_DEBUG=1` 且当前是房主。
+pub async fn steam_debug_ghost_probe() -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        steam_tunnel::debug_ghost_probe().await
     }
     #[cfg(not(target_os = "windows"))]
     {
         Err(unsupported())
+    }
+}
+
+/// 只读大厅元数据（加入后立刻离开），用于邀请进房前确认门槛。
+pub async fn steam_lobby_peek(lobby_id: String) -> Result<SteamLobbyInfo, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let id = lobby_id
+            .trim()
+            .parse::<u64>()
+            .map_err(|_| "无效的大厅 ID".to_string())?;
+        steam_tunnel::peek_lobby(id).await
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = lobby_id;
+        Err(unsupported())
+    }
+}
+
+/// 离开当前大厅（同时停止隧道）。
+pub async fn steam_lobby_leave() -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        steam_tunnel::leave_lobby().await
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Ok(())
+    }
+}
+
+/// 设置大厅是否可被搜索到（关房前先置 false）。
+pub async fn steam_lobby_set_joinable(joinable: bool) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        steam_tunnel::set_lobby_joinable(joinable).await
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = joinable;
+        Ok(())
+    }
+}
+
+/// 打开 Steam 原生好友邀请界面。
+pub async fn steam_lobby_invite_dialog() -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        steam_tunnel::invite_dialog().await
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(unsupported())
+    }
+}
+
+/// 读取待处理的好友邀请大厅 id（Dart 侧轮询）。
+pub fn steam_pending_lobby_invite() -> Option<String> {
+    #[cfg(target_os = "windows")]
+    {
+        steam_tunnel::peer_pending_lobby_invite()
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        None
+    }
+}
+
+/// 清空待处理的邀请（进房成功或用户放弃后调用）。
+pub fn steam_clear_pending_lobby_invite() {
+    #[cfg(target_os = "windows")]
+    {
+        steam_tunnel::clear_pending_lobby_invite();
     }
 }
 

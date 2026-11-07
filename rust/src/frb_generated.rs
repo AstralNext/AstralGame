@@ -40,7 +40,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1269728391;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -473883569;
 
 // Section: executor
 
@@ -1895,6 +1895,381 @@ fn wire__crate__api__steam__steam_app_notify_impl(
         },
     )
 }
+fn wire__crate__api__steam__steam_clear_pending_lobby_invite_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "steam_clear_pending_lobby_invite",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok = Result::<_, ()>::Ok({
+                        crate::api::steam::steam_clear_pending_lobby_invite();
+                    })?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__steam__steam_debug_ghost_probe_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "steam_debug_ghost_probe",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, String>(
+                    (move || async move {
+                        let output_ok = crate::api::steam::steam_debug_ghost_probe().await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__steam__steam_lobby_create_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "steam_lobby_create",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_game_id = <String>::sse_decode(&mut deserializer);
+            let api_name = <String>::sse_decode(&mut deserializer);
+            let api_gate = <String>::sse_decode(&mut deserializer);
+            let api_max_members = <u32>::sse_decode(&mut deserializer);
+            let api_join_token = <String>::sse_decode(&mut deserializer);
+            let api_nickname = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, String>(
+                    (move || async move {
+                        let output_ok = crate::api::steam::steam_lobby_create(
+                            api_game_id,
+                            api_name,
+                            api_gate,
+                            api_max_members,
+                            api_join_token,
+                            api_nickname,
+                        )
+                        .await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__steam__steam_lobby_info_default_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "steam_lobby_info_default",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok =
+                        Result::<_, ()>::Ok(crate::api::steam::SteamLobbyInfo::default())?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__steam__steam_lobby_invite_dialog_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "steam_lobby_invite_dialog",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, String>(
+                    (move || async move {
+                        let output_ok = crate::api::steam::steam_lobby_invite_dialog().await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__steam__steam_lobby_join_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "steam_lobby_join",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_lobby_id = <String>::sse_decode(&mut deserializer);
+            let api_game_id = <String>::sse_decode(&mut deserializer);
+            let api_join_token = <String>::sse_decode(&mut deserializer);
+            let api_nickname = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, String>(
+                    (move || async move {
+                        let output_ok = crate::api::steam::steam_lobby_join(
+                            api_lobby_id,
+                            api_game_id,
+                            api_join_token,
+                            api_nickname,
+                        )
+                        .await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__steam__steam_lobby_leave_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "steam_lobby_leave",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, String>(
+                    (move || async move {
+                        let output_ok = crate::api::steam::steam_lobby_leave().await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__steam__steam_lobby_peek_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "steam_lobby_peek",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_lobby_id = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, String>(
+                    (move || async move {
+                        let output_ok = crate::api::steam::steam_lobby_peek(api_lobby_id).await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__steam__steam_lobby_search_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "steam_lobby_search",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_game_id = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, String>(
+                    (move || async move {
+                        let output_ok = crate::api::steam::steam_lobby_search(api_game_id).await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__steam__steam_lobby_set_joinable_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "steam_lobby_set_joinable",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_joinable = <bool>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, String>(
+                    (move || async move {
+                        let output_ok =
+                            crate::api::steam::steam_lobby_set_joinable(api_joinable).await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
 fn wire__crate__api__steam__steam_my_peer_id_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -1962,6 +2337,39 @@ fn wire__crate__api__steam__steam_peer_ping_impl(
                     })()
                     .await,
                 )
+            }
+        },
+    )
+}
+fn wire__crate__api__steam__steam_pending_lobby_invite_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "steam_pending_lobby_invite",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok =
+                        Result::<_, ()>::Ok(crate::api::steam::steam_pending_lobby_invite())?;
+                    Ok(output_ok)
+                })())
             }
         },
     )
@@ -2057,6 +2465,7 @@ fn wire__crate__api__steam__steam_start_impl(
             let api_host_steam_id = <String>::sse_decode(&mut deserializer);
             let api_join_token = <String>::sse_decode(&mut deserializer);
             let api_nickname = <String>::sse_decode(&mut deserializer);
+            let api_game_id = <String>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| async move {
                 transform_result_sse::<_, String>(
@@ -2066,6 +2475,7 @@ fn wire__crate__api__steam__steam_start_impl(
                             api_host_steam_id,
                             api_join_token,
                             api_nickname,
+                            api_game_id,
                         )
                         .await?;
                         Ok(output_ok)
@@ -2994,6 +3404,20 @@ impl SseDecode for Vec<u8> {
     }
 }
 
+impl SseDecode for Vec<crate::api::steam::SteamLobbyInfo> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::steam::SteamLobbyInfo>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
 impl SseDecode for Vec<crate::api::steam::SteamMemberInfo> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -3103,6 +3527,32 @@ impl SseDecode for (usize, u64, u64) {
         let mut var_field1 = <u64>::sse_decode(deserializer);
         let mut var_field2 = <u64>::sse_decode(deserializer);
         return (var_field0, var_field1, var_field2);
+    }
+}
+
+impl SseDecode for crate::api::steam::SteamLobbyInfo {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_lobbyId = <String>::sse_decode(deserializer);
+        let mut var_gameId = <String>::sse_decode(deserializer);
+        let mut var_name = <String>::sse_decode(deserializer);
+        let mut var_gate = <String>::sse_decode(deserializer);
+        let mut var_version = <String>::sse_decode(deserializer);
+        let mut var_hostSteamId = <String>::sse_decode(deserializer);
+        let mut var_players = <u32>::sse_decode(deserializer);
+        let mut var_capacity = <u32>::sse_decode(deserializer);
+        let mut var_joinable = <bool>::sse_decode(deserializer);
+        return crate::api::steam::SteamLobbyInfo {
+            lobby_id: var_lobbyId,
+            game_id: var_gameId,
+            name: var_name,
+            gate: var_gate,
+            version: var_version,
+            host_steam_id: var_hostSteamId,
+            players: var_players,
+            capacity: var_capacity,
+            joinable: var_joinable,
+        };
     }
 }
 
@@ -3357,60 +3807,98 @@ fn pde_ffi_dispatcher_primary_impl(
         42 => wire__crate__api__steam__steam_app_call_impl(port, ptr, rust_vec_len, data_len),
         43 => wire__crate__api__steam__steam_app_call_reply_impl(port, ptr, rust_vec_len, data_len),
         44 => wire__crate__api__steam__steam_app_notify_impl(port, ptr, rust_vec_len, data_len),
-        45 => wire__crate__api__steam__steam_my_peer_id_impl(port, ptr, rust_vec_len, data_len),
-        46 => wire__crate__api__steam__steam_peer_ping_impl(port, ptr, rust_vec_len, data_len),
-        47 => wire__crate__api__steam__steam_room_info_impl(port, ptr, rust_vec_len, data_len),
-        48 => {
+        45 => wire__crate__api__steam__steam_clear_pending_lobby_invite_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        46 => {
+            wire__crate__api__steam__steam_debug_ghost_probe_impl(port, ptr, rust_vec_len, data_len)
+        }
+        47 => wire__crate__api__steam__steam_lobby_create_impl(port, ptr, rust_vec_len, data_len),
+        48 => wire__crate__api__steam__steam_lobby_info_default_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        49 => wire__crate__api__steam__steam_lobby_invite_dialog_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        50 => wire__crate__api__steam__steam_lobby_join_impl(port, ptr, rust_vec_len, data_len),
+        51 => wire__crate__api__steam__steam_lobby_leave_impl(port, ptr, rust_vec_len, data_len),
+        52 => wire__crate__api__steam__steam_lobby_peek_impl(port, ptr, rust_vec_len, data_len),
+        53 => wire__crate__api__steam__steam_lobby_search_impl(port, ptr, rust_vec_len, data_len),
+        54 => wire__crate__api__steam__steam_lobby_set_joinable_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        55 => wire__crate__api__steam__steam_my_peer_id_impl(port, ptr, rust_vec_len, data_len),
+        56 => wire__crate__api__steam__steam_peer_ping_impl(port, ptr, rust_vec_len, data_len),
+        57 => wire__crate__api__steam__steam_pending_lobby_invite_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        58 => wire__crate__api__steam__steam_room_info_impl(port, ptr, rust_vec_len, data_len),
+        59 => {
             wire__crate__api__steam__steam_room_info_default_impl(port, ptr, rust_vec_len, data_len)
         }
-        49 => wire__crate__api__steam__steam_start_impl(port, ptr, rust_vec_len, data_len),
-        50 => wire__crate__api__steam__steam_status_impl(port, ptr, rust_vec_len, data_len),
-        51 => wire__crate__api__steam__steam_status_info_default_impl(
+        60 => wire__crate__api__steam__steam_start_impl(port, ptr, rust_vec_len, data_len),
+        61 => wire__crate__api__steam__steam_status_impl(port, ptr, rust_vec_len, data_len),
+        62 => wire__crate__api__steam__steam_status_info_default_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        52 => wire__crate__api__steam__steam_stop_impl(port, ptr, rust_vec_len, data_len),
-        53 => wire__crate__api__steam__steam_subscribe_app_inbound_impl(
+        63 => wire__crate__api__steam__steam_stop_impl(port, ptr, rust_vec_len, data_len),
+        64 => wire__crate__api__steam__steam_subscribe_app_inbound_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        54 => {
+        65 => {
             wire__crate__api__steam__steam_subscribe_status_impl(port, ptr, rust_vec_len, data_len)
         }
-        55 => wire__crate__api__forward__stop_all_forward_servers_impl(
+        66 => wire__crate__api__forward__stop_all_forward_servers_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        56 => wire__crate__api__multicast__stop_all_lan_game_listeners_impl(
+        67 => wire__crate__api__multicast__stop_all_lan_game_listeners_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        57 => wire__crate__api__multicast__stop_all_multicast_senders_impl(
+        68 => wire__crate__api__multicast__stop_all_multicast_senders_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        58 => {
+        69 => {
             wire__crate__api__forward__stop_forward_server_impl(port, ptr, rust_vec_len, data_len)
         }
-        59 => wire__crate__api__magic_wall__stop_magic_wall_impl(port, ptr, rust_vec_len, data_len),
-        60 => wire__crate__api__multicast__stop_multicast_sender_impl(
+        70 => wire__crate__api__magic_wall__stop_magic_wall_impl(port, ptr, rust_vec_len, data_len),
+        71 => wire__crate__api__multicast__stop_multicast_sender_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        61 => wire__crate__api__p2p__subscribe_app_inbound_impl(port, ptr, rust_vec_len, data_len),
-        62 => wire__crate__api__p2p__subscribe_core_logs_impl(port, ptr, rust_vec_len, data_len),
+        72 => wire__crate__api__p2p__subscribe_app_inbound_impl(port, ptr, rust_vec_len, data_len),
+        73 => wire__crate__api__p2p__subscribe_core_logs_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -3817,6 +4305,34 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::p2p::NodeHopStats>
     for crate::api::p2p::NodeHopStats
 {
     fn into_into_dart(self) -> crate::api::p2p::NodeHopStats {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::steam::SteamLobbyInfo {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.lobby_id.into_into_dart().into_dart(),
+            self.game_id.into_into_dart().into_dart(),
+            self.name.into_into_dart().into_dart(),
+            self.gate.into_into_dart().into_dart(),
+            self.version.into_into_dart().into_dart(),
+            self.host_steam_id.into_into_dart().into_dart(),
+            self.players.into_into_dart().into_dart(),
+            self.capacity.into_into_dart().into_dart(),
+            self.joinable.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::steam::SteamLobbyInfo
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::steam::SteamLobbyInfo>
+    for crate::api::steam::SteamLobbyInfo
+{
+    fn into_into_dart(self) -> crate::api::steam::SteamLobbyInfo {
         self
     }
 }
@@ -4255,6 +4771,16 @@ impl SseEncode for Vec<u8> {
     }
 }
 
+impl SseEncode for Vec<crate::api::steam::SteamLobbyInfo> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::steam::SteamLobbyInfo>::sse_encode(item, serializer);
+        }
+    }
+}
+
 impl SseEncode for Vec<crate::api::steam::SteamMemberInfo> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -4330,6 +4856,21 @@ impl SseEncode for (usize, u64, u64) {
         <usize>::sse_encode(self.0, serializer);
         <u64>::sse_encode(self.1, serializer);
         <u64>::sse_encode(self.2, serializer);
+    }
+}
+
+impl SseEncode for crate::api::steam::SteamLobbyInfo {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.lobby_id, serializer);
+        <String>::sse_encode(self.game_id, serializer);
+        <String>::sse_encode(self.name, serializer);
+        <String>::sse_encode(self.gate, serializer);
+        <String>::sse_encode(self.version, serializer);
+        <String>::sse_encode(self.host_steam_id, serializer);
+        <u32>::sse_encode(self.players, serializer);
+        <u32>::sse_encode(self.capacity, serializer);
+        <bool>::sse_encode(self.joinable, serializer);
     }
 }
 
