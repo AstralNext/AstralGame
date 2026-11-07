@@ -193,6 +193,7 @@ class SteamLobbyDiag {
     required this.capacity,
     required this.isHost,
     required this.overlayEnabled,
+    required this.inviteDialogCalled,
     required this.overlayHint,
   });
 
@@ -217,6 +218,9 @@ class SteamLobbyDiag {
   /// Steam 覆盖层是否开启（决定原生邀请面板是否可用）。
   final bool overlayEnabled;
 
+  /// 本次房间内是否真正调用过 `activate_invite_dialog`。
+  final bool inviteDialogCalled;
+
   /// 覆盖层不可用时的说明；可用时为空。
   final String overlayHint;
 
@@ -234,6 +238,7 @@ class SteamLobbyDiag {
       capacity.hashCode ^
       isHost.hashCode ^
       overlayEnabled.hashCode ^
+      inviteDialogCalled.hashCode ^
       overlayHint.hashCode;
 
   @override
@@ -250,6 +255,7 @@ class SteamLobbyDiag {
           capacity == other.capacity &&
           isHost == other.isHost &&
           overlayEnabled == other.overlayEnabled &&
+          inviteDialogCalled == other.inviteDialogCalled &&
           overlayHint == other.overlayHint;
 }
 

@@ -6,6 +6,7 @@
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::net::Ipv4Addr;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::sync::Mutex;
 use std::thread;
@@ -153,6 +154,8 @@ lazy_static! {
     /// 待处理的好友邀请大厅 id：来自 `GameLobbyJoinRequested` 或启动参数
     /// `+connect_lobby <id>`，由 Dart 轮询后清空。
     static ref PENDING_INVITE: Mutex<Option<u64>> = Mutex::new(None);
+    /// 本次房间内是否真正调用过 `activate_invite_dialog`，双机自检报告用。
+    static ref INVITE_DIALOG_CALLED: AtomicBool = AtomicBool::new(false);
 }
 
 /// Steam 大厅回调结果：Steam 回调只在 `run_callbacks()` 里派发，闭包把结果
@@ -995,6 +998,7 @@ impl Engine {
                 self.client
                     .friends()
                     .activate_invite_dialog(LobbyId::from_raw(lobby_id));
+                INVITE_DIALOG_CALLED.store(true, Ordering::Relaxed);
                 let _ = reply.send(Ok(
                     "已请求唤起 Steam 邀请面板（只打开面板，不代表已发送邀请）".to_string()
                 ));
@@ -1761,6 +1765,7 @@ impl Engine {
         self.reconnect_at = None;
         self.start_deadline = None;
         self.role = Role::Idle;
+        INVITE_DIALOG_CALLED.store(false, Ordering::Relaxed);
         if let Some(tx) = self.start_reply.take() {
             let _ = tx.send(Err(reason.to_string()));
         }
@@ -2201,6 +2206,13 @@ impl Engine {
                 let Some(hello) = proto::parse_hello(frame.payload) else {
                     return;
                 };
+                debug_log(
+                    "hello_recv",
+                    format!(
+                        "sid={from_steam} ver={} game={}",
+                        hello.version, hello.game_id
+                    ),
+                );
                 let game_matches = self.game_id.is_empty()
                     || hello.game_id.eq_ignore_ascii_case(&self.game_id);
                 if hello.token != self.join_token
@@ -2231,6 +2243,17 @@ impl Engine {
                         &body,
                     );
                     self.send_to_steam(from_steam, &bytes, SendFlags::RELIABLE);
+                    debug_log(
+                        "kick_sent",
+                        format!(
+                            "sid={from_steam} reason={}",
+                            if game_matches {
+                                "房间密码不匹配"
+                            } else {
+                                "游戏标识不一致"
+                            }
+                        ),
+                    );
                     self.remove_member(from_steam, "成员鉴权失败");
                     return;
                 }
@@ -2270,6 +2293,10 @@ impl Engine {
                 let body = proto::welcome(&welcome);
                 let bytes = proto::encode(proto::KIND_CONTROL, 0, proto::HOST_VIP, vip, &body);
                 self.send_to_steam(from_steam, &bytes, SendFlags::RELIABLE);
+                debug_log(
+                    "welcome_sent",
+                    format!("sid={from_steam} peer={peer_id} vip={vip}"),
+                );
                 self.message = "成员已加入房间".to_string();
                 self.broadcast_roster();
             }
@@ -2373,6 +2400,7 @@ impl Engine {
             proto::CTL_BYE => {
                 if self.role == Role::Guest {
                     let reason = proto::kick_reason(frame.payload);
+                    debug_log("bye", format!("from={from_steam} reason={reason}"));
                     self.shutdown_room(if reason.is_empty() {
                         "房主已关闭房间"
                     } else {
@@ -2693,9 +2721,11 @@ impl Engine {
             "Steam 覆盖层未开启：原生邀请面板不可用，可用好友 SteamID 直接邀请或搜索房间"
                 .to_string()
         };
+        let ivid = INVITE_DIALOG_CALLED.load(Ordering::Relaxed);
         let Some(lobby_id) = self.lobby_id else {
             return Ok(SteamLobbyDiag {
                 overlay_enabled: overlay,
+                invite_dialog_called: ivid,
                 overlay_hint,
                 ..Default::default()
             });
@@ -2725,6 +2755,7 @@ impl Engine {
             capacity,
             is_host: self.role == Role::Host,
             overlay_enabled: overlay,
+            invite_dialog_called: ivid,
             overlay_hint,
         })
     }

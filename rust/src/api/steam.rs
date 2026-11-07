@@ -104,6 +104,8 @@ pub struct SteamLobbyDiag {
     pub is_host: bool,
     /// Steam 覆盖层是否开启（决定原生邀请面板是否可用）。
     pub overlay_enabled: bool,
+    /// 本次房间内是否真正调用过 `activate_invite_dialog`。
+    pub invite_dialog_called: bool,
     /// 覆盖层不可用时的说明；可用时为空。
     pub overlay_hint: String,
 }

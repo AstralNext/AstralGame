@@ -3454,8 +3454,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   SteamLobbyDiag dco_decode_steam_lobby_diag(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 10)
-      throw Exception('unexpected arr length: expect 10 but see ${arr.length}');
+    if (arr.length != 11)
+      throw Exception('unexpected arr length: expect 11 but see ${arr.length}');
     return SteamLobbyDiag(
       lobbyId: dco_decode_String(arr[0]),
       gameId: dco_decode_String(arr[1]),
@@ -3466,7 +3466,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       capacity: dco_decode_u_32(arr[6]),
       isHost: dco_decode_bool(arr[7]),
       overlayEnabled: dco_decode_bool(arr[8]),
-      overlayHint: dco_decode_String(arr[9]),
+      inviteDialogCalled: dco_decode_bool(arr[9]),
+      overlayHint: dco_decode_String(arr[10]),
     );
   }
 
@@ -4239,6 +4240,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     final var_capacity = sse_decode_u_32(deserializer);
     final var_isHost = sse_decode_bool(deserializer);
     final var_overlayEnabled = sse_decode_bool(deserializer);
+    final var_inviteDialogCalled = sse_decode_bool(deserializer);
     final var_overlayHint = sse_decode_String(deserializer);
     return SteamLobbyDiag(
       lobbyId: var_lobbyId,
@@ -4250,6 +4252,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       capacity: var_capacity,
       isHost: var_isHost,
       overlayEnabled: var_overlayEnabled,
+      inviteDialogCalled: var_inviteDialogCalled,
       overlayHint: var_overlayHint,
     );
   }
@@ -5027,6 +5030,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_u_32(self.capacity, serializer);
     sse_encode_bool(self.isHost, serializer);
     sse_encode_bool(self.overlayEnabled, serializer);
+    sse_encode_bool(self.inviteDialogCalled, serializer);
     sse_encode_String(self.overlayHint, serializer);
   }
 

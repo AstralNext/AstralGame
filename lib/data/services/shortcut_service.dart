@@ -211,6 +211,9 @@ class ShortcutService {
   // 桌面路径
   // ======================================================================
 
+  /// 桌面真实路径；被 OneDrive / 组策略重定向时也能取到。取不到返回 null。
+  String? desktopDirectory() => _findWindowsDesktopDir();
+
   String? _findWindowsDesktopDir() {
     // 首选 Known Folder API：能正确处理 OneDrive 重定向、企业重定向和组策略。
     final known = _desktopFromKnownFolder();

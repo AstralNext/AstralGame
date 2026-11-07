@@ -3683,6 +3683,7 @@ impl SseDecode for crate::api::steam::SteamLobbyDiag {
         let mut var_capacity = <u32>::sse_decode(deserializer);
         let mut var_isHost = <bool>::sse_decode(deserializer);
         let mut var_overlayEnabled = <bool>::sse_decode(deserializer);
+        let mut var_inviteDialogCalled = <bool>::sse_decode(deserializer);
         let mut var_overlayHint = <String>::sse_decode(deserializer);
         return crate::api::steam::SteamLobbyDiag {
             lobby_id: var_lobbyId,
@@ -3694,6 +3695,7 @@ impl SseDecode for crate::api::steam::SteamLobbyDiag {
             capacity: var_capacity,
             is_host: var_isHost,
             overlay_enabled: var_overlayEnabled,
+            invite_dialog_called: var_inviteDialogCalled,
             overlay_hint: var_overlayHint,
         };
     }
@@ -4509,6 +4511,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::steam::SteamLobbyDiag {
             self.capacity.into_into_dart().into_dart(),
             self.is_host.into_into_dart().into_dart(),
             self.overlay_enabled.into_into_dart().into_dart(),
+            self.invite_dialog_called.into_into_dart().into_dart(),
             self.overlay_hint.into_into_dart().into_dart(),
         ]
         .into_dart()
@@ -5088,6 +5091,7 @@ impl SseEncode for crate::api::steam::SteamLobbyDiag {
         <u32>::sse_encode(self.capacity, serializer);
         <bool>::sse_encode(self.is_host, serializer);
         <bool>::sse_encode(self.overlay_enabled, serializer);
+        <bool>::sse_encode(self.invite_dialog_called, serializer);
         <String>::sse_encode(self.overlay_hint, serializer);
     }
 }

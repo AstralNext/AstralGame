@@ -6,6 +6,7 @@ import 'package:astral_game/data/models/active_room_session.dart';
 import 'package:astral_game/data/models/game_catalog.dart';
 import 'package:astral_game/data/services/connection_service.dart';
 import 'package:astral_game/data/services/game_assist_rules_service.dart';
+import 'package:astral_game/data/services/steam_selftest_service.dart';
 import 'package:astral_game/data/services/steam_transport_service.dart';
 import 'package:astral_game/di.dart';
 import 'package:astral_game/src/rust/api/steam.dart';
@@ -38,6 +39,8 @@ class _SteamTransportPanelState extends State<SteamTransportPanel> {
   SteamLobbyDiag? _diag;
   String? _error;
   bool _refreshing = false;
+  bool _selfTestRunning = false;
+  String _selfTestStatus = '';
 
   @override
   void initState() {
@@ -177,6 +180,28 @@ class _SteamTransportPanelState extends State<SteamTransportPanel> {
             count: count,
             onTap: _guestRosterProbe,
           ),
+        if (_debugEnabled)
+          (index, count) => AstralGroupedTile(
+            icon: Icons.play_circle_outline_rounded,
+            label: '自检：房主跑一遍',
+            subtitle: _selfTestSubtitle(
+              '自动建房 → 等客人 → 校验握手 → 导出日志到桌面',
+            ),
+            index: index,
+            count: count,
+            onTap: _canRunSelfTest ? () => _runSelfTest(host: true) : null,
+          ),
+        if (_debugEnabled)
+          (index, count) => AstralGroupedTile(
+            icon: Icons.play_circle_outline_rounded,
+            label: '自检：客人跑一遍',
+            subtitle: _selfTestSubtitle(
+              '自动搜房 → 加入 → 校验握手 → 导出日志到桌面',
+            ),
+            index: index,
+            count: count,
+            onTap: _canRunSelfTest ? () => _runSelfTest(host: false) : null,
+          ),
         for (final member in (room?.members ?? const <SteamMemberInfo>[])
             // 离线成员不渲染（本机除外）；宽限期结束后 Rust 侧会真正摘除。
             .where((m) => m.online || m.isSelf))
@@ -229,6 +254,48 @@ class _SteamTransportPanelState extends State<SteamTransportPanel> {
     }
     if (!mounted) return;
     showAppToast(context, message);
+    await _refresh();
+  }
+
+  /// 自检只在未组网时可用：房间活跃时先离开，避免打断用户正在用的联机。
+  bool get _canRunSelfTest => !_selfTestRunning && _room?.active != true;
+
+  String _selfTestSubtitle(String idle) {
+    if (_selfTestRunning) {
+      return _selfTestStatus.isEmpty ? '正在准备…' : _selfTestStatus;
+    }
+    if (_room?.active == true) return '请先离开当前组网房间再运行自检';
+    return idle;
+  }
+
+  Future<void> _runSelfTest({required bool host}) async {
+    setState(() {
+      _selfTestRunning = true;
+      _selfTestStatus = '正在准备…';
+    });
+    SteamSelfTestResult? result;
+    String? error;
+    try {
+      result = await SteamSelfTestService().run(
+        host: host,
+        onProgress: (message) {
+          if (!mounted) return;
+          setState(() => _selfTestStatus = message);
+        },
+      );
+    } catch (e) {
+      error = '$e';
+    }
+    if (!mounted) return;
+    setState(() {
+      _selfTestRunning = false;
+      _selfTestStatus = '';
+    });
+    if (error != null) {
+      showAppToast(context, '自检失败：$error');
+    } else if (result != null) {
+      showAppToast(context, '${result.summary}：${result.path}');
+    }
     await _refresh();
   }
 
