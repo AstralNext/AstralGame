@@ -71,7 +71,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => 1269728391;
+  int get rustContentHash => -473883569;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -270,12 +270,48 @@ abstract class RustLibApi extends BaseApi {
     required List<int> payload,
   });
 
+  Future<void> crateApiSteamSteamClearPendingLobbyInvite();
+
+  Future<String> crateApiSteamSteamDebugGhostProbe();
+
+  Future<SteamLobbyInfo> crateApiSteamSteamLobbyCreate({
+    required String gameId,
+    required String name,
+    required String gate,
+    required int maxMembers,
+    required String joinToken,
+    required String nickname,
+  });
+
+  Future<SteamLobbyInfo> crateApiSteamSteamLobbyInfoDefault();
+
+  Future<void> crateApiSteamSteamLobbyInviteDialog();
+
+  Future<SteamLobbyInfo> crateApiSteamSteamLobbyJoin({
+    required String lobbyId,
+    required String gameId,
+    required String joinToken,
+    required String nickname,
+  });
+
+  Future<void> crateApiSteamSteamLobbyLeave();
+
+  Future<SteamLobbyInfo> crateApiSteamSteamLobbyPeek({required String lobbyId});
+
+  Future<List<SteamLobbyInfo>> crateApiSteamSteamLobbySearch({
+    required String gameId,
+  });
+
+  Future<void> crateApiSteamSteamLobbySetJoinable({required bool joinable});
+
   Future<int> crateApiSteamSteamMyPeerId();
 
   Future<PlatformInt64> crateApiSteamSteamPeerPing({
     required int dstPeerId,
     required int timeoutMs,
   });
+
+  Future<String?> crateApiSteamSteamPendingLobbyInvite();
 
   Future<SteamRoomInfo> crateApiSteamSteamRoomInfo();
 
@@ -286,6 +322,7 @@ abstract class RustLibApi extends BaseApi {
     required String hostSteamId,
     required String joinToken,
     required String nickname,
+    required String gameId,
   });
 
   Future<SteamStatusInfo> crateApiSteamSteamStatus();
@@ -1866,7 +1903,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<int> crateApiSteamSteamMyPeerId() {
+  Future<void> crateApiSteamSteamClearPendingLobbyInvite() {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
@@ -1875,6 +1912,327 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             generalizedFrbRustBinding,
             serializer,
             funcId: 45,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSteamSteamClearPendingLobbyInviteConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSteamSteamClearPendingLobbyInviteConstMeta =>
+      const TaskConstMeta(
+        debugName: 'steam_clear_pending_lobby_invite',
+        argNames: [],
+      );
+
+  @override
+  Future<String> crateApiSteamSteamDebugGhostProbe() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 46,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSteamSteamDebugGhostProbeConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSteamSteamDebugGhostProbeConstMeta =>
+      const TaskConstMeta(debugName: 'steam_debug_ghost_probe', argNames: []);
+
+  @override
+  Future<SteamLobbyInfo> crateApiSteamSteamLobbyCreate({
+    required String gameId,
+    required String name,
+    required String gate,
+    required int maxMembers,
+    required String joinToken,
+    required String nickname,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(gameId, serializer);
+          sse_encode_String(name, serializer);
+          sse_encode_String(gate, serializer);
+          sse_encode_u_32(maxMembers, serializer);
+          sse_encode_String(joinToken, serializer);
+          sse_encode_String(nickname, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 47,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_steam_lobby_info,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSteamSteamLobbyCreateConstMeta,
+        argValues: [gameId, name, gate, maxMembers, joinToken, nickname],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSteamSteamLobbyCreateConstMeta =>
+      const TaskConstMeta(
+        debugName: 'steam_lobby_create',
+        argNames: [
+          'gameId',
+          'name',
+          'gate',
+          'maxMembers',
+          'joinToken',
+          'nickname',
+        ],
+      );
+
+  @override
+  Future<SteamLobbyInfo> crateApiSteamSteamLobbyInfoDefault() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 48,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_steam_lobby_info,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSteamSteamLobbyInfoDefaultConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSteamSteamLobbyInfoDefaultConstMeta =>
+      const TaskConstMeta(debugName: 'steam_lobby_info_default', argNames: []);
+
+  @override
+  Future<void> crateApiSteamSteamLobbyInviteDialog() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 49,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSteamSteamLobbyInviteDialogConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSteamSteamLobbyInviteDialogConstMeta =>
+      const TaskConstMeta(debugName: 'steam_lobby_invite_dialog', argNames: []);
+
+  @override
+  Future<SteamLobbyInfo> crateApiSteamSteamLobbyJoin({
+    required String lobbyId,
+    required String gameId,
+    required String joinToken,
+    required String nickname,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(lobbyId, serializer);
+          sse_encode_String(gameId, serializer);
+          sse_encode_String(joinToken, serializer);
+          sse_encode_String(nickname, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 50,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_steam_lobby_info,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSteamSteamLobbyJoinConstMeta,
+        argValues: [lobbyId, gameId, joinToken, nickname],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSteamSteamLobbyJoinConstMeta =>
+      const TaskConstMeta(
+        debugName: 'steam_lobby_join',
+        argNames: ['lobbyId', 'gameId', 'joinToken', 'nickname'],
+      );
+
+  @override
+  Future<void> crateApiSteamSteamLobbyLeave() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 51,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSteamSteamLobbyLeaveConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSteamSteamLobbyLeaveConstMeta =>
+      const TaskConstMeta(debugName: 'steam_lobby_leave', argNames: []);
+
+  @override
+  Future<SteamLobbyInfo> crateApiSteamSteamLobbyPeek({
+    required String lobbyId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(lobbyId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 52,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_steam_lobby_info,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSteamSteamLobbyPeekConstMeta,
+        argValues: [lobbyId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSteamSteamLobbyPeekConstMeta =>
+      const TaskConstMeta(debugName: 'steam_lobby_peek', argNames: ['lobbyId']);
+
+  @override
+  Future<List<SteamLobbyInfo>> crateApiSteamSteamLobbySearch({
+    required String gameId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(gameId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 53,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_steam_lobby_info,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSteamSteamLobbySearchConstMeta,
+        argValues: [gameId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSteamSteamLobbySearchConstMeta =>
+      const TaskConstMeta(
+        debugName: 'steam_lobby_search',
+        argNames: ['gameId'],
+      );
+
+  @override
+  Future<void> crateApiSteamSteamLobbySetJoinable({required bool joinable}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_bool(joinable, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 54,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSteamSteamLobbySetJoinableConstMeta,
+        argValues: [joinable],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSteamSteamLobbySetJoinableConstMeta =>
+      const TaskConstMeta(
+        debugName: 'steam_lobby_set_joinable',
+        argNames: ['joinable'],
+      );
+
+  @override
+  Future<int> crateApiSteamSteamMyPeerId() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 55,
             port: port_,
           );
         },
@@ -1906,7 +2264,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 46,
+            funcId: 56,
             port: port_,
           );
         },
@@ -1927,6 +2285,36 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   );
 
   @override
+  Future<String?> crateApiSteamSteamPendingLobbyInvite() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 57,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_opt_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSteamSteamPendingLobbyInviteConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSteamSteamPendingLobbyInviteConstMeta =>
+      const TaskConstMeta(
+        debugName: 'steam_pending_lobby_invite',
+        argNames: [],
+      );
+
+  @override
   Future<SteamRoomInfo> crateApiSteamSteamRoomInfo() {
     return handler.executeNormal(
       NormalTask(
@@ -1935,7 +2323,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 47,
+            funcId: 58,
             port: port_,
           );
         },
@@ -1962,7 +2350,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 48,
+            funcId: 59,
             port: port_,
           );
         },
@@ -1986,6 +2374,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     required String hostSteamId,
     required String joinToken,
     required String nickname,
+    required String gameId,
   }) {
     return handler.executeNormal(
       NormalTask(
@@ -1995,10 +2384,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           sse_encode_String(hostSteamId, serializer);
           sse_encode_String(joinToken, serializer);
           sse_encode_String(nickname, serializer);
+          sse_encode_String(gameId, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 49,
+            funcId: 60,
             port: port_,
           );
         },
@@ -2007,7 +2397,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_String,
         ),
         constMeta: kCrateApiSteamSteamStartConstMeta,
-        argValues: [host, hostSteamId, joinToken, nickname],
+        argValues: [host, hostSteamId, joinToken, nickname, gameId],
         apiImpl: this,
       ),
     );
@@ -2015,7 +2405,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   TaskConstMeta get kCrateApiSteamSteamStartConstMeta => const TaskConstMeta(
     debugName: 'steam_start',
-    argNames: ['host', 'hostSteamId', 'joinToken', 'nickname'],
+    argNames: ['host', 'hostSteamId', 'joinToken', 'nickname', 'gameId'],
   );
 
   @override
@@ -2027,7 +2417,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 50,
+            funcId: 61,
             port: port_,
           );
         },
@@ -2054,7 +2444,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 51,
+            funcId: 62,
             port: port_,
           );
         },
@@ -2081,7 +2471,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 52,
+            funcId: 63,
             port: port_,
           );
         },
@@ -2111,7 +2501,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             pdeCallFfi(
               generalizedFrbRustBinding,
               serializer,
-              funcId: 53,
+              funcId: 64,
               port: port_,
             );
           },
@@ -2146,7 +2536,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             pdeCallFfi(
               generalizedFrbRustBinding,
               serializer,
-              funcId: 54,
+              funcId: 65,
               port: port_,
             );
           },
@@ -2178,7 +2568,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 55,
+            funcId: 66,
             port: port_,
           );
         },
@@ -2205,7 +2595,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 56,
+            funcId: 67,
             port: port_,
           );
         },
@@ -2235,7 +2625,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 57,
+            funcId: 68,
             port: port_,
           );
         },
@@ -2266,7 +2656,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 58,
+            funcId: 69,
             port: port_,
           );
         },
@@ -2296,7 +2686,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 59,
+            funcId: 70,
             port: port_,
           );
         },
@@ -2324,7 +2714,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 60,
+            funcId: 71,
             port: port_,
           );
         },
@@ -2360,7 +2750,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             pdeCallFfi(
               generalizedFrbRustBinding,
               serializer,
-              funcId: 61,
+              funcId: 72,
               port: port_,
             );
           },
@@ -2395,7 +2785,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             pdeCallFfi(
               generalizedFrbRustBinding,
               serializer,
-              funcId: 62,
+              funcId: 73,
               port: port_,
             );
           },
@@ -2845,6 +3235,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<SteamLobbyInfo> dco_decode_list_steam_lobby_info(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_steam_lobby_info).toList();
+  }
+
+  @protected
   List<SteamMemberInfo> dco_decode_list_steam_member_info(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_steam_member_info).toList();
@@ -2924,6 +3320,25 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       dco_decode_usize(arr[0]),
       dco_decode_u_64(arr[1]),
       dco_decode_u_64(arr[2]),
+    );
+  }
+
+  @protected
+  SteamLobbyInfo dco_decode_steam_lobby_info(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 9)
+      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
+    return SteamLobbyInfo(
+      lobbyId: dco_decode_String(arr[0]),
+      gameId: dco_decode_String(arr[1]),
+      name: dco_decode_String(arr[2]),
+      gate: dco_decode_String(arr[3]),
+      version: dco_decode_String(arr[4]),
+      hostSteamId: dco_decode_String(arr[5]),
+      players: dco_decode_u_32(arr[6]),
+      capacity: dco_decode_u_32(arr[7]),
+      joinable: dco_decode_bool(arr[8]),
     );
   }
 
@@ -3542,6 +3957,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<SteamLobbyInfo> sse_decode_list_steam_lobby_info(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    final len_ = sse_decode_i_32(deserializer);
+    final ans_ = <SteamLobbyInfo>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_steam_lobby_info(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   List<SteamMemberInfo> sse_decode_list_steam_member_info(
     SseDeserializer deserializer,
   ) {
@@ -3649,6 +4078,31 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     final var_field1 = sse_decode_u_64(deserializer);
     final var_field2 = sse_decode_u_64(deserializer);
     return (var_field0, var_field1, var_field2);
+  }
+
+  @protected
+  SteamLobbyInfo sse_decode_steam_lobby_info(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final var_lobbyId = sse_decode_String(deserializer);
+    final var_gameId = sse_decode_String(deserializer);
+    final var_name = sse_decode_String(deserializer);
+    final var_gate = sse_decode_String(deserializer);
+    final var_version = sse_decode_String(deserializer);
+    final var_hostSteamId = sse_decode_String(deserializer);
+    final var_players = sse_decode_u_32(deserializer);
+    final var_capacity = sse_decode_u_32(deserializer);
+    final var_joinable = sse_decode_bool(deserializer);
+    return SteamLobbyInfo(
+      lobbyId: var_lobbyId,
+      gameId: var_gameId,
+      name: var_name,
+      gate: var_gate,
+      version: var_version,
+      hostSteamId: var_hostSteamId,
+      players: var_players,
+      capacity: var_capacity,
+      joinable: var_joinable,
+    );
   }
 
   @protected
@@ -4285,6 +4739,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_steam_lobby_info(
+    List<SteamLobbyInfo> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_steam_lobby_info(item, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_list_steam_member_info(
     List<SteamMemberInfo> self,
     SseSerializer serializer,
@@ -4370,6 +4836,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_usize(self.$1, serializer);
     sse_encode_u_64(self.$2, serializer);
     sse_encode_u_64(self.$3, serializer);
+  }
+
+  @protected
+  void sse_encode_steam_lobby_info(
+    SteamLobbyInfo self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.lobbyId, serializer);
+    sse_encode_String(self.gameId, serializer);
+    sse_encode_String(self.name, serializer);
+    sse_encode_String(self.gate, serializer);
+    sse_encode_String(self.version, serializer);
+    sse_encode_String(self.hostSteamId, serializer);
+    sse_encode_u_32(self.players, serializer);
+    sse_encode_u_32(self.capacity, serializer);
+    sse_encode_bool(self.joinable, serializer);
   }
 
   @protected

@@ -222,6 +222,8 @@ class ConnectionService {
     required String gameId,
     required String gameName,
     String? displayName,
+    String gate = kSteamLobbyGateBasic,
+    String? extraPassword,
   }) async {
     _beginConnectionAttempt();
     try {
@@ -231,6 +233,8 @@ class ConnectionService {
           gameId: gameId,
           gameName: gameName,
           displayName: displayName,
+          gate: gate,
+          extraPassword: extraPassword,
         );
       }
       final hostPeers = _p2pConfig.enabledPeers();
@@ -305,21 +309,31 @@ class ConnectionService {
     required String gameId,
     required String gameName,
     String? displayName,
+    String gate = kSteamLobbyGateBasic,
+    String? extraPassword,
   }) async {
     final status = await _steam.waitReady();
-    if (!status.ok) throw StateError(status.message);
+    if (!SteamTransportService.isReady(status)) {
+      throw StateError('${SteamTransportService.describeNotReady(status)}，请稍后重试。');
+    }
     if (status.steamId.isEmpty) {
       throw StateError('未获取到 SteamID：请先启动并登录 Steam 客户端。');
     }
 
     final networkName = 'ag_${_randomId(10)}';
-    final secret = _p2pConfig.generateRoomCode(length: 16);
+    final extra = extraPassword?.trim() ?? '';
+    final secret = composeSteamJoinToken(extraPassword: extra);
+    final effectiveGate = extra.isNotEmpty ? kSteamLobbyGateDouble : gate;
     final label = (displayName == null || displayName.trim().isEmpty)
         ? gameName
         : displayName.trim();
 
     try {
-      await _steam.startHost(
+      await _steam.createLobby(
+        gameId: gameId,
+        name: label,
+        gate: effectiveGate,
+        maxMembers: 8,
         joinToken: secret,
         nickname: status.persona,
       );
@@ -395,13 +409,16 @@ class ConnectionService {
 
     // 邀请里只需要房主 SteamID 与房间口令，虚拟 IP 由房主分配。
     final status = await _steam.waitReady();
-    if (!status.ok) throw StateError(status.message);
+    if (!SteamTransportService.isReady(status)) {
+      throw StateError('${SteamTransportService.describeNotReady(status)}，请稍后重试。');
+    }
 
     try {
       await _steam.startGuest(
         hostSteamId: hostId,
         joinToken: payload.networkSecret,
         nickname: status.persona,
+        gameId: payload.gameId,
       );
       _peerRpc.bindSteam();
       await _peerRpcRouter.startSteam();
@@ -441,6 +458,94 @@ class ConnectionService {
       'vip=${status.virtualIp}',
     );
     return session;
+  }
+
+  /// 供 UI 直接使用大厅能力（搜索 / 邀请界面 / 待处理邀请）。
+  SteamTransportService get steamTransport => _steam;
+
+  /// 当前是否处于 Steam 组网模式（大厅搜房入口只在此时显示）。
+  bool get steamModeActive => _steamModeActive;
+
+  /// 从大厅搜索结果直接进房。
+  ///
+  /// 与邀请进房的区别：口令由「全工具基础口令 + 用户输入的可选额外密码」
+  /// 拼成，房主与客人无需交换任何离线邀请串。
+  Future<ActiveRoomSession> joinSteamLobby({
+    required String lobbyId,
+    required String gameId,
+    required String gameName,
+    String? extraPassword,
+    String? displayName,
+  }) async {
+    _beginConnectionAttempt();
+    try {
+      final reason = _settingsState.transportGate.unavailableReason(
+        TransportMode.steam,
+      );
+      if (reason != null) throw StateError('$reason，无法加入该房间。');
+      final status = await _steam.waitReady();
+      if (!SteamTransportService.isReady(status)) {
+        throw StateError('${SteamTransportService.describeNotReady(status)}，请稍后重试。');
+      }
+      final token = composeSteamJoinToken(extraPassword: extraPassword);
+      final info = await _steam.joinLobby(
+        lobbyId: lobbyId,
+        gameId: gameId,
+        joinToken: token,
+        nickname: status.persona,
+      );
+      try {
+        _peerRpc.bindSteam();
+        await _peerRpcRouter.startSteam();
+        _nodeManagement.startSteam();
+      } catch (e) {
+        await _unbindPeerRpc();
+        _nodeManagement.stop();
+        await _steam.leaveLobby();
+        rethrow;
+      }
+      final label = (displayName == null || displayName.trim().isEmpty)
+          ? (gameName.isEmpty ? '房间' : gameName)
+          : displayName.trim();
+      final resolvedGameId = info.gameId.isEmpty ? gameId : info.gameId;
+      final payload = RoomInvitePayload(
+        gameId: resolvedGameId,
+        gameName: gameName,
+        networkName: 'ag_${info.lobbyId}',
+        networkSecret: token,
+        peers: const <PeerEndpoint>[],
+        displayName: label,
+        transport: 'steam',
+        hostSteamId: info.hostSteamId,
+      );
+      final session = ActiveRoomSession(
+        isHost: false,
+        gameId: resolvedGameId,
+        gameName: gameName.isEmpty ? '房间' : gameName,
+        networkName: payload.networkName,
+        networkSecret: token,
+        displayName: label,
+        peers: const <PeerEndpoint>[],
+        transport: 'steam',
+        hostSteamId: info.hostSteamId,
+      );
+      _roomState.setSession(session);
+      try {
+        await _startGameAssist(gameId: resolvedGameId, isHost: false);
+      } catch (e) {
+        appLogger.w('[ConnectionService] Steam 辅助服务启动失败: $e');
+      }
+      _roomState.setConnected(true, clearSession: false);
+      _armGuestPresenceWatch();
+      await _appSettings.setLastRoomPayload(payload);
+      appLogger.i(
+        '[ConnectionService] 已通过大厅加入 Steam 房间: '
+        'lobby=$lobbyId host=${info.hostSteamId}',
+      );
+      return session;
+    } finally {
+      _endConnectionAttempt();
+    }
   }
 
   /// 解析邀请输入（短码/离线）并返回完整 payload，**不真正加入房间**。

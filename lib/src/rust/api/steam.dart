@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 import 'p2p.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`
 
 /// 读取当前 Steam 状态；首次调用会拉起后台线程。
 Future<SteamStatusInfo> steamStatus() =>
@@ -29,12 +29,77 @@ Future<SteamStatusInfo> steamStart({
   required String hostSteamId,
   required String joinToken,
   required String nickname,
+  required String gameId,
 }) => RustLib.instance.api.crateApiSteamSteamStart(
   host: host,
   hostSteamId: hostSteamId,
   joinToken: joinToken,
   nickname: nickname,
+  gameId: gameId,
 );
+
+/// 创建 Steam 公开大厅并直接开房（写 `ag_*` 标签、开启 P2P 监听）。
+Future<SteamLobbyInfo> steamLobbyCreate({
+  required String gameId,
+  required String name,
+  required String gate,
+  required int maxMembers,
+  required String joinToken,
+  required String nickname,
+}) => RustLib.instance.api.crateApiSteamSteamLobbyCreate(
+  gameId: gameId,
+  name: name,
+  gate: gate,
+  maxMembers: maxMembers,
+  joinToken: joinToken,
+  nickname: nickname,
+);
+
+/// 搜索本游戏的大厅（服务端 `ag_game` 过滤 + 本地二次校验）。
+Future<List<SteamLobbyInfo>> steamLobbySearch({required String gameId}) =>
+    RustLib.instance.api.crateApiSteamSteamLobbySearch(gameId: gameId);
+
+/// 加入大厅并连上房主；返回时隧道已可用。
+Future<SteamLobbyInfo> steamLobbyJoin({
+  required String lobbyId,
+  required String gameId,
+  required String joinToken,
+  required String nickname,
+}) => RustLib.instance.api.crateApiSteamSteamLobbyJoin(
+  lobbyId: lobbyId,
+  gameId: gameId,
+  joinToken: joinToken,
+  nickname: nickname,
+);
+
+/// 诊断用：往成员表注入一个「离线超过宽限期」的成员，跑一次真实 prune，
+/// 返回摘除前后的成员数。需要 `ASTRAL_STEAM_DEBUG=1` 且当前是房主。
+Future<String> steamDebugGhostProbe() =>
+    RustLib.instance.api.crateApiSteamSteamDebugGhostProbe();
+
+/// 只读大厅元数据（加入后立刻离开），用于邀请进房前确认门槛。
+Future<SteamLobbyInfo> steamLobbyPeek({required String lobbyId}) =>
+    RustLib.instance.api.crateApiSteamSteamLobbyPeek(lobbyId: lobbyId);
+
+/// 离开当前大厅（同时停止隧道）。
+Future<void> steamLobbyLeave() =>
+    RustLib.instance.api.crateApiSteamSteamLobbyLeave();
+
+/// 设置大厅是否可被搜索到（关房前先置 false）。
+Future<void> steamLobbySetJoinable({required bool joinable}) =>
+    RustLib.instance.api.crateApiSteamSteamLobbySetJoinable(joinable: joinable);
+
+/// 打开 Steam 原生好友邀请界面。
+Future<void> steamLobbyInviteDialog() =>
+    RustLib.instance.api.crateApiSteamSteamLobbyInviteDialog();
+
+/// 读取待处理的好友邀请大厅 id（Dart 侧轮询）。
+Future<String?> steamPendingLobbyInvite() =>
+    RustLib.instance.api.crateApiSteamSteamPendingLobbyInvite();
+
+/// 清空待处理的邀请（进房成功或用户放弃后调用）。
+Future<void> steamClearPendingLobbyInvite() =>
+    RustLib.instance.api.crateApiSteamSteamClearPendingLobbyInvite();
 
 /// 停止 Steam 组网（保留 Steam 进程级连接）。
 Future<void> steamStop() => RustLib.instance.api.crateApiSteamSteamStop();
@@ -96,6 +161,72 @@ Future<PlatformInt64> steamPeerPing({
 /// 订阅入站应用 RPC 事件。
 Stream<AppInboundEventC> steamSubscribeAppInbound() =>
     RustLib.instance.api.crateApiSteamSteamSubscribeAppInbound();
+
+/// 一条 Steam 大厅搜索结果 / 当前大厅。
+class SteamLobbyInfo {
+  const SteamLobbyInfo({
+    required this.lobbyId,
+    required this.gameId,
+    required this.name,
+    required this.gate,
+    required this.version,
+    required this.hostSteamId,
+    required this.players,
+    required this.capacity,
+    required this.joinable,
+  });
+
+  /// Steam 大厅 id（十进制字符串，避免 64 位精度问题）。
+  final String lobbyId;
+
+  /// `ag_game`：游戏标识（构建房间时手动选择）。
+  final String gameId;
+
+  /// `ag_name`：房间展示名。
+  final String name;
+
+  /// `ag_gate`：`basic` / `double` / `open`。
+  final String gate;
+
+  /// `ag_ver`：组网协议版本。
+  final String version;
+
+  /// 房主 SteamID。
+  final String hostSteamId;
+  final int players;
+  final int capacity;
+  final bool joinable;
+
+  static Future<SteamLobbyInfo> default_() =>
+      RustLib.instance.api.crateApiSteamSteamLobbyInfoDefault();
+
+  @override
+  int get hashCode =>
+      lobbyId.hashCode ^
+      gameId.hashCode ^
+      name.hashCode ^
+      gate.hashCode ^
+      version.hashCode ^
+      hostSteamId.hashCode ^
+      players.hashCode ^
+      capacity.hashCode ^
+      joinable.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SteamLobbyInfo &&
+          runtimeType == other.runtimeType &&
+          lobbyId == other.lobbyId &&
+          gameId == other.gameId &&
+          name == other.name &&
+          gate == other.gate &&
+          version == other.version &&
+          hostSteamId == other.hostSteamId &&
+          players == other.players &&
+          capacity == other.capacity &&
+          joinable == other.joinable;
+}
 
 /// 房间成员快照。
 class SteamMemberInfo {

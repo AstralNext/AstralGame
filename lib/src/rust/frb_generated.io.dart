@@ -212,6 +212,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
 
   @protected
+  List<SteamLobbyInfo> dco_decode_list_steam_lobby_info(dynamic raw);
+
+  @protected
   List<SteamMemberInfo> dco_decode_list_steam_member_info(dynamic raw);
 
   @protected
@@ -231,6 +234,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   (BigInt, BigInt, BigInt) dco_decode_record_usize_u_64_u_64(dynamic raw);
+
+  @protected
+  SteamLobbyInfo dco_decode_steam_lobby_info(dynamic raw);
 
   @protected
   SteamMemberInfo dco_decode_steam_member_info(dynamic raw);
@@ -449,6 +455,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
 
   @protected
+  List<SteamLobbyInfo> sse_decode_list_steam_lobby_info(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   List<SteamMemberInfo> sse_decode_list_steam_member_info(
     SseDeserializer deserializer,
   );
@@ -472,6 +483,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   (BigInt, BigInt, BigInt) sse_decode_record_usize_u_64_u_64(
     SseDeserializer deserializer,
   );
+
+  @protected
+  SteamLobbyInfo sse_decode_steam_lobby_info(SseDeserializer deserializer);
 
   @protected
   SteamMemberInfo sse_decode_steam_member_info(SseDeserializer deserializer);
@@ -755,6 +769,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_steam_lobby_info(
+    List<SteamLobbyInfo> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_steam_member_info(
     List<SteamMemberInfo> self,
     SseSerializer serializer,
@@ -784,6 +804,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_record_usize_u_64_u_64(
     (BigInt, BigInt, BigInt) self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_steam_lobby_info(
+    SteamLobbyInfo self,
     SseSerializer serializer,
   );
 

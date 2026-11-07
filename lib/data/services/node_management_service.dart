@@ -410,7 +410,9 @@ class NodeManagementService {
     _adoptSelfPeerId(room.selfPeerId);
     return <KVNodeInfo>[
       for (final m in room.members)
-        KVNodeInfo(
+        // 离线成员不进入节点列表（本机除外），避免幽灵节点。
+        if (m.online || m.isSelf)
+          KVNodeInfo(
           peerId: m.peerId,
           hostname: m.nickname.isEmpty
               ? 'Steam-${m.steamId}'
