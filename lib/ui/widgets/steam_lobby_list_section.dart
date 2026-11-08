@@ -461,10 +461,14 @@ class _LobbyRow extends StatelessWidget {
     final palette = context.astralPalette;
     final textTheme = Theme.of(context).textTheme;
     final tone = _tone(room);
-    final full = tone == AstralStatusTone.full;
     final unavailable = tone == AstralStatusTone.unavailable || !_canJoin(room);
     final enabled = !unavailable && !roomActive && !joining;
-    final label = full ? '已满' : (unavailable ? '不可加入' : '加入');
+    // 点位已经表达状态，按钮只保留禁用态；文字解释放到 hover 提示里。
+    final blockReason = switch (tone) {
+      AstralStatusTone.full => '已满',
+      AstralStatusTone.unavailable => '不可加入',
+      _ => null,
+    };
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(
@@ -496,37 +500,29 @@ class _LobbyRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 16),
-          Tooltip(
-            message: 'Steam 搜索不返回延迟，进房后显示',
-            child: SizedBox(
-              width: 36,
-              child: Text(
-                '—',
-                textAlign: TextAlign.right,
-                style: textTheme.labelMedium?.copyWith(
-                  color: palette.textTertiary,
+          Builder(
+            builder: (context) {
+              final button = TextButton(
+                onPressed: enabled ? () => onJoin?.call(room) : null,
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(0, 32),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  textStyle: textTheme.labelMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          TextButton(
-            onPressed: enabled ? () => onJoin?.call(room) : null,
-            style: TextButton.styleFrom(
-              minimumSize: const Size(0, 32),
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              textStyle: textTheme.labelMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            child: joining
-                ? const SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Text(label),
+                child: joining
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('加入'),
+              );
+              if (blockReason == null) return button;
+              return Tooltip(message: blockReason, child: button);
+            },
           ),
         ],
       ),

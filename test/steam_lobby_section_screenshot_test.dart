@@ -5,6 +5,9 @@ import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/models/game_catalog.dart';
 import 'package:astral_game/data/services/steam_transport_service.dart';
 import 'package:astral_game/src/rust/api/steam.dart';
+import 'package:astral_game/ui/widgets/astral_card.dart';
+import 'package:astral_game/ui/widgets/astral_status_dot.dart';
+import 'package:astral_game/ui/widgets/section_header.dart';
 import 'package:astral_game/ui/widgets/steam_lobby_list_section.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -62,33 +65,32 @@ void main() {
     }
   });
 
-  testWidgets('导出房间列表三种验收截图', (tester) async {
+  testWidgets('导出房间列表验收截图', (tester) async {
     final scenarios = <String, List<SteamLobbyInfo>>{
       'rooms': [
-        _room(id: '1', name: '星露谷 · 小木屋', players: 2),
-        _room(id: '2', name: '泰拉瑞亚 · 开荒', players: 4),
-        _room(id: '3', name: '深岩银河 · 挖矿队', players: 1, capacity: 4),
+        _room(id: '1', name: '小木屋', players: 2),
+        _room(id: '2', name: '开荒', players: 4),
+        _room(id: '3', name: '挖矿队', players: 1, capacity: 4),
       ],
-      'empty': const [],
       'mixed': [
         _room(
           id: '4',
-          name: '星露谷 · 需要口令',
+          name: '需要口令',
           players: 5,
           gate: kSteamLobbyGateDouble,
         ),
-        _room(id: '5', name: '星露谷 · 周末农场', players: 8),
+        _room(id: '5', name: '周末农场', players: 8),
         _room(
           id: '6',
-          name: '星露谷 · 旧版本房间',
+          name: '旧版本房间',
           players: 3,
           version: 'old',
           joinable: false,
         ),
-        _room(id: '7', name: '星露谷 · 已关闭', players: 2, joinable: false),
+        _room(id: '7', name: '已关闭', players: 2, joinable: false),
         _room(
           id: '8',
-          name: '星露谷 · 新人房',
+          name: '新人房',
           players: 3,
           gate: kSteamLobbyGateOpen,
         ),
@@ -126,6 +128,93 @@ void main() {
       await _capture(tester, boundaryKey, entry.key);
     }
   });
+
+  testWidgets('导出两颗绿点并排近景', (tester) async {
+    final boundaryKey = GlobalKey();
+    await tester.pumpWidget(
+      MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: AstralGameTheme.defaultTheme,
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 420,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: RepaintBoundary(
+                  key: boundaryKey,
+                  child: const _GreenDotsCard(),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await _capture(tester, boundaryKey, 'greens');
+  });
+}
+
+/// 两颗绿点的并排近景：上半是列表里的真实 8px 尺寸，下半放大 4 倍便于核对色值。
+class _GreenDotsCard extends StatelessWidget {
+  const _GreenDotsCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.astralPalette;
+    final textTheme = Theme.of(context).textTheme;
+
+    Widget item(AstralStatusTone tone, double size, String label) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AstralStatusDot(tone: tone, size: size, semanticLabel: label),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: textTheme.bodyMedium?.copyWith(color: palette.textPrimary),
+          ),
+        ],
+      );
+    }
+
+    Widget row(String caption, double size) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 84,
+              child: Text(
+                caption,
+                style: textTheme.bodySmall?.copyWith(
+                  color: palette.textSecondary,
+                ),
+              ),
+            ),
+            item(AstralStatusTone.ready, size, '可加入'),
+            const SizedBox(width: 32),
+            item(AstralStatusTone.secured, size, '需要口令'),
+          ],
+        ),
+      );
+    }
+
+    return AstralCard(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SectionHeader(title: '两种绿', tone: SectionHeaderTone.muted),
+          row('8px 实际', 8),
+          Divider(height: 1, thickness: 1, color: palette.divider),
+          row('4× 放大', 32),
+        ],
+      ),
+    );
+  }
 }
 
 Future<void> _loadFont(String family, String path) async {

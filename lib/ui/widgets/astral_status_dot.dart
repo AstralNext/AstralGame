@@ -32,10 +32,11 @@ class AstralStatusDot extends StatelessWidget {
   Color _color(AppThemePalette palette) {
     return switch (tone) {
       AstralStatusTone.ready => palette.online,
+      // 暗绿：保色相压亮度，和亮绿的对比要够，8px 正常尺寸也一眼能分。
       AstralStatusTone.secured => Color.lerp(
         palette.online,
         Colors.black,
-        0.38,
+        0.58,
       )!,
       AstralStatusTone.full => palette.warning,
       AstralStatusTone.unavailable => palette.textTertiary,
