@@ -72,18 +72,18 @@ void main() {
           ({
             String name,
             GameInfo? game,
-            SteamLobbyGateFilter gate,
+            SteamLobbyGateFilter? gate,
             List<SteamLobbyInfo> rooms,
             double width,
             double height,
             double scale,
           })
         >[
-          // 「全部」：跨游戏、跨门槛混排。
+          // 不限门槛：跨游戏、跨门槛混排；点位与锁必须同源。
           (
             name: 'mixed',
             game: null,
-            gate: SteamLobbyGateFilter.all,
+            gate: null,
             width: 760,
             height: 520,
             scale: 2,
@@ -121,7 +121,7 @@ void main() {
           (
             name: 'empty',
             game: null,
-            gate: SteamLobbyGateFilter.all,
+            gate: null,
             width: 760,
             height: 520,
             scale: 2,
@@ -131,7 +131,7 @@ void main() {
           (
             name: 'terraria',
             game: _otherGame,
-            gate: SteamLobbyGateFilter.all,
+            gate: null,
             width: 760,
             height: 520,
             scale: 2,
@@ -184,7 +184,7 @@ void main() {
           (
             name: 'lock-detail',
             game: null,
-            gate: SteamLobbyGateFilter.all,
+            gate: null,
             width: 560,
             height: 208,
             scale: 3,

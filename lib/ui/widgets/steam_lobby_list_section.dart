@@ -45,7 +45,9 @@ class SteamLobbyListSection extends StatefulWidget {
 class SteamLobbyListSectionState extends State<SteamLobbyListSection> {
   List<GameInfo> _catalog = const [];
   GameInfo? _game;
-  SteamLobbyGateFilter _gateFilter = SteamLobbyGateFilter.all;
+
+  /// null = 不限（两个口径标签都没选中）。
+  SteamLobbyGateFilter? _gateFilter;
   List<SteamLobbyInfo> _rooms = const [];
   bool _loading = true;
   String? _error;
@@ -146,9 +148,9 @@ class SteamLobbyListSectionState extends State<SteamLobbyListSection> {
     unawaited(_search());
   }
 
+  /// 点一下选中，再点同一个取消（回到不限）。
   void _changeGate(SteamLobbyGateFilter filter) {
-    if (filter == _gateFilter) return;
-    setState(() => _gateFilter = filter);
+    setState(() => _gateFilter = _gateFilter == filter ? null : filter);
   }
 
   Future<void> _join(SteamLobbyInfo room) async {
@@ -268,8 +270,9 @@ class SteamLobbyListSectionState extends State<SteamLobbyListSection> {
 }
 
 /// 门槛筛选：与游戏维度叠加，只做本地过滤。
+///
+/// 只有两个可切换标签，都不选中即「不限」——避免和游戏下拉的「全部」重名。
 enum SteamLobbyGateFilter {
-  all('全部'),
   open('公开'),
   secured('需要口令');
 
@@ -277,6 +280,11 @@ enum SteamLobbyGateFilter {
 
   final String label;
 }
+
+/// 门槛的唯一判定：完全公开 = 不需要口令；基础口令与额外密码都需要。
+///
+/// 锁、点位颜色、口令筛选都从这里派生，避免两处各自判断导致「亮绿点 + 小锁」。
+bool _needsPassword(SteamLobbyInfo room) => room.gate != kSteamLobbyGateOpen;
 
 /// 纯展示层：验收截图直接渲染这一个组件。
 class SteamLobbyListView extends StatelessWidget {
@@ -286,7 +294,7 @@ class SteamLobbyListView extends StatelessWidget {
     required this.selectedGame,
     required this.rooms,
     required this.loading,
-    this.gateFilter = SteamLobbyGateFilter.all,
+    this.gateFilter,
     this.error,
     this.joiningLobbyId,
     this.roomActive = false,
@@ -302,8 +310,8 @@ class SteamLobbyListView extends StatelessWidget {
   /// 选中的游戏；null 表示「全部」。
   final GameInfo? selectedGame;
 
-  /// 当前门槛筛选；默认「全部」。
-  final SteamLobbyGateFilter gateFilter;
+  /// 当前门槛筛选；null 表示不限（两个标签都没选中）。
+  final SteamLobbyGateFilter? gateFilter;
 
   final List<SteamLobbyInfo> rooms;
   final bool loading;
@@ -311,7 +319,10 @@ class SteamLobbyListView extends StatelessWidget {
   final String? joiningLobbyId;
   final bool roomActive;
   final ValueChanged<GameInfo?>? onSelectGame;
+
+  /// 点标签只上报被点的那个；「再点一次取消」由 Section 自己处理。
   final ValueChanged<SteamLobbyGateFilter>? onSelectGate;
+
   final VoidCallback? onRefresh;
 
   /// 邀请好友入口；为 null 时不渲染该按钮。
@@ -322,14 +333,14 @@ class SteamLobbyListView extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.astralPalette;
     final textTheme = Theme.of(context).textTheme;
-    // 门槛筛选只在本地收窄，不触发重新搜房。
+    // 门槛筛选只在本地收窄，不触发重新搜房；判定与锁、点位同源。
     final visibleRooms = switch (gateFilter) {
-      SteamLobbyGateFilter.all => rooms,
+      null => rooms,
       SteamLobbyGateFilter.open => rooms
-          .where((room) => room.gate == kSteamLobbyGateOpen)
+          .where((room) => !_needsPassword(room))
           .toList(growable: false),
       SteamLobbyGateFilter.secured => rooms
-          .where((room) => room.gate != kSteamLobbyGateOpen)
+          .where(_needsPassword)
           .toList(growable: false),
     };
     final countText = loading ? '搜索中…' : '${visibleRooms.length} 个房间';
@@ -465,7 +476,7 @@ class SteamLobbyListView extends StatelessWidget {
     if (error != null) return hint('搜索失败：$error');
     if (visibleRooms.isEmpty) {
       return hint(
-        selectedGame == null && gateFilter == SteamLobbyGateFilter.all
+        selectedGame == null && gateFilter == null
             ? '暂无房间'
             : '当前筛选下暂无房间',
       );
@@ -780,10 +791,7 @@ class _LobbyRow extends StatelessWidget {
       room.version == kSteamLobbyProtocolVersion &&
       (room.capacity <= 0 || room.players < room.capacity);
 
-  /// 除完全公开外都要口令（基础口令或额外密码）。
-  static bool _needsPassword(SteamLobbyInfo room) =>
-      room.gate != kSteamLobbyGateOpen;
-
+  /// 点位颜色与锁都从 `_needsPassword` 派生：需要口令 = 深绿 + 小锁。
   static AstralStatusTone _tone(SteamLobbyInfo room) {
     if (!room.joinable || room.version != kSteamLobbyProtocolVersion) {
       return AstralStatusTone.unavailable;
@@ -791,7 +799,7 @@ class _LobbyRow extends StatelessWidget {
     if (room.capacity > 0 && room.players >= room.capacity) {
       return AstralStatusTone.full;
     }
-    if (room.gate == kSteamLobbyGateDouble) {
+    if (_needsPassword(room)) {
       return AstralStatusTone.secured;
     }
     return AstralStatusTone.ready;
