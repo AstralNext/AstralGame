@@ -67,63 +67,144 @@ void main() {
   });
 
   testWidgets('导出房间列表验收截图', (tester) async {
-    final scenarios = <({String name, GameInfo? game, List<SteamLobbyInfo> rooms})>[
-      // 「全部」：跨游戏混排。
-      (
-        name: 'mixed',
-        game: null,
-        rooms: [
-          _room(id: '1', name: '小木屋', players: 2),
-          _room(
-            id: '2',
-            name: '开荒',
-            players: 4,
-            gameId: _otherGame.id,
+    final scenarios =
+        <
+          ({
+            String name,
+            GameInfo? game,
+            SteamLobbyGateFilter gate,
+            List<SteamLobbyInfo> rooms,
+            double width,
+            double height,
+            double scale,
+          })
+        >[
+          // 「全部」：跨游戏、跨门槛混排。
+          (
+            name: 'mixed',
+            game: null,
+            gate: SteamLobbyGateFilter.all,
+            width: 760,
+            height: 520,
+            scale: 2,
+            rooms: [
+              _room(id: '1', name: '小木屋', players: 2),
+              _room(
+                id: '2',
+                name: '开荒',
+                players: 4,
+                gameId: _otherGame.id,
+              ),
+              _room(
+                id: '3',
+                name: '需要口令',
+                players: 5,
+                gate: kSteamLobbyGateDouble,
+              ),
+              _room(id: '4', name: '周末农场', players: 8),
+              _room(
+                id: '5',
+                name: '旧版本房间',
+                players: 3,
+                version: 'old',
+                joinable: false,
+                gameId: _otherGame.id,
+              ),
+              _room(
+                id: '6',
+                name: '新人房',
+                players: 3,
+                gate: kSteamLobbyGateOpen,
+              ),
+            ],
           ),
-          _room(
-            id: '3',
-            name: '需要口令',
-            players: 5,
-            gate: kSteamLobbyGateDouble,
+          (
+            name: 'empty',
+            game: null,
+            gate: SteamLobbyGateFilter.all,
+            width: 760,
+            height: 520,
+            scale: 2,
+            rooms: const [],
           ),
-          _room(id: '4', name: '周末农场', players: 8),
-          _room(
-            id: '5',
-            name: '旧版本房间',
-            players: 3,
-            version: 'old',
-            joinable: false,
-            gameId: _otherGame.id,
+          // 切到具体游戏标签。
+          (
+            name: 'terraria',
+            game: _otherGame,
+            gate: SteamLobbyGateFilter.all,
+            width: 760,
+            height: 520,
+            scale: 2,
+            rooms: [
+              _room(
+                id: '7',
+                name: '开荒',
+                players: 4,
+                gameId: _otherGame.id,
+              ),
+              _room(
+                id: '8',
+                name: '硬核生存',
+                players: 6,
+                gameId: _otherGame.id,
+              ),
+            ],
           ),
-          _room(
-            id: '6',
-            name: '新人房',
-            players: 3,
-            gate: kSteamLobbyGateOpen,
+          // 门槛筛选切到「需要口令」：只剩 basic / double 的房间。
+          (
+            name: 'secured',
+            game: null,
+            gate: SteamLobbyGateFilter.secured,
+            width: 760,
+            height: 520,
+            scale: 2,
+            rooms: [
+              _room(id: '9', name: '小木屋', players: 2),
+              _room(
+                id: '10',
+                name: '开荒',
+                players: 4,
+                gameId: _otherGame.id,
+              ),
+              _room(
+                id: '11',
+                name: '周末农场',
+                players: 8,
+                gate: kSteamLobbyGateOpen,
+              ),
+              _room(
+                id: '12',
+                name: '需要口令',
+                players: 5,
+                gate: kSteamLobbyGateDouble,
+              ),
+            ],
           ),
-        ],
-      ),
-      (name: 'empty', game: null, rooms: const []),
-      // 切到具体游戏标签。
-      (
-        name: 'terraria',
-        game: _otherGame,
-        rooms: [
-          _room(
-            id: '7',
-            name: '开荒',
-            players: 4,
-            gameId: _otherGame.id,
+          // 小锁近景：3 倍像素，只留三行。
+          (
+            name: 'lock-detail',
+            game: null,
+            gate: SteamLobbyGateFilter.all,
+            width: 560,
+            height: 208,
+            scale: 3,
+            rooms: [
+              _room(
+                id: '13',
+                name: '需要口令',
+                players: 5,
+                gate: kSteamLobbyGateDouble,
+              ),
+              _room(id: '14', name: '开荒', players: 4),
+              _room(
+                id: '15',
+                name: '新人房',
+                players: 3,
+                gate: kSteamLobbyGateOpen,
+              ),
+            ],
           ),
-          _room(
-            id: '8',
-            name: '硬核生存',
-            players: 6,
-            gameId: _otherGame.id,
-          ),
-        ],
-      ),
-    ];
+        ];
 
     for (final scenario in scenarios) {
       final boundaryKey = GlobalKey();
@@ -134,8 +215,8 @@ void main() {
           home: Scaffold(
             body: Center(
               child: SizedBox(
-                width: 760,
-                height: 520,
+                width: scenario.width,
+                height: scenario.height,
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: RepaintBoundary(
@@ -143,10 +224,13 @@ void main() {
                     child: SteamLobbyListView(
                       catalog: const [_game, _otherGame],
                       selectedGame: scenario.game,
+                      gateFilter: scenario.gate,
                       rooms: scenario.rooms,
                       loading: false,
                       onSelectGame: (_) {},
+                      onSelectGate: (_) {},
                       onRefresh: () {},
+                      onInvite: () {},
                     ),
                   ),
                 ),
@@ -156,7 +240,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await _capture(tester, boundaryKey, scenario.name);
+      await _capture(tester, boundaryKey, scenario.name, scenario.scale);
     }
   });
 
@@ -259,12 +343,13 @@ Future<void> _loadFont(String family, String path) async {
 Future<void> _capture(
   WidgetTester tester,
   GlobalKey boundaryKey,
-  String name,
-) async {
+  String name, [
+  double pixelRatio = 2,
+]) async {
   final boundary =
       boundaryKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
   await tester.runAsync(() async {
-    final image = await boundary.toImage(pixelRatio: 2);
+    final image = await boundary.toImage(pixelRatio: pixelRatio);
     final data = await image.toByteData(format: ui.ImageByteFormat.png);
     final dir = Directory('build/evidence')..createSync(recursive: true);
     File(

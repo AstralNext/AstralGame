@@ -11,6 +11,8 @@ import 'package:astral_game/src/rust/api/steam.dart';
 import 'package:astral_game/ui/widgets/app_toast.dart';
 import 'package:astral_game/ui/widgets/astral_card.dart';
 import 'package:astral_game/ui/widgets/astral_status_dot.dart';
+import 'package:astral_game/utils/error_text.dart';
+import 'package:astral_game/utils/logger.dart';
 import 'package:flutter/material.dart';
 
 /// Steam Tab 内常驻的房间列表。
@@ -23,6 +25,7 @@ class SteamLobbyListSection extends StatefulWidget {
     required this.connection,
     required this.roomActive,
     this.onJoined,
+    this.onInvite,
   });
 
   final ConnectionService connection;
@@ -32,6 +35,9 @@ class SteamLobbyListSection extends StatefulWidget {
 
   final VoidCallback? onJoined;
 
+  /// 邀请好友入口（仅房主可用）；为 null 时头部不出现该按钮。
+  final VoidCallback? onInvite;
+
   @override
   SteamLobbyListSectionState createState() => SteamLobbyListSectionState();
 }
@@ -39,6 +45,7 @@ class SteamLobbyListSection extends StatefulWidget {
 class SteamLobbyListSectionState extends State<SteamLobbyListSection> {
   List<GameInfo> _catalog = const [];
   GameInfo? _game;
+  SteamLobbyGateFilter _gateFilter = SteamLobbyGateFilter.all;
   List<SteamLobbyInfo> _rooms = const [];
   bool _loading = true;
   String? _error;
@@ -120,8 +127,9 @@ class SteamLobbyListSectionState extends State<SteamLobbyListSection> {
       });
     } catch (e) {
       if (!mounted) return;
+      appLogger.w('[SteamLobby] 搜索房间失败: $e');
       setState(() {
-        _error = '$e';
+        _error = errorText(e);
         _loading = false;
       });
     }
@@ -136,6 +144,11 @@ class SteamLobbyListSectionState extends State<SteamLobbyListSection> {
       _loading = true;
     });
     unawaited(_search());
+  }
+
+  void _changeGate(SteamLobbyGateFilter filter) {
+    if (filter == _gateFilter) return;
+    setState(() => _gateFilter = filter);
   }
 
   Future<void> _join(SteamLobbyInfo room) async {
@@ -170,7 +183,8 @@ class SteamLobbyListSectionState extends State<SteamLobbyListSection> {
       widget.onJoined?.call();
     } catch (e) {
       if (!mounted) return;
-      showAppToast(context, '$e');
+      appLogger.w('[SteamLobby] 加入房间失败: $e');
+      showAppToast(context, '加入房间失败：${errorText(e)}');
     } finally {
       if (mounted) setState(() => _joiningLobbyId = null);
     }
@@ -238,19 +252,33 @@ class SteamLobbyListSectionState extends State<SteamLobbyListSection> {
     return SteamLobbyListView(
       catalog: _catalog,
       selectedGame: _game,
+      gateFilter: _gateFilter,
       rooms: _rooms,
       loading: _loading,
       error: _error,
       joiningLobbyId: _joiningLobbyId,
       roomActive: widget.roomActive,
       onSelectGame: _loading || _joiningLobbyId != null ? null : _changeGame,
+      onSelectGate: _changeGate,
       onRefresh: _loading ? null : () => unawaited(refresh()),
+      onInvite: widget.onInvite,
       onJoin: (room) => unawaited(_join(room)),
     );
   }
 }
 
-/// 纯展示层：三张验收截图直接渲染这一个组件。
+/// 门槛筛选：与游戏维度叠加，只做本地过滤。
+enum SteamLobbyGateFilter {
+  all('全部'),
+  open('公开'),
+  secured('需要口令');
+
+  const SteamLobbyGateFilter(this.label);
+
+  final String label;
+}
+
+/// 纯展示层：验收截图直接渲染这一个组件。
 class SteamLobbyListView extends StatelessWidget {
   const SteamLobbyListView({
     super.key,
@@ -258,11 +286,14 @@ class SteamLobbyListView extends StatelessWidget {
     required this.selectedGame,
     required this.rooms,
     required this.loading,
+    this.gateFilter = SteamLobbyGateFilter.all,
     this.error,
     this.joiningLobbyId,
     this.roomActive = false,
     this.onSelectGame,
+    this.onSelectGate,
     this.onRefresh,
+    this.onInvite,
     this.onJoin,
   });
 
@@ -271,20 +302,37 @@ class SteamLobbyListView extends StatelessWidget {
   /// 选中的游戏；null 表示「全部」。
   final GameInfo? selectedGame;
 
+  /// 当前门槛筛选；默认「全部」。
+  final SteamLobbyGateFilter gateFilter;
+
   final List<SteamLobbyInfo> rooms;
   final bool loading;
   final String? error;
   final String? joiningLobbyId;
   final bool roomActive;
   final ValueChanged<GameInfo?>? onSelectGame;
+  final ValueChanged<SteamLobbyGateFilter>? onSelectGate;
   final VoidCallback? onRefresh;
+
+  /// 邀请好友入口；为 null 时不渲染该按钮。
+  final VoidCallback? onInvite;
   final ValueChanged<SteamLobbyInfo>? onJoin;
 
   @override
   Widget build(BuildContext context) {
     final palette = context.astralPalette;
     final textTheme = Theme.of(context).textTheme;
-    final countText = loading ? '搜索中…' : '${rooms.length} 个房间';
+    // 门槛筛选只在本地收窄，不触发重新搜房。
+    final visibleRooms = switch (gateFilter) {
+      SteamLobbyGateFilter.all => rooms,
+      SteamLobbyGateFilter.open => rooms
+          .where((room) => room.gate == kSteamLobbyGateOpen)
+          .toList(growable: false),
+      SteamLobbyGateFilter.secured => rooms
+          .where((room) => room.gate != kSteamLobbyGateOpen)
+          .toList(growable: false),
+    };
+    final countText = loading ? '搜索中…' : '${visibleRooms.length} 个房间';
     // 选中态用绿色：浅绿底 + 深一点的绿字（暗色主题下直接用亮绿）。
     final darkSurface = palette.card.computeLuminance() < 0.4;
     final selectedFg = darkSurface
@@ -299,23 +347,36 @@ class SteamLobbyListView extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // 标题行：房间数和刷新按钮在右上角。
+          // 单行头部：游戏下拉 + 门槛标签 + 房间数 + 刷新。
           Padding(
             padding: const EdgeInsets.fromLTRB(
-              AppDimensions.space16,
-              2,
+              AppDimensions.space12,
+              8,
               AppDimensions.space8,
-              0,
+              8,
             ),
             child: Row(
               children: [
-                Text(
-                  '房间列表',
-                  style: textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: palette.textPrimary,
+                Flexible(
+                  child: _GameDropdown(
+                    catalog: catalog,
+                    selectedGame: selectedGame,
+                    selectedColor: selectedFg,
+                    selectedBackground: selectedBg,
+                    onSelectGame: onSelectGame,
                   ),
                 ),
+                const SizedBox(width: AppDimensions.space8),
+                for (final filter in SteamLobbyGateFilter.values)
+                  _GateChip(
+                    label: filter.label,
+                    selected: gateFilter == filter,
+                    selectedColor: selectedFg,
+                    selectedBackground: selectedBg,
+                    onTap: onSelectGate == null
+                        ? null
+                        : () => onSelectGate!(filter),
+                  ),
                 const Spacer(),
                 Text(
                   countText,
@@ -324,6 +385,17 @@ class SteamLobbyListView extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: AppDimensions.space4),
+                if (onInvite != null)
+                  IconButton(
+                    tooltip: '邀请好友',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: onInvite,
+                    icon: Icon(
+                      Icons.person_add_alt_1_rounded,
+                      size: 20,
+                      color: palette.textSecondary,
+                    ),
+                  ),
                 IconButton(
                   tooltip: '刷新房间列表',
                   visualDensity: VisualDensity.compact,
@@ -343,14 +415,6 @@ class SteamLobbyListView extends StatelessWidget {
               ],
             ),
           ),
-          // 横排游戏标签：一行放不下就横向滚动，不折行。
-          _GameFilterBar(
-            catalog: catalog,
-            selectedGame: selectedGame,
-            selectedColor: selectedFg,
-            selectedBackground: selectedBg,
-            onSelectGame: onSelectGame,
-          ),
           Divider(height: 1, thickness: 1, color: palette.divider),
           if (roomActive)
             Padding(
@@ -367,7 +431,14 @@ class SteamLobbyListView extends StatelessWidget {
                 ),
               ),
             ),
-          Expanded(child: _buildBody(context, palette, textTheme)),
+          Expanded(
+            child: _buildBody(
+              context,
+              palette,
+              textTheme,
+              visibleRooms,
+            ),
+          ),
         ],
       ),
     );
@@ -377,6 +448,7 @@ class SteamLobbyListView extends StatelessWidget {
     BuildContext context,
     AppThemePalette palette,
     TextTheme textTheme,
+    List<SteamLobbyInfo> visibleRooms,
   ) {
     Widget hint(String text) => Center(
       child: Padding(
@@ -391,14 +463,18 @@ class SteamLobbyListView extends StatelessWidget {
 
     if (loading && rooms.isEmpty) return hint('正在搜索…');
     if (error != null) return hint('搜索失败：$error');
-    if (rooms.isEmpty) {
-      return hint(selectedGame == null ? '暂无房间' : '该游戏下暂无房间');
+    if (visibleRooms.isEmpty) {
+      return hint(
+        selectedGame == null && gateFilter == SteamLobbyGateFilter.all
+            ? '暂无房间'
+            : '当前筛选下暂无房间',
+      );
     }
 
     return Scrollbar(
       child: ListView.separated(
         padding: EdgeInsets.zero,
-        itemCount: rooms.length,
+        itemCount: visibleRooms.length,
         separatorBuilder: (context, index) => Divider(
           height: 1,
           thickness: 1,
@@ -408,7 +484,7 @@ class SteamLobbyListView extends StatelessWidget {
           color: palette.divider,
         ),
         itemBuilder: (context, index) {
-          final room = rooms[index];
+          final room = visibleRooms[index];
           return _LobbyRow(
             room: room,
             game: _gameFor(room.gameId),
@@ -432,9 +508,9 @@ class SteamLobbyListView extends StatelessWidget {
   }
 }
 
-/// 横排游戏标签栏：放不下时横向滚动，右侧渐隐 + 箭头提示后面还有。
-class _GameFilterBar extends StatefulWidget {
-  const _GameFilterBar({
+/// 紧凑游戏下拉：八个以上游戏也不会裁切，默认「全部」。
+class _GameDropdown extends StatelessWidget {
+  const _GameDropdown({
     required this.catalog,
     required this.selectedGame,
     required this.selectedColor,
@@ -449,144 +525,121 @@ class _GameFilterBar extends StatefulWidget {
   final ValueChanged<GameInfo?>? onSelectGame;
 
   @override
-  State<_GameFilterBar> createState() => _GameFilterBarState();
-}
-
-class _GameFilterBarState extends State<_GameFilterBar> {
-  final ScrollController _controller = ScrollController();
-  bool _moreRight = false;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _syncOverflow());
-  }
-
-  @override
-  void didUpdateWidget(covariant _GameFilterBar oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.catalog.length != widget.catalog.length) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _syncOverflow());
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  /// 右侧还有没滚出来的标签时才显示渐隐和箭头。
-  void _syncOverflow() {
-    if (!mounted || !_controller.hasClients) return;
-    final more = _controller.position.extentAfter > 0.5;
-    if (more != _moreRight) setState(() => _moreRight = more);
-  }
-
-  @override
   Widget build(BuildContext context) {
     final palette = context.astralPalette;
-    final selectedGame = widget.selectedGame;
-    final onSelectGame = widget.onSelectGame;
+    final textTheme = Theme.of(context).textTheme;
+    final selected = selectedGame;
+    final onSelectGame = this.onSelectGame;
 
-    return SizedBox(
-      height: 40,
-      child: NotificationListener<ScrollMetricsNotification>(
-        onNotification: (_) {
-          _syncOverflow();
-          return false;
-        },
-        child: NotificationListener<ScrollNotification>(
-          onNotification: (_) {
-            _syncOverflow();
-            return false;
-          },
-          child: Stack(
-            children: [
-              ListView(
-                controller: _controller,
-                scrollDirection: Axis.horizontal,
-                padding: EdgeInsets.only(
-                  left: AppDimensions.space12,
-                  // 右侧渐隐会盖住尾部，多留一点空间让最后一个标签能完全露出。
-                  right: _moreRight ? 40 : AppDimensions.space12,
-                ),
-                children: [
-                  _GameChip(
-                    label: '全部',
-                    selected: selectedGame == null,
-                    selectedColor: widget.selectedColor,
-                    selectedBackground: widget.selectedBackground,
-                    leading: Icon(
-                      Icons.apps_rounded,
-                      size: 16,
-                      color: selectedGame == null
-                          ? widget.selectedColor
-                          : palette.textSecondary,
-                    ),
-                    onTap: onSelectGame == null
-                        ? null
-                        : () => onSelectGame(null),
-                  ),
-                  for (final game in widget.catalog)
-                    _GameChip(
-                      label: game.displayName,
-                      selected: selectedGame?.id == game.id,
-                      selectedColor: widget.selectedColor,
-                      selectedBackground: widget.selectedBackground,
-                      leading: _GameChipIcon(game: game),
-                      onTap: onSelectGame == null
-                          ? null
-                          : () => onSelectGame(game),
-                    ),
-                ],
-              ),
-              if (_moreRight)
-                Positioned(
-                  top: 0,
-                  bottom: 0,
-                  right: 0,
-                  width: 48,
-                  child: IgnorePointer(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            palette.card.withValues(alpha: 0),
-                            palette.card,
-                          ],
-                        ),
-                      ),
-                      child: Align(
-                        alignment: Alignment.centerRight,
-                        child: Padding(
-                          padding: const EdgeInsets.only(right: 2),
-                          child: Icon(
-                            Icons.chevron_right_rounded,
-                            size: 18,
-                            color: palette.textTertiary,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
+    final content = ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 132, maxWidth: 190),
+      child: Container(
+        height: 32,
+        padding: const EdgeInsets.only(left: 10, right: 6),
+        decoration: BoxDecoration(
+          color: selected == null ? Colors.transparent : selectedBackground,
+          borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
+          border: Border.all(color: palette.divider),
         ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (selected == null)
+              Icon(
+                Icons.apps_rounded,
+                size: 16,
+                color: palette.textSecondary,
+              )
+            else
+              _GameChipIcon(game: selected, size: 16),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                selected?.displayName ?? '全部',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: textTheme.labelMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: selected == null
+                      ? palette.textSecondary
+                      : selectedColor,
+                ),
+              ),
+            ),
+            Icon(
+              Icons.arrow_drop_down_rounded,
+              size: 20,
+              color: palette.textTertiary,
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (onSelectGame == null) {
+      return Opacity(opacity: 0.6, child: content);
+    }
+
+    return PopupMenuButton<GameInfo?>(
+      tooltip: '按游戏筛选',
+      offset: const Offset(0, 36),
+      onSelected: onSelectGame,
+      itemBuilder: (context) => [
+        _menuItem(context, game: null, selected: selected == null),
+        for (final game in catalog)
+          _menuItem(
+            context,
+            game: game,
+            selected: selected?.id == game.id,
+          ),
+      ],
+      child: content,
+    );
+  }
+
+  PopupMenuItem<GameInfo?> _menuItem(
+    BuildContext context, {
+    required GameInfo? game,
+    required bool selected,
+  }) {
+    final palette = context.astralPalette;
+    final textTheme = Theme.of(context).textTheme;
+    return PopupMenuItem<GameInfo?>(
+      value: game,
+      height: 40,
+      child: Row(
+        children: [
+          if (game == null)
+            Icon(Icons.apps_rounded, size: 18, color: palette.textSecondary)
+          else
+            _GameChipIcon(game: game),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              game?.displayName ?? '全部',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: textTheme.bodyMedium?.copyWith(
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                color: selected ? palette.online : palette.textPrimary,
+              ),
+            ),
+          ),
+          if (selected)
+            Icon(Icons.check_rounded, size: 16, color: palette.online),
+        ],
       ),
     );
   }
 }
 
-/// 横排游戏标签：高 32，选中浅绿底 + 绿色文字。
-class _GameChip extends StatelessWidget {
-  const _GameChip({
+/// 门槛标签：高 32，选中浅绿底 + 绿色文字。
+class _GateChip extends StatelessWidget {
+  const _GateChip({
     required this.label,
     required this.selected,
     required this.selectedColor,
     required this.selectedBackground,
-    required this.leading,
     required this.onTap,
   });
 
@@ -594,7 +647,6 @@ class _GameChip extends StatelessWidget {
   final bool selected;
   final Color selectedColor;
   final Color selectedBackground;
-  final Widget leading;
   final VoidCallback? onTap;
 
   @override
@@ -621,8 +673,6 @@ class _GameChip extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  leading,
-                  const SizedBox(width: 6),
                   Text(
                     label,
                     maxLines: 1,
@@ -730,6 +780,10 @@ class _LobbyRow extends StatelessWidget {
       room.version == kSteamLobbyProtocolVersion &&
       (room.capacity <= 0 || room.players < room.capacity);
 
+  /// 除完全公开外都要口令（基础口令或额外密码）。
+  static bool _needsPassword(SteamLobbyInfo room) =>
+      room.gate != kSteamLobbyGateOpen;
+
   static AstralStatusTone _tone(SteamLobbyInfo room) {
     if (!room.joinable || room.version != kSteamLobbyProtocolVersion) {
       return AstralStatusTone.unavailable;
@@ -783,14 +837,32 @@ class _LobbyRow extends StatelessWidget {
             const SizedBox(width: 8),
           ],
           Expanded(
-            child: Text(
-              room.name.isEmpty ? '未命名房间' : room.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w500,
-                color: palette.textPrimary,
-              ),
+            child: Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    room.name.isEmpty ? '未命名房间' : room.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w500,
+                      color: palette.textPrimary,
+                    ),
+                  ),
+                ),
+                // 需要口令的房间在名字后加小锁：不单靠亮绿/深绿的色差区分。
+                if (_needsPassword(room)) ...[
+                  const SizedBox(width: 6),
+                  Tooltip(
+                    message: '需要口令',
+                    child: Icon(
+                      Icons.lock_rounded,
+                      size: 12,
+                      color: palette.textTertiary,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
           const SizedBox(width: 12),

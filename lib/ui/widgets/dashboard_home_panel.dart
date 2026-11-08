@@ -85,6 +85,8 @@ class DashboardHomePanel extends StatelessWidget {
                 onDisconnect: callbacks.onDisconnect,
                 onBookmark: callbacks.onBookmarkRoom,
                 isBookmarked: isBookmarked,
+                // Steam 房间是大厅：没有短码可分享，也没有可收藏的对象。
+                showEasyTierActions: !cs.steamModeActive,
               );
             })
           : _IdleHome(
@@ -117,6 +119,8 @@ class _IdleHome extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
     final version = ClientRuntimeInfo.appVersion;
     final os = ClientRuntimeInfo.operatingSystemVersion;
+    // 收藏存的是「短码 + 服务器」，Steam 模式整块不出现。
+    final showBookmarks = !getIt<ConnectionService>().steamModeActive;
 
     // 首页按剩余空间自适应：风景卡吃掉剩余高度，下方信息与胶囊贴底。
     // 这里不能套 ScrollView——即使内容刚好放下，桌面端也会因为可滚动而显示滚动条。
@@ -126,6 +130,7 @@ class _IdleHome extends StatelessWidget {
         Expanded(child: DailySceneryCard(username: username)),
         const SizedBox(height: 16),
         Watch((context) {
+          if (!showBookmarks) return const SizedBox.shrink();
           final list = getIt<RoomState>().bookmarksList.value;
           if (list.isEmpty) return const SizedBox.shrink();
           return Padding(

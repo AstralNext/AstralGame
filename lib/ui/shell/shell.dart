@@ -59,8 +59,11 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
   TransportMode _navTransportMode = TransportMode.easytier;
   EffectCleanup? _transportModeEffect;
 
-  /// 四个一级 Tab 各自的滚动控制器：重按当前 Tab 时回到顶部。
+  /// 四个固定槽位各自的滚动控制器：重按当前 Tab 时回到顶部。
   late final List<ScrollController> _tabScrollControllers;
+
+  /// 当前导航项对应的滚动控制器，顺序与 [_navigationItems] 一致。
+  List<ScrollController> _activeScrollControllers = const [];
 
   final TrayManager _trayManager = TrayManager.instance;
   EffectCleanup? _shellNavEffect;
@@ -72,14 +75,17 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
   /// 手机端收藏搜索是否展开（底部搜索胶囊）。
   bool _bookmarkSearchOpen = false;
 
-  /// 收藏 Tab 的索引（[IndexedStack] 顺序：联机/服务器/收藏/设置）。
-  static const _bookmarksTabIndex = 2;
-
-  /// 服务器 Tab 的索引。
+  /// 固定槽位索引：[IndexedStack] 顺序为 联机/服务器/收藏/设置。
+  static const _bookmarksSlotIndex = 2;
   static const _serversTabIndex = 1;
+  static const _settingsSlotIndex = 3;
 
-  /// 设置 Tab 的索引。
-  static const _settingsTabIndex = 3;
+  /// Steam 模式下没有「短码 + 服务器」的收藏对象，侧栏直接不展示该 Tab。
+  bool get _showBookmarks => _navTransportMode != TransportMode.steam;
+
+  /// 设置 Tab 的实际索引：Steam 模式少了收藏槽，整体前移一位。
+  int get _settingsTabIndex =>
+      _showBookmarks ? _settingsSlotIndex : _bookmarksSlotIndex;
 
   @override
   void initState() {
@@ -88,11 +94,20 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
     _shellNavEffect = effect(() {
       final pending = getIt<ShellNavigationService>().pendingTabIndex.value;
       if (pending == null || !mounted) return;
-      final index = pending.clamp(0, 3);
-      if (index != _bookmarksTabIndex && _bookmarkSearchOpen) {
+      // 请求方用的是固定槽位索引；Steam 模式少了收藏槽，设置请求前移一位。
+      if (!_showBookmarks && pending == _bookmarksSlotIndex) {
+        getIt<ShellNavigationService>().clearPending();
+        return;
+      }
+      final index = (!_showBookmarks && pending > _bookmarksSlotIndex)
+          ? pending - 1
+          : pending;
+      if (index != _bookmarksSlotIndex && _bookmarkSearchOpen) {
         _closeBookmarkSearch();
       }
-      setState(() => _selectedIndex = index);
+      setState(
+        () => _selectedIndex = index.clamp(0, _navigationItems.length - 1),
+      );
       if (_selectedIndex == _settingsTabIndex) _refreshFirewallStatus();
       getIt<ShellNavigationService>().clearPending();
     });
@@ -114,6 +129,14 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
       // Steam 不可用时服务器 Tab 立刻回到 EasyTier 形态。
       final mode = _gatedTransportMode();
       if (!mounted || mode == _navTransportMode) return;
+      final wasSteam = _navTransportMode == TransportMode.steam;
+      final isSteam = mode == TransportMode.steam;
+      // 设置页在两种模式下都存在：切到 Steam 时索引前移，切回来时复位。
+      if (wasSteam && !isSteam && _selectedIndex == _bookmarksSlotIndex) {
+        _selectedIndex = _settingsSlotIndex;
+      } else if (!wasSteam && isSteam && _selectedIndex == _settingsSlotIndex) {
+        _selectedIndex = _bookmarksSlotIndex;
+      }
       _navTransportMode = mode;
       setState(_buildNavigationItems);
     });
@@ -150,9 +173,10 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
     _setupDesktopCloseBehavior();
   }
 
-  /// 启动后自动进入设定好的收藏房间（全平台生效）。
+  /// 启动后自动进入设定好的收藏房间（仅 EasyTier：Steam 房间是大厅，没有收藏）。
   Future<void> _autoEnterSelectedRoomIfNeeded() async {
     if (!mounted) return;
+    if (_navTransportMode == TransportMode.steam) return;
     final settingsState = getIt<SettingsState>();
     if (!settingsState.autoEnterRoom.value) return;
 
@@ -404,25 +428,38 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
                 scrollController: _tabScrollControllers[1],
               ),
       ),
-      NavigationItem(
-        icon: Icons.bookmark_border_rounded,
-        activeIcon: Icons.bookmark_rounded,
-        label: '收藏',
-        page: BookmarksPage(
-          key: const PageStorageKey('bookmarks'),
-          scrollController: _tabScrollControllers[2],
+      // 收藏存的是「短码 + 服务器」，Steam 房间是大厅、随时消失，没有可收藏对象。
+      if (_showBookmarks)
+        NavigationItem(
+          icon: Icons.bookmark_border_rounded,
+          activeIcon: Icons.bookmark_rounded,
+          label: '收藏',
+          page: BookmarksPage(
+            key: const PageStorageKey('bookmarks'),
+            scrollController: _tabScrollControllers[_bookmarksSlotIndex],
+          ),
         ),
-      ),
       NavigationItem(
         icon: Icons.settings_outlined,
         activeIcon: Icons.settings,
         label: '设置',
         page: SettingsMainPage(
           key: const PageStorageKey('settings'),
-          scrollController: _tabScrollControllers[3],
+          scrollController: _tabScrollControllers[_settingsSlotIndex],
         ),
       ),
     ];
+    // 按实际 Tab 顺序绑定滚动控制器（Steam 模式少一个槽位）。
+    _activeScrollControllers = _showBookmarks
+        ? _tabScrollControllers
+        : [
+            _tabScrollControllers[0],
+            _tabScrollControllers[1],
+            _tabScrollControllers[_settingsSlotIndex],
+          ];
+    if (_selectedIndex >= _navigationItems.length) {
+      _selectedIndex = _navigationItems.length - 1;
+    }
   }
 
   void _handleDestinationSelected(int index) {
@@ -437,12 +474,16 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
 
   /// 重按当前 Tab：收藏页先收起搜索，否则把页面平滑滚回顶部。
   void _handleTabReselect(int index) {
-    if (index == _bookmarksTabIndex && _bookmarkSearchOpen) {
+    if (_showBookmarks && index == _bookmarksSlotIndex && _bookmarkSearchOpen) {
       _closeBookmarkSearch();
       return;
     }
-    final controller = _tabScrollControllers[index];
-    if (!controller.hasClients || controller.offset <= 0) return;
+    final controller = index < _activeScrollControllers.length
+        ? _activeScrollControllers[index]
+        : null;
+    if (controller == null || !controller.hasClients || controller.offset <= 0) {
+      return;
+    }
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
     unawaited(
       controller.animateTo(
@@ -480,7 +521,7 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
   ///
   /// 读取 signals，必须在 [Watch] 内调用。
   List<BottomNavAction> _trailingActions(BuildContext context) {
-    if (_selectedIndex == _bookmarksTabIndex) {
+    if (_showBookmarks && _selectedIndex == _bookmarksSlotIndex) {
       // 搜索胶囊展开时收起圆钮，让导航恢复完整宽度。
       if (_bookmarkSearchOpen) return const [];
       return [
@@ -541,7 +582,7 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
     final isCompact = screenWidth < AppBreakpoints.narrow;
     // 手机端：收藏页才在悬浮底栏右侧留搜索位。
     final showBookmarkSearch =
-        isCompact && _selectedIndex == _bookmarksTabIndex;
+        isCompact && _showBookmarks && _selectedIndex == _bookmarksSlotIndex;
     final searchOpen = showBookmarkSearch && _bookmarkSearchOpen;
     final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
@@ -581,7 +622,9 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
                           isMaximized: _isMaximized,
                           onToggleMaximize: _toggleMaximize,
                           // 收藏 Tab：顶栏中央放搜索胶囊
-                          center: _selectedIndex == _bookmarksTabIndex
+                          center:
+                              _showBookmarks &&
+                                  _selectedIndex == _bookmarksSlotIndex
                               ? const BookmarkSearchField()
                               : null,
                         )
@@ -593,7 +636,9 @@ class _ShellState extends State<Shell> with WindowListener, TrayListener {
                             username: nodes.currentUsername.value,
                             onAvatarTap: () => showEditProfileDialog(context),
                             // 收藏 Tab：顶栏中央放搜索胶囊
-                            center: _selectedIndex == _bookmarksTabIndex
+                            center:
+                                _showBookmarks &&
+                                    _selectedIndex == _bookmarksSlotIndex
                                 ? const BookmarkSearchField()
                                 : null,
                           );

@@ -1,18 +1,12 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/config/theme.dart';
 import 'package:astral_game/data/services/connection_service.dart';
-import 'package:astral_game/data/services/steam_selftest_service.dart';
 import 'package:astral_game/data/services/steam_transport_service.dart';
-import 'package:astral_game/data/state/settings_state.dart';
 import 'package:astral_game/di.dart';
 import 'package:astral_game/src/rust/api/steam.dart';
-import 'package:astral_game/ui/widgets/app_toast.dart';
 import 'package:astral_game/ui/widgets/astral_card.dart';
-import 'package:astral_game/ui/widgets/astral_grouped_tile.dart';
-import 'package:astral_game/ui/widgets/astral_settings_section.dart';
 import 'package:astral_game/ui/widgets/astral_status_dot.dart';
 import 'package:astral_game/ui/widgets/error_state.dart';
 import 'package:astral_game/ui/widgets/steam_lobby_list_section.dart';
@@ -20,8 +14,8 @@ import 'package:flutter/material.dart';
 
 /// Steam 组网（SDR 虚拟局域网）状态面板。
 ///
-/// 每 2 秒刷新一次：Steam 登录 / SteamID / SDR 中继是否就绪、当前组网房间的
-/// 虚拟 IP、成员列表与实时流量。
+/// 每 2 秒刷新一次登录 / SDR 就绪 / 组网状态，顶部只有一行只读状态；
+/// 账号、中继、房间与成员的详细信息归到设置页的 Steam 分区。
 /// 用于「Steam」一级 Tab：当前联机模式为 Steam 时替代服务器页。
 class SteamTransportPanel extends StatefulWidget {
   const SteamTransportPanel({super.key});
@@ -42,9 +36,6 @@ class _SteamTransportPanelState extends State<SteamTransportPanel> {
   SteamLobbyDiag? _diag;
   String? _error;
   bool _refreshing = false;
-  bool _selfTestRunning = false;
-  bool _detailsOpen = false;
-  String _selfTestStatus = '';
 
   @override
   void initState() {
@@ -101,163 +92,28 @@ class _SteamTransportPanelState extends State<SteamTransportPanel> {
       );
     }
 
-    // 状态统一成「小圆点 + 短文字」，不再用彩色文字或徽标。
-    Widget status(AstralStatusTone tone, String text) =>
-        AstralStatusLine(tone: tone, text: text);
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _buildStatusStrip(context, room),
-        if (_detailsOpen) ...[
-          const SizedBox(height: AppDimensions.sectionGap),
-          Flexible(
-            flex: 2,
-            child: SingleChildScrollView(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 280),
-                child: AstralSettingsFormCard(
-                  title: '详情',
-                  subtitle: '账号、中继、房间与成员信息',
-                  rows: [
-            (index, count) => AstralGroupedTile(
-              icon: Icons.person_outline_rounded,
-              label: 'Steam 账号',
-              subtitle: _accountSubtitle(),
-              index: index,
-              count: count,
-              trailing: status(
-                _status?.loggedOn == true
-                    ? AstralStatusTone.ready
-                    : AstralStatusTone.unavailable,
-                _status?.loggedOn == true ? '已登录' : '未登录',
-              ),
-            ),
-            (index, count) => AstralGroupedTile(
-              icon: Icons.cloud_done_outlined,
-              label: 'SDR 中继',
-              subtitle: _relaySubtitle(),
-              index: index,
-              count: count,
-              trailing: status(
-                _status?.relayReady == true
-                    ? AstralStatusTone.ready
-                    : AstralStatusTone.unavailable,
-                _status?.relayReady == true ? '已就绪' : '准备中',
-              ),
-            ),
-            (index, count) => AstralGroupedTile(
-              icon: Icons.lan_outlined,
-              label: '组网房间',
-              subtitle: _roomSubtitle(room),
-              index: index,
-              count: count,
-              trailing: status(
-                room?.active == true
-                    ? AstralStatusTone.ready
-                    : AstralStatusTone.unavailable,
-                room?.active == true ? '已组网' : '未组网',
-              ),
-            ),
-            if (room?.active == true || _debugEnabled)
-              (index, count) => AstralGroupedTile(
-                icon: Icons.monitor_heart_outlined,
-                label: '诊断：大厅信息',
-                subtitle: _diagSubtitle(),
-                index: index,
-                count: count,
-                onTap: _showLobbyDiag,
-              ),
-            if (room?.active == true && room?.isHost == true)
-              (index, count) => AstralGroupedTile(
-                icon: Icons.person_add_alt_1_outlined,
-                label: '邀请好友',
-                subtitle: _inviteSubtitle(),
-                index: index,
-                count: count,
-                onTap: _inviteFriends,
-              ),
-            if (room?.active == true && room?.isHost == true && _debugEnabled)
-              (index, count) => AstralGroupedTile(
-                icon: Icons.bug_report_outlined,
-                label: '诊断：幽灵成员清理',
-                subtitle: '注入离线超过宽限期的成员并跑一次真实 prune',
-                index: index,
-                count: count,
-                onTap: _ghostProbe,
-              ),
-            if (_debugEnabled)
-              (index, count) => AstralGroupedTile(
-                icon: Icons.bug_report_outlined,
-                label: '诊断：客人侧宽限过滤',
-                subtitle: '注入离线超宽限期的房主并跑真实 prune，验证 roster 被清空',
-                index: index,
-                count: count,
-                onTap: _guestRosterProbe,
-              ),
-            if (_debugEnabled)
-              (index, count) => AstralGroupedTile(
-                icon: Icons.play_circle_outline_rounded,
-                label: '自检：房主跑一遍',
-                subtitle: _selfTestSubtitle('自动建房 → 等客人 → 校验握手 → 导出日志到桌面'),
-                index: index,
-                count: count,
-                onTap: _canRunSelfTest ? () => _runSelfTest(host: true) : null,
-              ),
-            if (_debugEnabled)
-              (index, count) => AstralGroupedTile(
-                icon: Icons.play_circle_outline_rounded,
-                label: '自检：客人跑一遍',
-                subtitle: _selfTestSubtitle(_guestSelfTestIdle()),
-                index: index,
-                count: count,
-                onTap: _canRunSelfTest ? () => _runSelfTest(host: false) : null,
-              ),
-            for (final member
-                in (room?.members ?? const <SteamMemberInfo>[])
-                // 离线成员不渲染（本机除外）；宽限期结束后 Rust 侧会真正摘除。
-                .where((m) => m.online || m.isSelf))
-              (index, count) => AstralGroupedTile(
-                icon: member.isHost
-                    ? Icons.workspace_premium_outlined
-                    : Icons.computer_rounded,
-                label: member.nickname.isEmpty
-                    ? 'Steam-${member.steamId}'
-                    : member.nickname,
-                subtitle:
-                    '${member.virtualIp} · ${member.latencyMs}ms'
-                    '${member.isSelf || !member.online ? '' : ' · ${member.viaRelay ? '中转' : '直连'}'}'
-                    ' · ↓ ${_formatBytes(member.bytesIn)} ↑ ${_formatBytes(member.bytesOut)}',
-                index: index,
-                count: count,
-                trailing: status(
-                  member.online
-                      ? AstralStatusTone.ready
-                      : AstralStatusTone.unavailable,
-                  member.online ? (member.isSelf ? '本机' : '在线') : '离线',
-                ),
-              ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
         const SizedBox(height: AppDimensions.sectionGap),
         Expanded(
-          flex: 3,
           child: SteamLobbyListSection(
             key: _lobbyListKey,
             connection: getIt<ConnectionService>(),
             roomActive: room?.active == true,
             onJoined: () => unawaited(_refresh()),
+            // 邀请只对房主有意义；非房主时头部不出现该入口。
+            onInvite: (room?.active == true && room?.isHost == true)
+                ? _inviteFriends
+                : null,
           ),
         ),
       ],
     );
   }
 
-  /// 44px 状态条：账号短名 + 三个状态点；点击展开/收起详情。
+  /// 32px 只读状态条：账号短名 + 三个状态点，不可点击、不可展开。
   Widget _buildStatusStrip(BuildContext context, SteamRoomInfo? room) {
     final palette = context.astralPalette;
     final textTheme = Theme.of(context).textTheme;
@@ -283,11 +139,10 @@ class _SteamTransportPanelState extends State<SteamTransportPanel> {
 
     return AstralCard(
       padding: EdgeInsets.zero,
-      onTap: () => setState(() => _detailsOpen = !_detailsOpen),
       child: SizedBox(
-        height: 44,
+        height: 32,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Row(
             children: [
               Flexible(
@@ -331,180 +186,10 @@ class _SteamTransportPanelState extends State<SteamTransportPanel> {
                   text: inRoom ? '已组网' : '未组网',
                 ),
               ],
-              const Spacer(),
-              Icon(
-                _detailsOpen
-                    ? Icons.expand_less_rounded
-                    : Icons.expand_more_rounded,
-                size: 18,
-                color: palette.textTertiary,
-              ),
             ],
           ),
         ),
       ),
-    );
-  }
-
-  /// 仅在 `ASTRAL_STEAM_DEBUG=1` 启动时显示诊断入口。
-  static final bool _debugEnabled = () {
-    final raw = Platform.environment['ASTRAL_STEAM_DEBUG']
-        ?.trim()
-        .toLowerCase();
-    return raw == '1' || raw == 'true' || raw == 'yes';
-  }();
-
-  Future<void> _ghostProbe() async {
-    String message;
-    try {
-      message = await _steam.debugGhostProbe();
-    } catch (e) {
-      message = '诊断失败：$e';
-    }
-    if (!mounted) return;
-    showAppToast(context, message);
-    await _refresh();
-  }
-
-  Future<void> _guestRosterProbe() async {
-    String message;
-    try {
-      message = await _steam.debugGuestRosterProbe();
-    } catch (e) {
-      message = '诊断失败：$e';
-    }
-    if (!mounted) return;
-    showAppToast(context, message);
-    await _refresh();
-  }
-
-  /// 自检只在未组网时可用：房间活跃时先离开，避免打断用户正在用的联机。
-  bool get _canRunSelfTest => !_selfTestRunning && _room?.active != true;
-
-  String _selfTestSubtitle(String idle) {
-    if (_selfTestRunning) {
-      return _selfTestStatus.isEmpty ? '正在准备…' : _selfTestStatus;
-    }
-    if (_room?.active == true) return '请先离开当前组网房间再运行自检';
-    return idle;
-  }
-
-  String _guestSelfTestIdle() {
-    final lobbyId = getIt<SettingsState>().steamSelfTestLobbyId?.trim() ?? '';
-    if (lobbyId.isEmpty) return '自动搜房 → 加入 → 校验握手 → 导出日志到桌面';
-    return '加入脚本指定的大厅 $lobbyId → 校验握手 → 导出日志到桌面';
-  }
-
-  Future<void> _runSelfTest({required bool host}) async {
-    setState(() {
-      _selfTestRunning = true;
-      _selfTestStatus = '正在准备…';
-    });
-    SteamSelfTestResult? result;
-    String? error;
-    try {
-      result = await SteamSelfTestService().run(
-        host: host,
-        targetLobbyId: host
-            ? null
-            : getIt<SettingsState>().steamSelfTestLobbyId,
-        onProgress: (message) {
-          if (!mounted) return;
-          setState(() => _selfTestStatus = message);
-        },
-      );
-    } catch (e) {
-      error = '$e';
-    }
-    if (!mounted) return;
-    setState(() {
-      _selfTestRunning = false;
-      _selfTestStatus = '';
-    });
-    if (error != null) {
-      showAppToast(context, '自检失败：$error');
-    } else if (result != null) {
-      showAppToast(context, '${result.summary}：${result.path}');
-    }
-    await _refresh();
-  }
-
-  Future<void> _showLobbyDiag() async {
-    final SteamLobbyDiag diag;
-    try {
-      diag = await _steam.lobbyDiag();
-    } catch (e) {
-      if (mounted) showAppToast(context, '读取大厅诊断失败：$e');
-      return;
-    }
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      barrierColor: astralDialogBarrierColor,
-      builder: (dialogContext) {
-        final scheme = Theme.of(dialogContext).colorScheme;
-        Widget row(String label, String value, {bool ok = true}) => Padding(
-          padding: const EdgeInsets.symmetric(vertical: 3),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                width: 96,
-                child: Text(
-                  label,
-                  style: TextStyle(color: scheme.onSurfaceVariant),
-                ),
-              ),
-              Expanded(
-                child: SelectableText(
-                  value.isEmpty ? '—' : value,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: ok ? null : scheme.error,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-        return AlertDialog(
-          title: const Text('大厅诊断'),
-          content: SizedBox(
-            width: 460,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                row('大厅 id', diag.lobbyId),
-                row('ag_game', diag.gameId),
-                row('ag_ver', diag.version),
-                row('ag_gate', diag.gate),
-                row('可加入', diag.joinable ? '是' : '否', ok: diag.joinable),
-                row('成员', '${diag.members} / ${diag.capacity}'),
-                row(
-                  '角色',
-                  diag.lobbyId.isEmpty ? '未建房' : (diag.isHost ? '房主' : '成员'),
-                ),
-                row(
-                  '覆盖层',
-                  diag.overlayEnabled ? '已开启' : '未开启',
-                  ok: diag.overlayEnabled,
-                ),
-                if (diag.overlayHint.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Text(diag.overlayHint, style: TextStyle(color: scheme.error)),
-                ],
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('关闭'),
-            ),
-          ],
-        );
-      },
     );
   }
 
@@ -524,64 +209,12 @@ class _SteamTransportPanelState extends State<SteamTransportPanel> {
         overlayEnabled: diag?.overlayEnabled ?? false,
         onSearchRooms: () async {
           Navigator.pop(dialogContext);
-          // 房间列表常驻在状态卡下方，这里只触发一次刷新。
+          // 房间列表常驻在状态条下方，这里只触发一次刷新。
           await _lobbyListKey.currentState?.refresh();
         },
       ),
     );
     await _refresh();
-  }
-
-  String _inviteSubtitle() {
-    final diag = _diag;
-    if (diag == null) return '通过 Steam 好友列表邀请（正在检测覆盖层状态…）';
-    if (!diag.overlayEnabled) {
-      return '覆盖层未开启：可直接邀请 SteamID 好友，或让对方搜索房间';
-    }
-    return '可直接邀请 SteamID 好友；也可唤起 Steam 邀请面板';
-  }
-
-  String _diagSubtitle() {
-    final diag = _diag;
-    if (diag == null) return '未读取到大厅信息';
-    if (diag.lobbyId.isEmpty) {
-      return diag.overlayHint.isEmpty ? '当前没有 Steam 大厅' : diag.overlayHint;
-    }
-    return '大厅 ${diag.lobbyId} · ${diag.joinable ? '可加入' : '已关闭加入'}'
-        ' · ${diag.members}/${diag.capacity} 人';
-  }
-
-  String _accountSubtitle() {
-    final status = _status;
-    if (status == null) return '正在启动 Steam 接口…';
-    if (!status.ok) {
-      return status.message.isEmpty ? 'Steam 未初始化' : status.message;
-    }
-    final persona = status.persona.isEmpty ? 'Steam 玩家' : status.persona;
-    return '$persona · ${status.steamId}';
-  }
-
-  String _relaySubtitle() {
-    final status = _status;
-    if (status == null) return '正在检测 SDR 中继网络…';
-    if (!status.ok) return 'Steam 未就绪，中继不可用';
-    if (status.relayReady) return '中继 / 直连由 Steam 自动选择，无需手动配置';
-    return status.message.isEmpty ? '正在获取中继网络…' : status.message;
-  }
-
-  String _roomSubtitle(SteamRoomInfo? room) {
-    if (room == null || !room.active) return '尚未创建或加入 Steam 组网房间';
-    final role = room.isHost ? '房主' : '成员';
-    return '$role · 虚拟 IP ${room.virtualIp} · ${room.memberCount} 人 · ${room.network}';
-  }
-
-  static String _formatBytes(BigInt bytes) {
-    final value = bytes.toInt();
-    if (value < 1024) return '$value B';
-    if (value < 1024 * 1024) {
-      return '${(value / 1024).toStringAsFixed(1)} KB';
-    }
-    return '${(value / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 }
 

@@ -22,6 +22,7 @@ import 'package:astral_game/ui/widgets/fade_in_section.dart';
 import 'package:astral_game/ui/widgets/linux_capability_prompt.dart';
 import 'package:astral_game/ui/widgets/page_header.dart';
 import 'package:astral_game/ui/navigation/astral_page_route.dart';
+import 'package:astral_game/ui/widgets/steam_settings_section.dart';
 import 'package:astral_game/ui/widgets/theme_picker_sheet.dart';
 import 'package:astral_game/data/services/connection_service.dart';
 import 'package:astral_game/data/services/firewall_service.dart';
@@ -187,6 +188,19 @@ class _SettingsMainPageState extends State<SettingsMainPage>
                   );
                 }),
               ),
+              // Steam 模式：账号 / SDR 中继 / 房间成员与诊断入口都收在这个分区。
+              Watch((context) {
+                final mode = settingsState.transportGate.fallback(
+                  settingsState.transportMode.value,
+                );
+                if (mode != TransportMode.steam) {
+                  return const SizedBox.shrink();
+                }
+                return const Padding(
+                  padding: EdgeInsets.only(top: AppDimensions.sectionGap),
+                  child: FadeInSection(child: SteamSettingsSection()),
+                );
+              }),
               const SizedBox(height: AppDimensions.sectionGap),
               FadeInSection(
                 child: Watch((context) {
@@ -225,6 +239,12 @@ class _SettingsMainPageState extends State<SettingsMainPage>
               FadeInSection(
                 order: 1,
                 child: Watch((context) {
+                  // 自动进入房间依赖「收藏」里的短码 + 服务器，Steam 模式整组不出现。
+                  final steamMode =
+                      settingsState.transportGate.fallback(
+                        settingsState.transportMode.value,
+                      ) ==
+                      TransportMode.steam;
                   return AstralSettingsFormCard(
                     title: '应用',
                     rows: [
@@ -239,17 +259,22 @@ class _SettingsMainPageState extends State<SettingsMainPage>
                             settingsState.saveToPersistence();
                           },
                         ),
-                      _switchRow(
-                        icon: Icons.login_rounded,
-                        title: '启动后自动进入房间',
-                        subtitle: () => '从收藏中选择要进入的房间',
-                        value: () => settingsState.autoEnterRoom.value,
-                        onChanged: (v) =>
-                            _onAutoEnterRoomChanged(settingsState, v),
-                      ),
-                      if (settingsState.autoEnterRoom.value)
-                        (index, count) =>
-                            _buildAutoEnterRoomRow(settingsState, index, count),
+                      if (!steamMode) ...[
+                        _switchRow(
+                          icon: Icons.login_rounded,
+                          title: '启动后自动进入房间',
+                          subtitle: () => '从收藏中选择要进入的房间',
+                          value: () => settingsState.autoEnterRoom.value,
+                          onChanged: (v) =>
+                              _onAutoEnterRoomChanged(settingsState, v),
+                        ),
+                        if (settingsState.autoEnterRoom.value)
+                          (index, count) => _buildAutoEnterRoomRow(
+                            settingsState,
+                            index,
+                            count,
+                          ),
+                      ],
                       _switchRow(
                         icon: Icons.system_update_outlined,
                         title: '自动检查更新',

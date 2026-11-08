@@ -69,10 +69,12 @@ class ConnectionService {
 
   /// 当前设置是否要求走 Steam 组网。
   ///
-  /// 统一走 [SettingsState.transportGate]：平台和「实验性功能」开关都在那里
-  /// 判定，避免这里再复制一份条件。
+  /// 以运行时的 [SettingsState.transportMode] 为准，不再回读本地存储：
+  /// 自检启动（`--steam-selftest`）等场景只改内存模式、不落盘，读存储会
+  /// 把 Steam 建房错当成 EasyTier，进而误报「请先启用服务器」。
+  /// 平台与实验性开关仍统一由 [SettingsState.transportGate] 判定。
   bool get _steamModeActive =>
-      _appSettings.getTransportMode() == TransportMode.steam &&
+      _settingsState.transportMode.value == TransportMode.steam &&
       _settingsState.transportGate.isAvailable(TransportMode.steam);
 
   /// 预热 Steam 客户端与 SDR 中继。

@@ -54,6 +54,12 @@ class _JoinLinkBinderState extends State<JoinLinkBinder> {
     final links = getIt<JoinLinkService>();
     try {
       final connection = getIt<ConnectionService>();
+      // 邀请链接是 EasyTier 的「短码 + 服务器」体系，Steam 模式没有对应对象。
+      if (connection.steamModeActive) {
+        links.consume();
+        _toast('当前是 Steam 组网，邀请链接不可用；请在 Steam 页的房间列表里加入');
+        return;
+      }
       // 连接中先等它结束，而不是直接吞掉邀请链接。
       if (connection.isConnecting.value) {
         _toast('正在连接中，稍后自动打开邀请…');

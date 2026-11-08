@@ -23,6 +23,7 @@ class TransportInfoPage extends StatelessWidget {
     // 统一判定入口：即使外部传入了 Steam，当前平台/开关不允许时也回落成
     // EasyTier 分支，不会渲染 Steam 面板。
     final effectiveMode = getIt<SettingsState>().transportGate.fallback(mode);
+    final isSteam = effectiveMode == TransportMode.steam;
     final isNarrow = MediaQuery.sizeOf(context).width < AppBreakpoints.narrow;
     final startPad = isNarrow
         ? AppDimensions.pagePaddingHMobile
@@ -34,17 +35,19 @@ class TransportInfoPage extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        PageHeader(
-          padding: EdgeInsetsDirectional.fromSTEB(startPad, 12, endPad, 8),
-          subtitle: '${effectiveMode.menuLabel} 组网状态',
-        ),
+        // Steam 页直接用状态条当页头，不再单独占一行副标题。
+        if (!isSteam)
+          PageHeader(
+            padding: EdgeInsetsDirectional.fromSTEB(startPad, 12, endPad, 8),
+            subtitle: '${effectiveMode.menuLabel} 组网状态',
+          ),
         Expanded(
           // Steam 页要「列表吃满剩余高度」，不能再套 ListView（高度无界）。
           child: switch (effectiveMode) {
             TransportMode.steam => Padding(
               padding: EdgeInsetsDirectional.fromSTEB(
                 startPad,
-                4,
+                12,
                 endPad,
                 isNarrow
                     ? AppDimensions.listBottomWithNav(context)

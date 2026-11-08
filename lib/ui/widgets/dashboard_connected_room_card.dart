@@ -18,6 +18,7 @@ class ConnectedRoomCard extends StatelessWidget {
     required this.onDisconnect,
     required this.onBookmark,
     this.isBookmarked = false,
+    this.showEasyTierActions = true,
   });
 
   final String roomDisplayName;
@@ -28,6 +29,9 @@ class ConnectedRoomCard extends StatelessWidget {
   final VoidCallback onDisconnect;
   final VoidCallback onBookmark;
   final bool isBookmarked;
+
+  /// 短码、收藏、分享都是 EasyTier 专属；Steam 大厅随时消失，没有可分享/收藏的对象。
+  final bool showEasyTierActions;
 
   @override
   Widget build(BuildContext context) {
@@ -70,7 +74,8 @@ class ConnectedRoomCard extends StatelessWidget {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      '正在连接组网…短码可先分享给好友',
+                      '正在连接组网…'
+                      '${showEasyTierActions ? '短码可先分享给好友' : ''}',
                       style: textTheme.bodySmall?.copyWith(
                         color: palette.accent,
                         fontWeight: FontWeight.w600,
@@ -119,7 +124,7 @@ class ConnectedRoomCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    if (code.isNotEmpty) ...[
+                    if (showEasyTierActions && code.isNotEmpty) ...[
                       const SizedBox(height: 10),
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.end,
@@ -186,37 +191,52 @@ class ConnectedRoomCard extends StatelessWidget {
           const SizedBox(height: 14),
           Row(
             children: [
-              IconButton(
-                tooltip: isBookmarked ? '取消收藏' : '收藏当前房间',
-                onPressed: onBookmark,
-                icon: Icon(
-                  isBookmarked
-                      ? Icons.bookmark_rounded
-                      : Icons.bookmark_border_rounded,
-                  color: isBookmarked ? palette.accent : palette.accent,
-                  fill: isBookmarked ? 1 : 0,
-                ),
-              ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: FilledButton.tonal(
-                  onPressed: onShare,
-                  child: const Text('分享'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: onDisconnect,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: palette.error,
-                    side: BorderSide(
-                      color: palette.error.withValues(alpha: 0.35),
-                    ),
+              if (showEasyTierActions) ...[
+                IconButton(
+                  tooltip: isBookmarked ? '取消收藏' : '收藏当前房间',
+                  onPressed: onBookmark,
+                  icon: Icon(
+                    isBookmarked
+                        ? Icons.bookmark_rounded
+                        : Icons.bookmark_border_rounded,
+                    color: palette.accent,
+                    fill: isBookmarked ? 1 : 0,
                   ),
-                  child: const Text('离开'),
                 ),
+                const SizedBox(width: 4),
+              ],
+              Expanded(
+                child: showEasyTierActions
+                    ? FilledButton.tonal(
+                        onPressed: onShare,
+                        child: const Text('分享'),
+                      )
+                    : OutlinedButton(
+                        onPressed: onDisconnect,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: palette.error,
+                          side: BorderSide(
+                            color: palette.error.withValues(alpha: 0.35),
+                          ),
+                        ),
+                        child: const Text('离开房间'),
+                      ),
               ),
+              if (showEasyTierActions) ...[
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: onDisconnect,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: palette.error,
+                      side: BorderSide(
+                        color: palette.error.withValues(alpha: 0.35),
+                      ),
+                    ),
+                    child: const Text('离开'),
+                  ),
+                ),
+              ],
             ],
           ),
         ],

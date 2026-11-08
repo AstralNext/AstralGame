@@ -26,6 +26,7 @@ import 'package:astral_game/ui/widgets/create_room_dialog.dart';
 import 'package:astral_game/ui/widgets/dashboard_home_panel.dart';
 import 'package:astral_game/ui/widgets/share_room_dialog.dart';
 import 'package:astral_game/utils/error_text.dart';
+import 'package:astral_game/utils/logger.dart';
 import 'package:astral_game/utils/room_share.dart';
 import 'package:flutter/material.dart';
 import 'package:signals/signals_flutter.dart';
@@ -95,7 +96,8 @@ class _DashboardPageState extends State<DashboardPage> {
       if (!mounted) return;
       showAppToast(context, '已加入好友的房间「${info.name}」');
     } catch (e) {
-      if (mounted) showAppToast(context, '好友邀请加入失败：$e');
+      appLogger.w('[Dashboard] 好友邀请加入失败: $e');
+      if (mounted) showAppToast(context, '好友邀请加入失败：${errorText(e)}');
     } finally {
       _steamInviteBusy = false;
     }
@@ -159,7 +161,8 @@ class _DashboardPageState extends State<DashboardPage> {
     } on ShareCodeException catch (e) {
       if (mounted) showAppToast(context, '短码服务暂不可用（${e.message}）');
     } catch (e) {
-      if (mounted) showAppToast(context, '无法生成短码：$e');
+      appLogger.w('[Dashboard] 生成短码失败: $e');
+      if (mounted) showAppToast(context, '无法生成短码：${errorText(e)}');
     }
 
     if (!mounted) return;
@@ -299,7 +302,8 @@ class _DashboardPageState extends State<DashboardPage> {
     } on ConnectionAbortedException {
       return;
     } catch (e) {
-      if (mounted) showAppToast(context, '$e');
+      appLogger.w('[Dashboard] 创建房间失败: $e');
+      if (mounted) showAppToast(context, '创建房间失败：${errorText(e)}');
     }
   }
 
