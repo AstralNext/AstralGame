@@ -10,6 +10,7 @@ import 'package:astral_game/data/services/game_assist_rules_service.dart';
 import 'package:astral_game/data/services/node_management_service.dart';
 
 import 'package:astral_game/data/services/share_code_service.dart';
+import 'package:astral_game/data/services/shell_navigation_service.dart';
 import 'package:astral_game/data/services/steam_transport_service.dart';
 import 'package:astral_game/src/rust/api/steam.dart';
 import 'package:astral_game/data/state/room_state.dart';
@@ -24,7 +25,6 @@ import 'package:astral_game/ui/widgets/confirm_dialog.dart';
 import 'package:astral_game/ui/widgets/create_room_dialog.dart';
 import 'package:astral_game/ui/widgets/dashboard_home_panel.dart';
 import 'package:astral_game/ui/widgets/share_room_dialog.dart';
-import 'package:astral_game/ui/widgets/steam_lobby_browser_dialog.dart';
 import 'package:astral_game/utils/error_text.dart';
 import 'package:astral_game/utils/room_share.dart';
 import 'package:flutter/material.dart';
@@ -132,7 +132,8 @@ class _DashboardPageState extends State<DashboardPage> {
             child: const Text('取消'),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, controller.text.trim()),
+            onPressed: () =>
+                Navigator.pop(dialogContext, controller.text.trim()),
             child: const Text('加入'),
           ),
         ],
@@ -307,22 +308,10 @@ class _DashboardPageState extends State<DashboardPage> {
       if (mounted) showAppToast(context, '正在连接中，请稍候…');
       return;
     }
-    // Steam 模式没有短码，直接进大厅搜索。
+    // Steam 模式没有短码：切到 Steam 页，房间列表会随页面进入自动刷新。
     if (_connectionService.steamModeActive) {
-      await getIt<GameAssistRulesService>().ensureLocalLoaded();
-      if (!mounted) return;
-      final catalog = GameCatalog.pickerItems;
-      if (catalog.isEmpty) {
-        showAppToast(context, '游戏目录未加载');
-        return;
-      }
-      final session = await showSteamLobbyBrowser(
-        context,
-        connection: _connectionService,
-        catalog: catalog,
-      );
-      if (!mounted || session == null) return;
-      showAppToast(context, '已加入「${session.gameName}」房间');
+      getIt<ShellNavigationService>().openServersTab();
+      if (mounted) showAppToast(context, '房间列表在 Steam 页下方');
       return;
     }
     final codeController = TextEditingController();

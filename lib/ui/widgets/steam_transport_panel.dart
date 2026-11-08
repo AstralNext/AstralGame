@@ -1,11 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:astral_game/config/app_dimensions.dart';
 import 'package:astral_game/config/theme.dart';
-import 'package:astral_game/data/models/active_room_session.dart';
-import 'package:astral_game/data/models/game_catalog.dart';
 import 'package:astral_game/data/services/connection_service.dart';
-import 'package:astral_game/data/services/game_assist_rules_service.dart';
 import 'package:astral_game/data/services/steam_selftest_service.dart';
 import 'package:astral_game/data/services/steam_transport_service.dart';
 import 'package:astral_game/data/state/settings_state.dart';
@@ -14,8 +12,9 @@ import 'package:astral_game/src/rust/api/steam.dart';
 import 'package:astral_game/ui/widgets/app_toast.dart';
 import 'package:astral_game/ui/widgets/astral_grouped_tile.dart';
 import 'package:astral_game/ui/widgets/astral_settings_section.dart';
+import 'package:astral_game/ui/widgets/astral_status_dot.dart';
 import 'package:astral_game/ui/widgets/error_state.dart';
-import 'package:astral_game/ui/widgets/steam_lobby_browser_dialog.dart';
+import 'package:astral_game/ui/widgets/steam_lobby_list_section.dart';
 import 'package:flutter/material.dart';
 
 /// Steam 组网（SDR 虚拟局域网）状态面板。
@@ -34,6 +33,8 @@ class _SteamTransportPanelState extends State<SteamTransportPanel> {
   static const Duration _pollInterval = Duration(seconds: 2);
 
   final SteamTransportService _steam = SteamTransportService();
+  final GlobalKey<SteamLobbyListSectionState> _lobbyListKey =
+      GlobalKey<SteamLobbyListSectionState>();
   Timer? _timer;
   SteamStatusInfo? _status;
   SteamRoomInfo? _room;
@@ -88,8 +89,6 @@ class _SteamTransportPanelState extends State<SteamTransportPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     final room = _room;
     if (_error != null) {
       return ErrorState(
@@ -100,135 +99,152 @@ class _SteamTransportPanelState extends State<SteamTransportPanel> {
       );
     }
 
-    Widget badge(String text, {required bool ok}) => Text(
-      text,
-      style: theme.textTheme.labelMedium?.copyWith(
-        color: ok ? scheme.primary : scheme.error,
-        fontWeight: FontWeight.w600,
-      ),
-    );
+    // 状态统一成「小圆点 + 短文字」，不再用彩色文字或徽标。
+    Widget status(AstralStatusTone tone, String text) =>
+        AstralStatusLine(tone: tone, text: text);
 
-    return AstralSettingsFormCard(
-      title: 'Steam 组网',
-      subtitle: '经 Steam 中继建立虚拟局域网：为每个成员分配虚拟 IP，游戏直接局域网联机',
-      rows: [
-        (index, count) => AstralGroupedTile(
-          icon: Icons.person_outline_rounded,
-          label: 'Steam 账号',
-          subtitle: _accountSubtitle(),
-          index: index,
-          count: count,
-          trailing: badge(
-            _status?.loggedOn == true ? '已登录' : '未登录',
-            ok: _status?.loggedOn == true,
-          ),
-        ),
-        (index, count) => AstralGroupedTile(
-          icon: Icons.cloud_done_outlined,
-          label: 'SDR 中继',
-          subtitle: _relaySubtitle(),
-          index: index,
-          count: count,
-          trailing: badge(
-            _status?.relayReady == true ? '已就绪' : '准备中',
-            ok: _status?.relayReady == true,
-          ),
-        ),
-        (index, count) => AstralGroupedTile(
-          icon: Icons.lan_outlined,
-          label: '组网房间',
-          subtitle: _roomSubtitle(room),
-          index: index,
-          count: count,
-          trailing: badge(
-            room?.active == true ? '已组网' : '未组网',
-            ok: room?.active == true,
-          ),
-        ),
-        if (room?.active == true || _debugEnabled)
-          (index, count) => AstralGroupedTile(
-            icon: Icons.monitor_heart_outlined,
-            label: '诊断：大厅信息',
-            subtitle: _diagSubtitle(),
-            index: index,
-            count: count,
-            onTap: _showLobbyDiag,
-          ),
-        if (room?.active == true && room?.isHost == true)
-          (index, count) => AstralGroupedTile(
-            icon: Icons.person_add_alt_1_outlined,
-            label: '邀请好友',
-            subtitle: _inviteSubtitle(),
-            index: index,
-            count: count,
-            onTap: _inviteFriends,
-          ),
-        if (room?.active == true && room?.isHost == true && _debugEnabled)
-          (index, count) => AstralGroupedTile(
-            icon: Icons.bug_report_outlined,
-            label: '诊断：幽灵成员清理',
-            subtitle: '注入离线超过宽限期的成员并跑一次真实 prune',
-            index: index,
-            count: count,
-            onTap: _ghostProbe,
-          ),
-        if (_debugEnabled)
-          (index, count) => AstralGroupedTile(
-            icon: Icons.bug_report_outlined,
-            label: '诊断：客人侧宽限过滤',
-            subtitle: '注入离线超宽限期的房主并跑真实 prune，验证 roster 被清空',
-            index: index,
-            count: count,
-            onTap: _guestRosterProbe,
-          ),
-        if (_debugEnabled)
-          (index, count) => AstralGroupedTile(
-            icon: Icons.play_circle_outline_rounded,
-            label: '自检：房主跑一遍',
-            subtitle: _selfTestSubtitle(
-              '自动建房 → 等客人 → 校验握手 → 导出日志到桌面',
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        AstralSettingsFormCard(
+          title: 'Steam 组网',
+          subtitle: '经 Steam 中继建立虚拟局域网：为每个成员分配虚拟 IP，游戏直接局域网联机',
+          rows: [
+            (index, count) => AstralGroupedTile(
+              icon: Icons.person_outline_rounded,
+              label: 'Steam 账号',
+              subtitle: _accountSubtitle(),
+              index: index,
+              count: count,
+              trailing: status(
+                _status?.loggedOn == true
+                    ? AstralStatusTone.ready
+                    : AstralStatusTone.unavailable,
+                _status?.loggedOn == true ? '已登录' : '未登录',
+              ),
             ),
-            index: index,
-            count: count,
-            onTap: _canRunSelfTest ? () => _runSelfTest(host: true) : null,
-          ),
-        if (_debugEnabled)
-          (index, count) => AstralGroupedTile(
-            icon: Icons.play_circle_outline_rounded,
-            label: '自检：客人跑一遍',
-            subtitle: _selfTestSubtitle(_guestSelfTestIdle()),
-            index: index,
-            count: count,
-            onTap: _canRunSelfTest ? () => _runSelfTest(host: false) : null,
-          ),
-        for (final member in (room?.members ?? const <SteamMemberInfo>[])
-            // 离线成员不渲染（本机除外）；宽限期结束后 Rust 侧会真正摘除。
-            .where((m) => m.online || m.isSelf))
-          (index, count) => AstralGroupedTile(
-            icon: member.isHost
-                ? Icons.workspace_premium_outlined
-                : Icons.computer_rounded,
-            label: member.nickname.isEmpty
-                ? 'Steam-${member.steamId}'
-                : member.nickname,
-            subtitle:
-                '${member.virtualIp} · ${member.latencyMs}ms'
-                '${member.isSelf || !member.online ? '' : ' · ${member.viaRelay ? '中转' : '直连'}'}'
-                ' · ↓ ${_formatBytes(member.bytesIn)} ↑ ${_formatBytes(member.bytesOut)}',
-            index: index,
-            count: count,
-            trailing: badge(
-              member.online ? (member.isSelf ? '本机' : '在线') : '离线',
-              ok: member.online,
+            (index, count) => AstralGroupedTile(
+              icon: Icons.cloud_done_outlined,
+              label: 'SDR 中继',
+              subtitle: _relaySubtitle(),
+              index: index,
+              count: count,
+              trailing: status(
+                _status?.relayReady == true
+                    ? AstralStatusTone.ready
+                    : AstralStatusTone.unavailable,
+                _status?.relayReady == true ? '已就绪' : '准备中',
+              ),
             ),
-          ),
+            (index, count) => AstralGroupedTile(
+              icon: Icons.lan_outlined,
+              label: '组网房间',
+              subtitle: _roomSubtitle(room),
+              index: index,
+              count: count,
+              trailing: status(
+                room?.active == true
+                    ? AstralStatusTone.ready
+                    : AstralStatusTone.unavailable,
+                room?.active == true ? '已组网' : '未组网',
+              ),
+            ),
+            if (room?.active == true || _debugEnabled)
+              (index, count) => AstralGroupedTile(
+                icon: Icons.monitor_heart_outlined,
+                label: '诊断：大厅信息',
+                subtitle: _diagSubtitle(),
+                index: index,
+                count: count,
+                onTap: _showLobbyDiag,
+              ),
+            if (room?.active == true && room?.isHost == true)
+              (index, count) => AstralGroupedTile(
+                icon: Icons.person_add_alt_1_outlined,
+                label: '邀请好友',
+                subtitle: _inviteSubtitle(),
+                index: index,
+                count: count,
+                onTap: _inviteFriends,
+              ),
+            if (room?.active == true && room?.isHost == true && _debugEnabled)
+              (index, count) => AstralGroupedTile(
+                icon: Icons.bug_report_outlined,
+                label: '诊断：幽灵成员清理',
+                subtitle: '注入离线超过宽限期的成员并跑一次真实 prune',
+                index: index,
+                count: count,
+                onTap: _ghostProbe,
+              ),
+            if (_debugEnabled)
+              (index, count) => AstralGroupedTile(
+                icon: Icons.bug_report_outlined,
+                label: '诊断：客人侧宽限过滤',
+                subtitle: '注入离线超宽限期的房主并跑真实 prune，验证 roster 被清空',
+                index: index,
+                count: count,
+                onTap: _guestRosterProbe,
+              ),
+            if (_debugEnabled)
+              (index, count) => AstralGroupedTile(
+                icon: Icons.play_circle_outline_rounded,
+                label: '自检：房主跑一遍',
+                subtitle: _selfTestSubtitle('自动建房 → 等客人 → 校验握手 → 导出日志到桌面'),
+                index: index,
+                count: count,
+                onTap: _canRunSelfTest ? () => _runSelfTest(host: true) : null,
+              ),
+            if (_debugEnabled)
+              (index, count) => AstralGroupedTile(
+                icon: Icons.play_circle_outline_rounded,
+                label: '自检：客人跑一遍',
+                subtitle: _selfTestSubtitle(_guestSelfTestIdle()),
+                index: index,
+                count: count,
+                onTap: _canRunSelfTest ? () => _runSelfTest(host: false) : null,
+              ),
+            for (final member
+                in (room?.members ?? const <SteamMemberInfo>[])
+                // 离线成员不渲染（本机除外）；宽限期结束后 Rust 侧会真正摘除。
+                .where((m) => m.online || m.isSelf))
+              (index, count) => AstralGroupedTile(
+                icon: member.isHost
+                    ? Icons.workspace_premium_outlined
+                    : Icons.computer_rounded,
+                label: member.nickname.isEmpty
+                    ? 'Steam-${member.steamId}'
+                    : member.nickname,
+                subtitle:
+                    '${member.virtualIp} · ${member.latencyMs}ms'
+                    '${member.isSelf || !member.online ? '' : ' · ${member.viaRelay ? '中转' : '直连'}'}'
+                    ' · ↓ ${_formatBytes(member.bytesIn)} ↑ ${_formatBytes(member.bytesOut)}',
+                index: index,
+                count: count,
+                trailing: status(
+                  member.online
+                      ? AstralStatusTone.ready
+                      : AstralStatusTone.unavailable,
+                  member.online ? (member.isSelf ? '本机' : '在线') : '离线',
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: AppDimensions.sectionGap),
+        SteamLobbyListSection(
+          key: _lobbyListKey,
+          connection: getIt<ConnectionService>(),
+          roomActive: room?.active == true,
+          onJoined: () => unawaited(_refresh()),
+        ),
       ],
     );
   }
 
   /// 仅在 `ASTRAL_STEAM_DEBUG=1` 启动时显示诊断入口。
   static final bool _debugEnabled = () {
-    final raw = Platform.environment['ASTRAL_STEAM_DEBUG']?.trim().toLowerCase();
+    final raw = Platform.environment['ASTRAL_STEAM_DEBUG']
+        ?.trim()
+        .toLowerCase();
     return raw == '1' || raw == 'true' || raw == 'yes';
   }();
 
@@ -370,10 +386,7 @@ class _SteamTransportPanelState extends State<SteamTransportPanel> {
                 ),
                 if (diag.overlayHint.isNotEmpty) ...[
                   const SizedBox(height: 8),
-                  Text(
-                    diag.overlayHint,
-                    style: TextStyle(color: scheme.error),
-                  ),
+                  Text(diag.overlayHint, style: TextStyle(color: scheme.error)),
                 ],
               ],
             ),
@@ -405,29 +418,12 @@ class _SteamTransportPanelState extends State<SteamTransportPanel> {
         overlayEnabled: diag?.overlayEnabled ?? false,
         onSearchRooms: () async {
           Navigator.pop(dialogContext);
-          await _openLobbySearch();
+          // 房间列表常驻在状态卡下方，这里只触发一次刷新。
+          await _lobbyListKey.currentState?.refresh();
         },
       ),
     );
     await _refresh();
-  }
-
-  /// 覆盖层不可用时的替代路径：直接进大厅搜房。
-  Future<void> _openLobbySearch() async {
-    await getIt<GameAssistRulesService>().ensureLocalLoaded();
-    if (!mounted) return;
-    final catalog = GameCatalog.pickerItems;
-    if (catalog.isEmpty) {
-      showAppToast(context, '游戏目录未加载');
-      return;
-    }
-    final ActiveRoomSession? session = await showSteamLobbyBrowser(
-      context,
-      connection: getIt<ConnectionService>(),
-      catalog: catalog,
-    );
-    if (!mounted || session == null) return;
-    showAppToast(context, '已加入「${session.gameName}」房间');
   }
 
   String _inviteSubtitle() {
@@ -588,10 +584,12 @@ class _InviteFriendDialogState extends State<_InviteFriendDialog> {
                 warning
                     ? '需要开启 Steam 覆盖层才能邀请好友'
                           '（Steam → 设置 → 游戏中 → 启用 Steam 覆盖层）。\n'
-                          '仍可直接输入好友 SteamID 邀请；或让对方在「加入 → 搜索房间」里找到你的房间。'
+                          '仍可直接输入好友 SteamID 邀请；或让对方在 Steam 页下方的「房间列表」里找到你的房间。'
                     : '可直接输入好友 SteamID 邀请（不依赖覆盖层）；也可唤起 Steam 原生邀请面板。',
                 style: theme.textTheme.bodyMedium?.copyWith(
-                  color: warning ? scheme.onErrorContainer : scheme.onSurfaceVariant,
+                  color: warning
+                      ? scheme.onErrorContainer
+                      : scheme.onSurfaceVariant,
                   height: 1.4,
                 ),
               ),
@@ -623,7 +621,7 @@ class _InviteFriendDialogState extends State<_InviteFriendDialog> {
       actions: [
         TextButton(
           onPressed: _busy ? null : widget.onSearchRooms,
-          child: const Text('去搜索房间'),
+          child: const Text('查看房间列表'),
         ),
         TextButton(
           onPressed: _busy || !widget.overlayEnabled ? null : _openPanel,
