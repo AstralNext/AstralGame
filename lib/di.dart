@@ -50,6 +50,7 @@ import 'package:astral_game/utils/ping_util.dart';
 import 'package:astral_game/utils/runtime_platform.dart';
 import 'package:astral_game/src/rust/api/p2p.dart' show subscribeCoreLogs;
 import 'package:astral_game/src/rust/frb_generated.dart';
+import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:get_it/get_it.dart';
 import 'package:logger/logger.dart';
 import 'package:path/path.dart' as p;
@@ -114,6 +115,22 @@ Future<Directory> _resolveSupportDir() async {
   return dir;
 }
 
+/// Windows 下显式加载 exe 同目录的 Rust 库。
+///
+/// FRB 默认会按**当前工作目录**去找 `rust/target/release/`，从仓库根目录启动
+/// 时会命中过期的开发产物，导致 Dart/Rust content hash 不一致。打包后的程序
+/// 只应该用自己目录里的那份库，与工作目录无关。
+ExternalLibrary? _appDirRustLibrary() {
+  if (!Platform.isWindows) return null;
+  final lib = File(
+    p.join(
+      File(Platform.resolvedExecutable).parent.path,
+      'rust_lib_astral_game.dll',
+    ),
+  );
+  return lib.existsSync() ? ExternalLibrary.open(lib.path) : null;
+}
+
 /// 设置依赖注入
 Future<void> setupDI() async {
   // 为了保证 dispose 顺序（先创建的后销毁），每次 setupDI 前清空列表。
@@ -126,7 +143,7 @@ Future<void> setupDI() async {
   final prefsFuture = supportDirFuture.then(
     (_) => SharedPreferences.getInstance(),
   );
-  final rustInitFuture = RustLib.init();
+  final rustInitFuture = RustLib.init(externalLibrary: _appDirRustLibrary());
   final runtimeInfoFuture = ClientRuntimeInfo.warmUp();
   final bookmarkStoreFuture = supportDirFuture.then(
     (dir) => IsarBookmarkStore.open(p.join(dir.path, 'db')),

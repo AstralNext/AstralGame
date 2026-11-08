@@ -1181,9 +1181,15 @@ impl Engine {
         game_id: String,
         reply: oneshot::Sender<Result<Vec<SteamLobbyInfo>, String>>,
     ) {
-        let Some(game_id) = lobby::normalize_game_id(&game_id) else {
-            let _ = reply.send(Err("缺少游戏标识，无法搜索房间".to_string()));
-            return;
+        // 空 game_id 表示「全部」：不加服务端 `ag_game` 过滤，只做本地版本校验。
+        let filter_game = if game_id.trim().is_empty() {
+            None
+        } else {
+            let Some(game_id) = lobby::normalize_game_id(&game_id) else {
+                let _ = reply.send(Err("缺少游戏标识，无法搜索房间".to_string()));
+                return;
+            };
+            Some(game_id)
         };
         let mm = self.client.matchmaking();
         // 测试开关：Steam 端 `ag_game` 过滤正常时，本地二次校验永远筛不掉东西，
@@ -1191,17 +1197,20 @@ impl Engine {
         let force_local = std::env::var("ASTRAL_STEAM_FORCE_LOCAL_VALIDATE")
             .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
             .unwrap_or(false);
-        if force_local {
-            mm.set_lobby_list_filter(LobbyListFilter::default());
-        } else {
-            mm.set_lobby_list_filter(LobbyListFilter {
-                string: Some(vec![StringFilter(
-                    LobbyKey::new(lobby::KEY_GAME),
-                    game_id.as_str(),
-                    StringFilterKind::Equal,
-                )]),
-                ..Default::default()
-            });
+        match filter_game.as_deref() {
+            Some(game_id) if !force_local => {
+                mm.set_lobby_list_filter(LobbyListFilter {
+                    string: Some(vec![StringFilter(
+                        LobbyKey::new(lobby::KEY_GAME),
+                        game_id,
+                        StringFilterKind::Equal,
+                    )]),
+                    ..Default::default()
+                });
+            }
+            _ => {
+                mm.set_lobby_list_filter(LobbyListFilter::default());
+            }
         }
         let tx = self.lobby_tx.clone();
         mm.request_lobby_list(move |res| {
@@ -1212,10 +1221,15 @@ impl Engine {
         });
         debug_log(
             "lobby_search_start",
-            format!("game={game_id} force_local={force_local}"),
+            format!(
+                "game={} force_local={force_local}",
+                filter_game.as_deref().unwrap_or("*")
+            ),
         );
         self.pending_lobby = Some(PendingLobby {
-            op: LobbyOp::Search { game_id },
+            op: LobbyOp::Search {
+                game_id: filter_game.unwrap_or_default(),
+            },
             reply: LobbyReply::Many(reply),
             deadline: Instant::now() + LOBBY_TIMEOUT,
         });

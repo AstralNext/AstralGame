@@ -39,24 +39,33 @@ class TransportInfoPage extends StatelessWidget {
           subtitle: '${effectiveMode.menuLabel} 组网状态',
         ),
         Expanded(
-          child: ListView(
-            controller: scrollController,
-            padding: EdgeInsetsDirectional.fromSTEB(
-              startPad,
-              4,
-              endPad,
-              // 窄屏为悬浮胶囊留出余量；宽屏没有底栏，只保留页面底部留白。
-              isNarrow
-                  ? AppDimensions.listBottomWithNav(context)
-                  : AppDimensions.pagePaddingBottom,
+          // Steam 页要「列表吃满剩余高度」，不能再套 ListView（高度无界）。
+          child: switch (effectiveMode) {
+            TransportMode.steam => Padding(
+              padding: EdgeInsetsDirectional.fromSTEB(
+                startPad,
+                4,
+                endPad,
+                isNarrow
+                    ? AppDimensions.listBottomWithNav(context)
+                    : AppDimensions.pagePaddingBottom,
+              ),
+              child: const SteamTransportPanel(),
             ),
-            children: [
-              switch (effectiveMode) {
-                TransportMode.steam => const SteamTransportPanel(),
-                TransportMode.easytier => const SizedBox.shrink(),
-              },
-            ],
-          ),
+            TransportMode.easytier => ListView(
+              controller: scrollController,
+              padding: EdgeInsetsDirectional.fromSTEB(
+                startPad,
+                4,
+                endPad,
+                // 窄屏为悬浮胶囊留出余量；宽屏没有底栏，只保留页面底部留白。
+                isNarrow
+                    ? AppDimensions.listBottomWithNav(context)
+                    : AppDimensions.pagePaddingBottom,
+              ),
+              children: const [SizedBox.shrink()],
+            ),
+          },
         ),
       ],
     );

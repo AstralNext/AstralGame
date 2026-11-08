@@ -10,6 +10,7 @@ import 'package:astral_game/data/state/settings_state.dart';
 import 'package:astral_game/di.dart';
 import 'package:astral_game/src/rust/api/steam.dart';
 import 'package:astral_game/ui/widgets/app_toast.dart';
+import 'package:astral_game/ui/widgets/astral_card.dart';
 import 'package:astral_game/ui/widgets/astral_grouped_tile.dart';
 import 'package:astral_game/ui/widgets/astral_settings_section.dart';
 import 'package:astral_game/ui/widgets/astral_status_dot.dart';
@@ -42,6 +43,7 @@ class _SteamTransportPanelState extends State<SteamTransportPanel> {
   String? _error;
   bool _refreshing = false;
   bool _selfTestRunning = false;
+  bool _detailsOpen = false;
   String _selfTestStatus = '';
 
   @override
@@ -106,10 +108,18 @@ class _SteamTransportPanelState extends State<SteamTransportPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        AstralSettingsFormCard(
-          title: 'Steam 组网',
-          subtitle: '经 Steam 中继建立虚拟局域网：为每个成员分配虚拟 IP，游戏直接局域网联机',
-          rows: [
+        _buildStatusStrip(context, room),
+        if (_detailsOpen) ...[
+          const SizedBox(height: AppDimensions.sectionGap),
+          Flexible(
+            flex: 2,
+            child: SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 280),
+                child: AstralSettingsFormCard(
+                  title: '详情',
+                  subtitle: '账号、中继、房间与成员信息',
+                  rows: [
             (index, count) => AstralGroupedTile(
               icon: Icons.person_outline_rounded,
               label: 'Steam 账号',
@@ -227,16 +237,112 @@ class _SteamTransportPanelState extends State<SteamTransportPanel> {
                   member.online ? (member.isSelf ? '本机' : '在线') : '离线',
                 ),
               ),
-          ],
-        ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: AppDimensions.sectionGap),
-        SteamLobbyListSection(
-          key: _lobbyListKey,
-          connection: getIt<ConnectionService>(),
-          roomActive: room?.active == true,
-          onJoined: () => unawaited(_refresh()),
+        Expanded(
+          flex: 3,
+          child: SteamLobbyListSection(
+            key: _lobbyListKey,
+            connection: getIt<ConnectionService>(),
+            roomActive: room?.active == true,
+            onJoined: () => unawaited(_refresh()),
+          ),
         ),
       ],
+    );
+  }
+
+  /// 44px 状态条：账号短名 + 三个状态点；点击展开/收起详情。
+  Widget _buildStatusStrip(BuildContext context, SteamRoomInfo? room) {
+    final palette = context.astralPalette;
+    final textTheme = Theme.of(context).textTheme;
+    final status = _status;
+    final accountName = (status?.persona.trim().isNotEmpty ?? false)
+        ? status!.persona.trim()
+        : 'Steam 账号';
+    final loggedIn = status?.loggedOn == true;
+    final relayReady = status?.relayReady == true;
+    final inRoom = room?.active == true;
+
+    Widget separator() => Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Container(
+        width: 2,
+        height: 2,
+        decoration: BoxDecoration(
+          color: palette.textTertiary,
+          shape: BoxShape.circle,
+        ),
+      ),
+    );
+
+    return AstralCard(
+      padding: EdgeInsets.zero,
+      onTap: () => setState(() => _detailsOpen = !_detailsOpen),
+      child: SizedBox(
+        height: 44,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          child: Row(
+            children: [
+              Flexible(
+                child: Text(
+                  accountName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: palette.textPrimary,
+                  ),
+                ),
+              ),
+              separator(),
+              if (status == null)
+                Text(
+                  '正在连接 Steam…',
+                  style: textTheme.bodySmall?.copyWith(
+                    color: palette.textSecondary,
+                  ),
+                )
+              else ...[
+                AstralStatusLine(
+                  tone: loggedIn
+                      ? AstralStatusTone.ready
+                      : AstralStatusTone.unavailable,
+                  text: loggedIn ? '已登录' : '未登录',
+                ),
+                separator(),
+                AstralStatusLine(
+                  tone: relayReady
+                      ? AstralStatusTone.ready
+                      : AstralStatusTone.unavailable,
+                  text: relayReady ? 'SDR 就绪' : 'SDR 准备中',
+                ),
+                separator(),
+                AstralStatusLine(
+                  tone: inRoom
+                      ? AstralStatusTone.ready
+                      : AstralStatusTone.unavailable,
+                  text: inRoom ? '已组网' : '未组网',
+                ),
+              ],
+              const Spacer(),
+              Icon(
+                _detailsOpen
+                    ? Icons.expand_less_rounded
+                    : Icons.expand_more_rounded,
+                size: 18,
+                color: palette.textTertiary,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

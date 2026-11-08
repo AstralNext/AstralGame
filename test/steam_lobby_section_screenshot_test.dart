@@ -38,10 +38,11 @@ SteamLobbyInfo _room({
   String gate = kSteamLobbyGateBasic,
   String version = kSteamLobbyProtocolVersion,
   bool joinable = true,
+  String gameId = 'stardew',
 }) {
   return SteamLobbyInfo(
     lobbyId: id,
-    gameId: _game.id,
+    gameId: gameId,
     name: name,
     gate: gate,
     version: version,
@@ -66,38 +67,65 @@ void main() {
   });
 
   testWidgets('导出房间列表验收截图', (tester) async {
-    final scenarios = <String, List<SteamLobbyInfo>>{
-      'rooms': [
-        _room(id: '1', name: '小木屋', players: 2),
-        _room(id: '2', name: '开荒', players: 4),
-        _room(id: '3', name: '挖矿队', players: 1, capacity: 4),
-      ],
-      'mixed': [
-        _room(
-          id: '4',
-          name: '需要口令',
-          players: 5,
-          gate: kSteamLobbyGateDouble,
-        ),
-        _room(id: '5', name: '周末农场', players: 8),
-        _room(
-          id: '6',
-          name: '旧版本房间',
-          players: 3,
-          version: 'old',
-          joinable: false,
-        ),
-        _room(id: '7', name: '已关闭', players: 2, joinable: false),
-        _room(
-          id: '8',
-          name: '新人房',
-          players: 3,
-          gate: kSteamLobbyGateOpen,
-        ),
-      ],
-    };
+    final scenarios = <({String name, GameInfo? game, List<SteamLobbyInfo> rooms})>[
+      // 「全部」：跨游戏混排。
+      (
+        name: 'mixed',
+        game: null,
+        rooms: [
+          _room(id: '1', name: '小木屋', players: 2),
+          _room(
+            id: '2',
+            name: '开荒',
+            players: 4,
+            gameId: _otherGame.id,
+          ),
+          _room(
+            id: '3',
+            name: '需要口令',
+            players: 5,
+            gate: kSteamLobbyGateDouble,
+          ),
+          _room(id: '4', name: '周末农场', players: 8),
+          _room(
+            id: '5',
+            name: '旧版本房间',
+            players: 3,
+            version: 'old',
+            joinable: false,
+            gameId: _otherGame.id,
+          ),
+          _room(
+            id: '6',
+            name: '新人房',
+            players: 3,
+            gate: kSteamLobbyGateOpen,
+          ),
+        ],
+      ),
+      (name: 'empty', game: null, rooms: const []),
+      // 切到具体游戏标签。
+      (
+        name: 'terraria',
+        game: _otherGame,
+        rooms: [
+          _room(
+            id: '7',
+            name: '开荒',
+            players: 4,
+            gameId: _otherGame.id,
+          ),
+          _room(
+            id: '8',
+            name: '硬核生存',
+            players: 6,
+            gameId: _otherGame.id,
+          ),
+        ],
+      ),
+    ];
 
-    for (final entry in scenarios.entries) {
+    for (final scenario in scenarios) {
       final boundaryKey = GlobalKey();
       await tester.pumpWidget(
         MaterialApp(
@@ -107,15 +135,18 @@ void main() {
             body: Center(
               child: SizedBox(
                 width: 760,
+                height: 520,
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: RepaintBoundary(
                     key: boundaryKey,
                     child: SteamLobbyListView(
                       catalog: const [_game, _otherGame],
-                      game: _game,
-                      rooms: entry.value,
+                      selectedGame: scenario.game,
+                      rooms: scenario.rooms,
                       loading: false,
+                      onSelectGame: (_) {},
+                      onRefresh: () {},
                     ),
                   ),
                 ),
@@ -125,7 +156,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await _capture(tester, boundaryKey, entry.key);
+      await _capture(tester, boundaryKey, scenario.name);
     }
   });
 

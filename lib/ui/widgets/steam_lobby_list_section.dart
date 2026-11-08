@@ -11,7 +11,6 @@ import 'package:astral_game/src/rust/api/steam.dart';
 import 'package:astral_game/ui/widgets/app_toast.dart';
 import 'package:astral_game/ui/widgets/astral_card.dart';
 import 'package:astral_game/ui/widgets/astral_status_dot.dart';
-import 'package:astral_game/ui/widgets/section_header.dart';
 import 'package:flutter/material.dart';
 
 /// Steam Tab 内常驻的房间列表。
@@ -90,12 +89,13 @@ class SteamLobbyListSectionState extends State<SteamLobbyListSection> {
       return;
     }
     final currentId = _game?.id;
-    final game = currentId == null
-        ? catalog.first
-        : catalog.firstWhere(
-            (item) => item.id == currentId,
-            orElse: () => catalog.first,
-          );
+    GameInfo? game;
+    for (final item in catalog) {
+      if (item.id == currentId) {
+        game = item;
+        break;
+      }
+    }
     setState(() {
       _catalog = catalog;
       _game = game;
@@ -104,15 +104,14 @@ class SteamLobbyListSectionState extends State<SteamLobbyListSection> {
   }
 
   Future<void> _search() async {
-    final game = _game;
-    if (game == null) return;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
+      // 空 game_id = 「全部」：Rust 侧不加 `ag_game` 过滤，只做本地版本校验。
       final rooms = await widget.connection.steamTransport.searchLobbies(
-        game.id,
+        _game?.id ?? '',
       );
       if (!mounted) return;
       setState(() {
@@ -129,7 +128,7 @@ class SteamLobbyListSectionState extends State<SteamLobbyListSection> {
   }
 
   void _changeGame(GameInfo? game) {
-    if (game == null || game.id == _game?.id) return;
+    if (game?.id == _game?.id) return;
     setState(() {
       _game = game;
       _rooms = const [];
@@ -140,8 +139,7 @@ class SteamLobbyListSectionState extends State<SteamLobbyListSection> {
   }
 
   Future<void> _join(SteamLobbyInfo room) async {
-    final game = _game;
-    if (game == null || _joiningLobbyId != null || widget.roomActive) return;
+    if (_joiningLobbyId != null || widget.roomActive) return;
     if (!_LobbyRow._canJoin(room)) return;
 
     String? extra;
@@ -154,12 +152,17 @@ class SteamLobbyListSectionState extends State<SteamLobbyListSection> {
     }
     if (!mounted) return;
 
+    // 房间自己的 `ag_game` 才是进房校验用的标识；「全部」筛选下也能正确加入。
+    final gameName =
+        GameCatalog.byId(room.gameId)?.displayName ??
+        (room.gameId.isEmpty ? 'Steam 房间' : room.gameId);
+
     setState(() => _joiningLobbyId = room.lobbyId);
     try {
       final session = await widget.connection.joinSteamLobby(
         lobbyId: room.lobbyId,
-        gameId: game.id,
-        gameName: game.displayName,
+        gameId: room.gameId,
+        gameName: gameName,
         extraPassword: extra,
       );
       if (!mounted) return;
@@ -234,13 +237,13 @@ class SteamLobbyListSectionState extends State<SteamLobbyListSection> {
   Widget build(BuildContext context) {
     return SteamLobbyListView(
       catalog: _catalog,
-      game: _game,
+      selectedGame: _game,
       rooms: _rooms,
       loading: _loading,
       error: _error,
       joiningLobbyId: _joiningLobbyId,
       roomActive: widget.roomActive,
-      onGameChanged: _loading || _joiningLobbyId != null ? null : _changeGame,
+      onSelectGame: _loading || _joiningLobbyId != null ? null : _changeGame,
       onRefresh: _loading ? null : () => unawaited(refresh()),
       onJoin: (room) => unawaited(_join(room)),
     );
@@ -252,25 +255,28 @@ class SteamLobbyListView extends StatelessWidget {
   const SteamLobbyListView({
     super.key,
     required this.catalog,
-    required this.game,
+    required this.selectedGame,
     required this.rooms,
     required this.loading,
     this.error,
     this.joiningLobbyId,
     this.roomActive = false,
-    this.onGameChanged,
+    this.onSelectGame,
     this.onRefresh,
     this.onJoin,
   });
 
   final List<GameInfo> catalog;
-  final GameInfo? game;
+
+  /// 选中的游戏；null 表示「全部」。
+  final GameInfo? selectedGame;
+
   final List<SteamLobbyInfo> rooms;
   final bool loading;
   final String? error;
   final String? joiningLobbyId;
   final bool roomActive;
-  final ValueChanged<GameInfo?>? onGameChanged;
+  final ValueChanged<GameInfo?>? onSelectGame;
   final VoidCallback? onRefresh;
   final ValueChanged<SteamLobbyInfo>? onJoin;
 
@@ -278,140 +284,273 @@ class SteamLobbyListView extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.astralPalette;
     final textTheme = Theme.of(context).textTheme;
+    final countText = loading ? '搜索中…' : '${rooms.length} 个房间';
+    // 选中态用绿色：浅绿底 + 深一点的绿字（暗色主题下直接用亮绿）。
+    final darkSurface = palette.card.computeLuminance() < 0.4;
+    final selectedFg = darkSurface
+        ? palette.online
+        : Color.lerp(palette.online, Colors.black, 0.32)!;
+    final selectedBg = palette.online.withValues(
+      alpha: darkSurface ? 0.20 : 0.12,
+    );
 
-    Widget hint(String text) => Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppDimensions.space16,
-        vertical: 18,
+    return AstralCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // 标题行：房间数和刷新按钮在右上角。
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppDimensions.space16,
+              2,
+              AppDimensions.space8,
+              0,
+            ),
+            child: Row(
+              children: [
+                Text(
+                  '房间列表',
+                  style: textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: palette.textPrimary,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  countText,
+                  style: textTheme.bodySmall?.copyWith(
+                    color: palette.textTertiary,
+                  ),
+                ),
+                const SizedBox(width: AppDimensions.space4),
+                IconButton(
+                  tooltip: '刷新房间列表',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: loading ? null : onRefresh,
+                  icon: loading
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Icon(
+                          Icons.refresh_rounded,
+                          size: 20,
+                          color: palette.textSecondary,
+                        ),
+                ),
+              ],
+            ),
+          ),
+          // 横排游戏标签：一行放不下就横向滚动，不折行。
+          SizedBox(
+            height: 40,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppDimensions.space12,
+              ),
+              children: [
+                _GameChip(
+                  label: '全部',
+                  selected: selectedGame == null,
+                  selectedColor: selectedFg,
+                  selectedBackground: selectedBg,
+                  leading: Icon(
+                    Icons.apps_rounded,
+                    size: 16,
+                    color: selectedGame == null
+                        ? selectedFg
+                        : palette.textSecondary,
+                  ),
+                  onTap: onSelectGame == null
+                      ? null
+                      : () => onSelectGame!(null),
+                ),
+                for (final game in catalog)
+                  _GameChip(
+                    label: game.displayName,
+                    selected: selectedGame?.id == game.id,
+                    selectedColor: selectedFg,
+                    selectedBackground: selectedBg,
+                    leading: _GameChipIcon(game: game),
+                    onTap: onSelectGame == null
+                        ? null
+                        : () => onSelectGame!(game),
+                  ),
+              ],
+            ),
+          ),
+          Divider(height: 1, thickness: 1, color: palette.divider),
+          if (roomActive)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppDimensions.space16,
+                8,
+                AppDimensions.space16,
+                0,
+              ),
+              child: Text(
+                '已在组网房间中，离开后可加入其他房间',
+                style: textTheme.bodySmall?.copyWith(
+                  color: palette.textSecondary,
+                ),
+              ),
+            ),
+          Expanded(child: _buildBody(context, palette, textTheme)),
+        ],
       ),
-      child: Text(
-        text,
-        style: textTheme.bodySmall?.copyWith(color: palette.textSecondary),
+    );
+  }
+
+  Widget _buildBody(
+    BuildContext context,
+    AppThemePalette palette,
+    TextTheme textTheme,
+  ) {
+    Widget hint(String text) => Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppDimensions.space16),
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          style: textTheme.bodySmall?.copyWith(color: palette.textSecondary),
+        ),
       ),
     );
 
-    final countText = loading && rooms.isEmpty ? '搜索中…' : '${rooms.length} 个房间';
+    if (loading && rooms.isEmpty) return hint('正在搜索…');
+    if (error != null) return hint('搜索失败：$error');
+    if (rooms.isEmpty) {
+      return hint(selectedGame == null ? '暂无房间' : '该游戏下暂无房间');
+    }
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SectionHeader(title: '房间列表', tone: SectionHeaderTone.muted),
-        AstralCard(
-          padding: EdgeInsets.zero,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppDimensions.space16,
-                  1,
-                  AppDimensions.space8,
-                  1,
-                ),
-                child: Row(
-                  children: [
-                    if (catalog.isNotEmpty && game != null)
-                      DropdownButtonHideUnderline(
-                        child: DropdownButton<GameInfo>(
-                          value: game,
-                          isDense: true,
-                          iconSize: 18,
-                          borderRadius: BorderRadius.circular(
-                            AppDimensions.radiusSm,
-                          ),
-                          style: textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w600,
-                            color: palette.textPrimary,
-                          ),
-                          items: [
-                            for (final item in catalog)
-                              DropdownMenuItem(
-                                value: item,
-                                child: Text(item.displayName),
-                              ),
-                          ],
-                          onChanged: onGameChanged,
-                        ),
-                      )
-                    else
-                      Text(
-                        '游戏目录未加载',
-                        style: textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: palette.textSecondary,
-                        ),
-                      ),
-                    const Spacer(),
-                    Text(
-                      countText,
-                      style: textTheme.bodySmall?.copyWith(
-                        color: palette.textTertiary,
-                      ),
-                    ),
-                    const SizedBox(width: AppDimensions.space4),
-                    IconButton(
-                      tooltip: '刷新房间列表',
-                      visualDensity: VisualDensity.compact,
-                      onPressed: loading ? null : onRefresh,
-                      icon: loading
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : Icon(
-                              Icons.refresh_rounded,
-                              size: 20,
-                              color: palette.textSecondary,
-                            ),
-                    ),
-                  ],
-                ),
-              ),
-              Divider(height: 1, thickness: 1, color: palette.divider),
-              if (roomActive)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppDimensions.space16,
-                    10,
-                    AppDimensions.space16,
-                    0,
-                  ),
-                  child: Text(
-                    '已在组网房间中，离开后可加入其他房间',
-                    style: textTheme.bodySmall?.copyWith(
-                      color: palette.textSecondary,
+    return Scrollbar(
+      child: ListView.separated(
+        padding: EdgeInsets.zero,
+        itemCount: rooms.length,
+        separatorBuilder: (context, index) => Divider(
+          height: 1,
+          thickness: 1,
+          indent: 42,
+          endIndent: AppDimensions.space16,
+          color: palette.divider,
+        ),
+        itemBuilder: (context, index) => _LobbyRow(
+          room: rooms[index],
+          joining: joiningLobbyId == rooms[index].lobbyId,
+          roomActive: roomActive,
+          onJoin: onJoin,
+        ),
+      ),
+    );
+  }
+}
+
+/// 横排游戏标签：高 32，选中浅绿底 + 绿色文字。
+class _GameChip extends StatelessWidget {
+  const _GameChip({
+    required this.label,
+    required this.selected,
+    required this.selectedColor,
+    required this.selectedBackground,
+    required this.leading,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final Color selectedColor;
+  final Color selectedBackground;
+  final Widget leading;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.astralPalette;
+    final textTheme = Theme.of(context).textTheme;
+    final radius = BorderRadius.circular(AppDimensions.radiusSm);
+    return Padding(
+      padding: const EdgeInsets.only(
+        right: AppDimensions.space8,
+        top: 4,
+        bottom: 4,
+      ),
+      child: Material(
+        color: selected ? selectedBackground : Colors.transparent,
+        borderRadius: radius,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: radius,
+          child: SizedBox(
+            height: 32,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  leading,
+                  const SizedBox(width: 6),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    style: textTheme.labelMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: selected ? selectedColor : palette.textSecondary,
                     ),
                   ),
-                ),
-              if (loading && rooms.isEmpty)
-                hint('正在搜索…')
-              else if (error != null)
-                hint('搜索失败：$error')
-              else if (rooms.isEmpty)
-                hint('同游戏下暂无房间')
-              else
-                for (var index = 0; index < rooms.length; index++) ...[
-                  _LobbyRow(
-                    room: rooms[index],
-                    joining: joiningLobbyId == rooms[index].lobbyId,
-                    roomActive: roomActive,
-                    onJoin: onJoin,
-                  ),
-                  if (index != rooms.length - 1)
-                    Divider(
-                      height: 1,
-                      thickness: 1,
-                      indent: 42,
-                      endIndent: AppDimensions.space16,
-                      color: palette.divider,
-                    ),
                 ],
-            ],
+              ),
+            ),
           ),
         ),
-      ],
+      ),
+    );
+  }
+}
+
+/// 标签前的游戏头像：有自带图标就用图标，没有就用首字圆底。
+class _GameChipIcon extends StatelessWidget {
+  const _GameChipIcon({required this.game});
+
+  final GameInfo game;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget fallback(BuildContext context, Object error, StackTrace? stack) {
+      return Container(
+        width: 18,
+        height: 18,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: game.color.withValues(alpha: 0.16),
+          shape: BoxShape.circle,
+        ),
+        child: Text(
+          game.displayName.isEmpty ? '?' : game.displayName.substring(0, 1),
+          style: TextStyle(
+            fontSize: 9,
+            height: 1,
+            fontWeight: FontWeight.w700,
+            color: game.color,
+          ),
+        ),
+      );
+    }
+
+    if (!game.hasIconAsset) return fallback(context, '', null);
+    return ClipOval(
+      child: SizedBox(
+        width: 18,
+        height: 18,
+        child: GameMediaImage(
+          source: game.resolvedIconAsset,
+          width: 18,
+          height: 18,
+          errorBuilder: fallback,
+        ),
+      ),
     );
   }
 }
@@ -473,9 +612,9 @@ class _LobbyRow extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         AppDimensions.space16,
-        6,
+        4,
         AppDimensions.space8,
-        6,
+        4,
       ),
       child: Row(
         children: [

@@ -169,8 +169,12 @@ pub fn parse_snapshot(
 }
 
 /// 本地二次校验：不满足即丢弃，不进入列表。
+///
+/// `expected_game_id` 为空表示「全部」：跳过游戏比对，只校验协议版本。
 pub fn validate(snapshot: &LobbySnapshot, expected_game_id: &str) -> Result<(), String> {
-    if !snapshot.game_id.eq_ignore_ascii_case(expected_game_id) {
+    if !expected_game_id.is_empty()
+        && !snapshot.game_id.eq_ignore_ascii_case(expected_game_id)
+    {
         return Err("游戏标识不一致".to_string());
     }
     if snapshot.version != PROTOCOL_VERSION {
