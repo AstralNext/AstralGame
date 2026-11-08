@@ -344,43 +344,12 @@ class SteamLobbyListView extends StatelessWidget {
             ),
           ),
           // 横排游戏标签：一行放不下就横向滚动，不折行。
-          SizedBox(
-            height: 40,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppDimensions.space12,
-              ),
-              children: [
-                _GameChip(
-                  label: '全部',
-                  selected: selectedGame == null,
-                  selectedColor: selectedFg,
-                  selectedBackground: selectedBg,
-                  leading: Icon(
-                    Icons.apps_rounded,
-                    size: 16,
-                    color: selectedGame == null
-                        ? selectedFg
-                        : palette.textSecondary,
-                  ),
-                  onTap: onSelectGame == null
-                      ? null
-                      : () => onSelectGame!(null),
-                ),
-                for (final game in catalog)
-                  _GameChip(
-                    label: game.displayName,
-                    selected: selectedGame?.id == game.id,
-                    selectedColor: selectedFg,
-                    selectedBackground: selectedBg,
-                    leading: _GameChipIcon(game: game),
-                    onTap: onSelectGame == null
-                        ? null
-                        : () => onSelectGame!(game),
-                  ),
-              ],
-            ),
+          _GameFilterBar(
+            catalog: catalog,
+            selectedGame: selectedGame,
+            selectedColor: selectedFg,
+            selectedBackground: selectedBg,
+            onSelectGame: onSelectGame,
           ),
           Divider(height: 1, thickness: 1, color: palette.divider),
           if (roomActive)
@@ -433,15 +402,177 @@ class SteamLobbyListView extends StatelessWidget {
         separatorBuilder: (context, index) => Divider(
           height: 1,
           thickness: 1,
-          indent: 42,
+          // 分隔线与房间名左对齐：「全部」多一个 16px 游戏图标。
+          indent: selectedGame == null ? 58 : 42,
           endIndent: AppDimensions.space16,
           color: palette.divider,
         ),
-        itemBuilder: (context, index) => _LobbyRow(
-          room: rooms[index],
-          joining: joiningLobbyId == rooms[index].lobbyId,
-          roomActive: roomActive,
-          onJoin: onJoin,
+        itemBuilder: (context, index) {
+          final room = rooms[index];
+          return _LobbyRow(
+            room: room,
+            game: _gameFor(room.gameId),
+            // 「全部」下每行需要游戏标识；已按游戏筛选时省掉。
+            showGameIcon: selectedGame == null,
+            joining: joiningLobbyId == room.lobbyId,
+            roomActive: roomActive,
+            onJoin: onJoin,
+          );
+        },
+      ),
+    );
+  }
+
+  /// 房间自己的 `ag_game` 对应的目录项；目录里没有就返回 null。
+  GameInfo? _gameFor(String gameId) {
+    for (final item in catalog) {
+      if (item.id == gameId) return item;
+    }
+    return GameCatalog.byId(gameId);
+  }
+}
+
+/// 横排游戏标签栏：放不下时横向滚动，右侧渐隐 + 箭头提示后面还有。
+class _GameFilterBar extends StatefulWidget {
+  const _GameFilterBar({
+    required this.catalog,
+    required this.selectedGame,
+    required this.selectedColor,
+    required this.selectedBackground,
+    required this.onSelectGame,
+  });
+
+  final List<GameInfo> catalog;
+  final GameInfo? selectedGame;
+  final Color selectedColor;
+  final Color selectedBackground;
+  final ValueChanged<GameInfo?>? onSelectGame;
+
+  @override
+  State<_GameFilterBar> createState() => _GameFilterBarState();
+}
+
+class _GameFilterBarState extends State<_GameFilterBar> {
+  final ScrollController _controller = ScrollController();
+  bool _moreRight = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncOverflow());
+  }
+
+  @override
+  void didUpdateWidget(covariant _GameFilterBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.catalog.length != widget.catalog.length) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _syncOverflow());
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  /// 右侧还有没滚出来的标签时才显示渐隐和箭头。
+  void _syncOverflow() {
+    if (!mounted || !_controller.hasClients) return;
+    final more = _controller.position.extentAfter > 0.5;
+    if (more != _moreRight) setState(() => _moreRight = more);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.astralPalette;
+    final selectedGame = widget.selectedGame;
+    final onSelectGame = widget.onSelectGame;
+
+    return SizedBox(
+      height: 40,
+      child: NotificationListener<ScrollMetricsNotification>(
+        onNotification: (_) {
+          _syncOverflow();
+          return false;
+        },
+        child: NotificationListener<ScrollNotification>(
+          onNotification: (_) {
+            _syncOverflow();
+            return false;
+          },
+          child: Stack(
+            children: [
+              ListView(
+                controller: _controller,
+                scrollDirection: Axis.horizontal,
+                padding: EdgeInsets.only(
+                  left: AppDimensions.space12,
+                  // 右侧渐隐会盖住尾部，多留一点空间让最后一个标签能完全露出。
+                  right: _moreRight ? 40 : AppDimensions.space12,
+                ),
+                children: [
+                  _GameChip(
+                    label: '全部',
+                    selected: selectedGame == null,
+                    selectedColor: widget.selectedColor,
+                    selectedBackground: widget.selectedBackground,
+                    leading: Icon(
+                      Icons.apps_rounded,
+                      size: 16,
+                      color: selectedGame == null
+                          ? widget.selectedColor
+                          : palette.textSecondary,
+                    ),
+                    onTap: onSelectGame == null
+                        ? null
+                        : () => onSelectGame(null),
+                  ),
+                  for (final game in widget.catalog)
+                    _GameChip(
+                      label: game.displayName,
+                      selected: selectedGame?.id == game.id,
+                      selectedColor: widget.selectedColor,
+                      selectedBackground: widget.selectedBackground,
+                      leading: _GameChipIcon(game: game),
+                      onTap: onSelectGame == null
+                          ? null
+                          : () => onSelectGame(game),
+                    ),
+                ],
+              ),
+              if (_moreRight)
+                Positioned(
+                  top: 0,
+                  bottom: 0,
+                  right: 0,
+                  width: 48,
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            palette.card.withValues(alpha: 0),
+                            palette.card,
+                          ],
+                        ),
+                      ),
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 2),
+                          child: Icon(
+                            Icons.chevron_right_rounded,
+                            size: 18,
+                            color: palette.textTertiary,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -510,18 +641,38 @@ class _GameChip extends StatelessWidget {
   }
 }
 
-/// 标签前的游戏头像：有自带图标就用图标，没有就用首字圆底。
+/// 游戏头像：有自带图标就用图标，没有就用首字圆底；未知游戏用中性圆底。
 class _GameChipIcon extends StatelessWidget {
-  const _GameChipIcon({required this.game});
+  const _GameChipIcon({this.game, this.size = 18});
 
-  final GameInfo game;
+  final GameInfo? game;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.astralPalette;
+    final game = this.game;
+    if (game == null) {
+      return Container(
+        width: size,
+        height: size,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: palette.textTertiary.withValues(alpha: 0.14),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(
+          Icons.videogame_asset_outlined,
+          size: size * 0.62,
+          color: palette.textTertiary,
+        ),
+      );
+    }
+
     Widget fallback(BuildContext context, Object error, StackTrace? stack) {
       return Container(
-        width: 18,
-        height: 18,
+        width: size,
+        height: size,
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: game.color.withValues(alpha: 0.16),
@@ -530,7 +681,7 @@ class _GameChipIcon extends StatelessWidget {
         child: Text(
           game.displayName.isEmpty ? '?' : game.displayName.substring(0, 1),
           style: TextStyle(
-            fontSize: 9,
+            fontSize: size * 0.5,
             height: 1,
             fontWeight: FontWeight.w700,
             color: game.color,
@@ -542,12 +693,12 @@ class _GameChipIcon extends StatelessWidget {
     if (!game.hasIconAsset) return fallback(context, '', null);
     return ClipOval(
       child: SizedBox(
-        width: 18,
-        height: 18,
+        width: size,
+        height: size,
         child: GameMediaImage(
           source: game.resolvedIconAsset,
-          width: 18,
-          height: 18,
+          width: size,
+          height: size,
           errorBuilder: fallback,
         ),
       ),
@@ -561,9 +712,15 @@ class _LobbyRow extends StatelessWidget {
     required this.joining,
     required this.roomActive,
     required this.onJoin,
+    this.game,
+    this.showGameIcon = false,
   });
 
   final SteamLobbyInfo room;
+
+  /// 房间所属游戏；仅「全部」语境下展示。
+  final GameInfo? game;
+  final bool showGameIcon;
   final bool joining;
   final bool roomActive;
   final ValueChanged<SteamLobbyInfo>? onJoin;
@@ -620,6 +777,11 @@ class _LobbyRow extends StatelessWidget {
         children: [
           AstralStatusDot(tone: tone, semanticLabel: _toneLabel(tone)),
           const SizedBox(width: 10),
+          // 「全部」混排时补一个游戏标识；已按游戏筛选的行省掉。
+          if (showGameIcon) ...[
+            _GameChipIcon(game: game, size: 16),
+            const SizedBox(width: 8),
+          ],
           Expanded(
             child: Text(
               room.name.isEmpty ? '未命名房间' : room.name,
