@@ -24,6 +24,9 @@ easytier = { git = "https://github.com/ldoubil/EasyTier.git", branch = "main-ast
 easytier-core = { git = "https://github.com/ldoubil/EasyTier.git", branch = "main-astral" }
 async-trait = "0.1"
 tracing = "0.1"
+# 只是调用全局 logger 的 flush()（ET 的日志器实现了 log::Log）；
+# 该 crate 本来就在依赖树里，不引入额外体积。
+log = "0.4"
 
 anyhow = "1"
 base64 = "0.22"

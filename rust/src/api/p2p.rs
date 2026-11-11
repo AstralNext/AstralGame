@@ -254,6 +254,10 @@ pub fn subscribe_core_logs(sink: StreamSink<CoreLogEventC>) {
 }
 
 fn emit_core_log(instance_id: &str, message: &str) {
+    // 同时落盘：这是 ET GlobalCtxEvent 的可读摘要（连接、断开、网卡、DHCP 等），
+    // 比内核内部日志更直接；来源标记为 ASTRAL_EVENT 以便和 CORE::* 区分。
+    tracing::info!(target: "ASTRAL_EVENT", instance = %instance_id, "{}", message);
+
     let Ok(guard) = CORE_LOG_SINK.lock() else {
         return;
     };
