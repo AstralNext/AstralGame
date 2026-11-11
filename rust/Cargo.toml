@@ -73,11 +73,3 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
 # 无法判断 SDR 连接走中继还是直连；vendor 副本补了 relay_pop() / pop_remote()。
 [patch.crates-io]
 steamworks = { path = "vendor/steamworks" }
-
-# 发行版瘦身：Rust 库是 Release 目录里最大的文件（默认配置下 30 MB+，大半是
-# 符号表和未合并的泛型代码）。不做 panic=abort——flutter_rust_bridge 依赖
-# 捕获 panic 转成 Dart 异常，abort 会让进程直接退出。
-[profile.release]
-lto = true
-codegen-units = 1
-strip = "symbols"
