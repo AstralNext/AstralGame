@@ -24,10 +24,16 @@ copy bin\plugin\AstralRaftNet.dll dist\AstralRaftNet.dll
 1. Astral 创建或加入 **Raft** 房间
 2. 启动 `Raft.exe`，Astral 自动检测并注入
 3. 游戏首页右上角出现 **Astral已注入**
-4. **新世界 / 载入世界**：勾选 **启用Astral局域网**（Steam 离线也能建房），联机权限不要选「不允许」
+4. **新世界 / 载入世界**：联机权限不要选「不允许」，Astral 会直接开始监听（Steam 离线也能建房）
 5. **加入世界**：新版 UI 会去掉「离线不可用」，标题 **加入astral房间**，列表 **lan发现**，点刷新即可。进房走原版 `RequestWorldAsClient`（等 `IsAllLandmarksLoaded`）；房主 `SendWorld` 改为立即 `GetWorld` 下发，不再空等 `initialized`。主菜单/返回可用。
 
 两边必须是不同 Steam 账号。游戏口 UDP `6488`（KCP+不可靠），发现 UDP `6489` 广播。
+
+## 设计约束
+
+- **Astral 是 Raft 唯一的联机通道。** `SendP2P` / `RPC` / `RPCExclude` / `Platform_HostGame` / `ReadP2P_Channel_Connecting` 等由补丁无条件接管，官方 PlayFab 房、Steam 好友房、跨平台房一律不再走通。这是设计目标，不是待修缺陷，不要为「让原版还能用」加回放行或回退分支。
+- **没有开关。** 不再提供「启用Astral局域网」选项，也不读取 `AstralLanEnabled` / `AstralLanEnabledVersion`；安装补丁即生效。唯一例外是游戏内联机权限选「不允许」（`ALLOW_NONE`，单机模式）时不监听、不广播。
+- **身份。** SteamID 可用时使用真实 SteamID；单机/离线没有 SteamID 时，插件生成并持久化自建唯一 ID（`PlayerPrefs` 键 `AstralLocalId`），不回落到原版 PlayFab 身份。
 
 ## 手动注入（备用）
 
