@@ -1,55 +1,14 @@
 using System;
-using HarmonyLib;
+using System.Reflection;
 using Steamworks;
 using UnityEngine;
-using UnityEngine.Events;
 using UnityEngine.UI;
 
 namespace AstralRaftNet
 {
     internal static class AstralMenuUi
     {
-        private const string NewToggleName = "AstralLanToggle_New";
-        private const string LoadToggleName = "AstralLanToggle_Load";
         private const string JoinRootName = "AstralLanJoinRoot";
-
-        public static void EnsureNewGame(NewGameBox box)
-        {
-            if (box == null || FindChild(box.transform, NewToggleName) != null)
-            {
-                return;
-            }
-
-            Toggle source = GetPrivate<Toggle>(box, "toggle_FriendlyFire");
-            if (source == null)
-            {
-                return;
-            }
-
-            Toggle toggle = CloneToggle(source, NewToggleName, "启用Astral局域网");
-            toggle.isOn = AstralSettings.EnableLan;
-            toggle.onValueChanged.AddListener(new UnityAction<bool>(OnLanToggled));
-            toggle.gameObject.SetActive(source.gameObject.activeSelf);
-        }
-
-        public static void EnsureLoadGame(LoadGameBox box)
-        {
-            if (box == null || FindChild(box.transform, LoadToggleName) != null)
-            {
-                return;
-            }
-
-            Toggle source = GetPrivate<Toggle>(box, "allowFriendlyFireToggle");
-            if (source == null)
-            {
-                return;
-            }
-
-            Toggle toggle = CloneToggle(source, LoadToggleName, "启用Astral局域网");
-            toggle.isOn = AstralSettings.EnableLan;
-            toggle.onValueChanged.AddListener(new UnityAction<bool>(OnLanToggled));
-            toggle.gameObject.SetActive(source.gameObject.activeSelf);
-        }
 
         public static void EnsureJoinGame(JoinGameBox box)
         {
@@ -115,23 +74,14 @@ namespace AstralRaftNet
             });
         }
 
-        public static void UnlockNewGameIfLan(NewGameBox box)
+        public static void UnlockNewGame(NewGameBox box)
         {
-            EnsureNewGame(box);
-            Transform child = FindChild(box.transform, NewToggleName);
-            if (child != null)
-            {
-                child.gameObject.SetActive(true);
-            }
-
-            bool lan = ReadNewGameLan(box);
-            AstralSettings.EnableLan = lan;
-            if (!lan || box == null)
+            if (box == null)
             {
                 return;
             }
 
-            AccessTools.Field(typeof(NewGameBox), "multiplayerAllowed").SetValue(box, true);
+            AstralReflection.Field(typeof(NewGameBox), "multiplayerAllowed").SetValue(box, true);
             Text offline = GetPrivate<Text>(box, "offlineText");
             if (offline != null)
             {
@@ -166,23 +116,14 @@ namespace AstralRaftNet
             }
         }
 
-        public static void UnlockLoadGameIfLan(LoadGameBox box)
+        public static void UnlockLoadGame(LoadGameBox box)
         {
-            EnsureLoadGame(box);
-            Transform child = FindChild(box.transform, LoadToggleName);
-            if (child != null)
-            {
-                child.gameObject.SetActive(true);
-            }
-
-            bool lan = ReadLoadGameLan(box);
-            AstralSettings.EnableLan = lan;
-            if (!lan || box == null)
+            if (box == null)
             {
                 return;
             }
 
-            AccessTools.Field(typeof(LoadGameBox), "multiplayerAllowed").SetValue(box, true);
+            AstralReflection.Field(typeof(LoadGameBox), "multiplayerAllowed").SetValue(box, true);
             Text offline = GetPrivate<Text>(box, "offlineText");
             if (offline != null)
             {
@@ -214,62 +155,6 @@ namespace AstralRaftNet
                     loadText.SetActive(true);
                 }
             }
-        }
-
-        public static void SyncNewGameVisibility(NewGameBox box)
-        {
-            UnlockNewGameIfLan(box);
-        }
-
-        public static void SyncLoadGameVisibility(LoadGameBox box)
-        {
-            UnlockLoadGameIfLan(box);
-        }
-
-        public static bool ReadNewGameLan(NewGameBox box)
-        {
-            return ReadToggle(box.transform, NewToggleName);
-        }
-
-        public static bool ReadLoadGameLan(LoadGameBox box)
-        {
-            return ReadToggle(box.transform, LoadToggleName);
-        }
-
-        private static bool ReadToggle(Transform root, string name)
-        {
-            Transform child = FindChild(root, name);
-            if (child == null)
-            {
-                return AstralSettings.EnableLan;
-            }
-
-            Toggle toggle = child.GetComponent<Toggle>();
-            return toggle != null && toggle.isOn;
-        }
-
-        private static void OnLanToggled(bool on)
-        {
-            AstralSettings.EnableLan = on;
-        }
-
-        private static Toggle CloneToggle(Toggle source, string name, string label)
-        {
-            GameObject clone = UnityEngine.Object.Instantiate(source.gameObject, source.transform.parent);
-            clone.name = name;
-            clone.transform.SetSiblingIndex(source.transform.GetSiblingIndex() + 1);
-            RectTransform srcRt = source.GetComponent<RectTransform>();
-            RectTransform dstRt = clone.GetComponent<RectTransform>();
-            if (srcRt != null && dstRt != null && source.transform.parent.GetComponent<VerticalLayoutGroup>() == null)
-            {
-                dstRt.anchoredPosition = srcRt.anchoredPosition + new Vector2(0f, -(Mathf.Abs(srcRt.rect.height) + 8f));
-            }
-
-            StripLocalize(clone);
-            SetAnyLabel(clone, label);
-            Toggle toggle = clone.GetComponent<Toggle>();
-            toggle.onValueChanged.RemoveAllListeners();
-            return toggle;
         }
 
         private static InputField CloneOrCreateInput(Transform parent, InputField source, Text sample, string value, string placeholder)
@@ -472,8 +357,9 @@ namespace AstralRaftNet
                     {
                         behaviour.GetType().GetProperty("text").SetValue(behaviour, label, null);
                     }
-                    catch
+                    catch (Exception ex)
                     {
+                        AstralLog.Info("set label text failed on " + typeName + ": " + ex.Message);
                     }
                 }
             }
@@ -505,13 +391,19 @@ namespace AstralRaftNet
 
         private static T GetPrivate<T>(object instance, string fieldName) where T : class
         {
+            FieldInfo field = AstralReflection.Field(instance.GetType(), fieldName);
+            if (field == null)
+            {
+                return null;
+            }
+
             try
             {
-                return AccessTools.Field(instance.GetType(), fieldName).GetValue(instance) as T;
+                return field.GetValue(instance) as T;
             }
             catch (Exception ex)
             {
-                AstralLog.Error("field " + fieldName + ": " + ex.Message);
+                AstralLog.Error("read field " + instance.GetType().Name + "." + fieldName + ": " + ex.Message);
                 return null;
             }
         }
