@@ -5,6 +5,8 @@ using System.Reflection;
 using HarmonyLib;
 using PlayFab.Party;
 using Steamworks;
+using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace AstralRaftNet
 {
@@ -23,8 +25,13 @@ namespace AstralRaftNet
     })]
     internal static class Patch_HostGame
     {
-        private static void Prefix(ref RequestJoinAuthSetting joinAuthSetting)
+        private static void Prefix(ref RequestJoinAuthSetting joinAuthSetting, Raft_Network __instance)
         {
+            // 先把真实 SteamID 写进 localSteamID 字段：原版紧接着执行
+            // hostID = LocalSteamID（Raft_Network.cs:417）。即使属性 getter 被内联
+            // 或补丁没命中，这一步也能保证 hostID 拿到真实 SteamID。
+            AlignLocalSteamField(__instance, "hostgame-prefix");
+
             if (joinAuthSetting == RequestJoinAuthSetting.ALLOW_FRIENDS)
             {
                 joinAuthSetting = RequestJoinAuthSetting.ALLOW_ALL;
@@ -32,12 +39,26 @@ namespace AstralRaftNet
             }
         }
 
-        private static void Postfix(RequestJoinAuthSetting joinAuthSetting)
+        private static void Postfix(RequestJoinAuthSetting joinAuthSetting, Raft_Network __instance)
         {
+            // 所有建房入口都汇到 HostGame(RequestJoinAuthSetting, string)，这里兜底写一次 hostID。
+            EnsureHostIdentity(__instance, "hostgame-postfix");
+
             // ALLOW_NONE 是单机/离线模式（OnPlayFabSignedIn 也用它），不是已删除的
             // EnableLan 开关：单机不应开监听广播，这里保留这一层语义判断。
             if (joinAuthSetting == RequestJoinAuthSetting.ALLOW_NONE)
             {
+                // 明确不监听：同时停掉上一局可能还在跑的广播线程，
+                // 否则会继续对外公告一个已经没人监听的 6488，客机点到就只剩 timeout。
+                AstralTransport.StopListen();
+                AstralLog.Info("host auth=ALLOW_NONE, lan listen disabled (no broadcast)");
+
+                // 单机加载存档也走这个分支，只在主菜单建房时提示，避免单人游戏被打扰。
+                if (SceneManager.GetActiveScene().name == Raft_Network.MenuSceneName)
+                {
+                    AstralOverlay.ShowNotice("当前房间权限为「无人」，未开启联机监听，其他玩家无法加入");
+                }
+
                 return;
             }
 
@@ -45,17 +66,92 @@ namespace AstralRaftNet
             // StartListen 内部会先校验真实 SteamID，拿不到就报错不监听。
             AstralTransport.StartListen(AstralTransport.Port);
         }
+
+        /// <summary>
+        /// 把 localSteamID 字段直接写成真实 SteamID。不走属性 setter（不存在），
+        /// 也不依赖 get_LocalSteamID 补丁是否命中。
+        /// </summary>
+        private static void AlignLocalSteamField(Raft_Network network, string where)
+        {
+            try
+            {
+                ulong steam = AstralTransport.SteamId;
+                if (steam == 0UL)
+                {
+                    AstralLog.Error("host identity: no valid SteamID at " + where + ", hostID will be wrong");
+                    return;
+                }
+
+                FieldInfo field = AstralReflection.Field(typeof(Raft_Network), "localSteamID");
+                Network_UserId current = (Network_UserId)field.GetValue(network);
+                if (current.Id != steam)
+                {
+                    field.SetValue(network, new Network_UserId(steam));
+                    AstralLog.Info("align localSteamID id=" + steam + " was=" + current.Id + " at " + where);
+                }
+            }
+            catch (Exception ex)
+            {
+                AstralLog.Error("align localSteamID failed: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// 把 hostID 写成真实 SteamID。原版只在 PlayFab 登录回调里赋值（HostGame 里
+        /// hostID = LocalSteamID 若 getter 未被补丁命中就会停在默认值 1），
+        /// 而不走 PlayFab 的建房路径永远不会触发那个回调，hostID 就一直是 1，
+        /// 导致 BlockCreator.Serialize_Create 的归属门槛恒假、方块不进快照。
+        /// 建房入口统一走 HostGame，这里覆盖全部入口；快照采集前还会再兜一次。
+        /// </summary>
+        internal static void EnsureHostIdentity(Raft_Network network, string where)
+        {
+            try
+            {
+                if (network == null || !Raft_Network.IsHost)
+                {
+                    return;
+                }
+
+                ulong steam = AstralTransport.SteamId;
+                if (steam == 0UL)
+                {
+                    AstralLog.Error("host identity: no valid SteamID at " + where + ", hostID not fixed");
+                    return;
+                }
+
+                FieldInfo field = AstralReflection.Field(typeof(Raft_Network), "hostID");
+                Network_UserId current = (Network_UserId)field.GetValue(network);
+                if (current.Id != steam)
+                {
+                    field.SetValue(network, new Network_UserId(steam));
+                    AstralLog.Info("align hostID id=" + steam + " was=" + current.Id + " at " + where);
+                }
+            }
+            catch (Exception ex)
+            {
+                AstralLog.Error("ensure hostID failed: " + ex.Message);
+            }
+        }
     }
 
     [HarmonyPatch(typeof(Raft_Network), "get_LocalSteamID", new Type[0])]
     internal static class Patch_LocalSteamID
     {
+        private static bool _reportedMissing;
+
         private static bool Prefix(ref Network_UserId __result)
         {
-            // 联机身份 = 真实 SteamID；只有完全拿不到 SteamID 的单机/离线场景
-            // 才退回持久化的 LocalId（仅用于存档归属）。
+            // 只认游戏本身的真实 SteamID。拿不到就明确报错，绝不退回任何自建 ID，
+            // 否则同一个进程里会同时存在两套身份，方块归属/快照门槛无从判断。
             ulong steam = AstralTransport.SteamId;
-            __result = new Network_UserId(steam != 0UL ? steam : AstralTransport.LocalId);
+            if (steam == 0UL && !_reportedMissing)
+            {
+                _reportedMissing = true;
+                AstralLog.Error("LocalSteamID: no valid SteamID from SteamUser.GetSteamID(), online identity unavailable");
+                AstralOverlay.ShowNotice("没有读到 SteamID：联机与存档归属都不可用，请确认通过 Steam 启动游戏");
+            }
+
+            __result = new Network_UserId(steam);
             return false;
         }
     }
@@ -63,6 +159,12 @@ namespace AstralRaftNet
     [HarmonyPatch(typeof(Raft_Network), nameof(Raft_Network.OnPlayFabSignedIn), new Type[0])]
     internal static class Patch_OnPlayFabSignedIn
     {
+        /// <summary>最近一次身份对齐的真实时间；-1 表示这次会话从未需要对齐。</summary>
+        internal static float AlignedAt = -1f;
+
+        /// <summary>对齐内容摘要，供 SendWorld 诊断行直接对比先后。</summary>
+        internal static string AlignedNote = string.Empty;
+
         private static void Postfix(Raft_Network __instance)
         {
             if (__instance == null)
@@ -90,6 +192,8 @@ namespace AstralRaftNet
                     {
                         localField.SetValue(__instance, new Network_UserId(steam));
                         AstralLog.Info("align localSteamID id=" + steam + " was=" + current.Id + " (PlayFab sign-in)");
+                        AlignedAt = Time.realtimeSinceStartup;
+                        AlignedNote = "local " + current.Id + "->" + steam;
                     }
                 }
 
@@ -109,6 +213,9 @@ namespace AstralRaftNet
                 {
                     hostField.SetValue(__instance, new Network_UserId(steam));
                     AstralLog.Info("align hostID id=" + steam + " was=" + host.Id + " (PlayFab sign-in)");
+                    AlignedAt = Time.realtimeSinceStartup;
+                    AlignedNote = (AlignedNote.Length == 0 ? string.Empty : AlignedNote + " ")
+                        + "host " + host.Id + "->" + steam;
                 }
             }
             catch (Exception ex)
@@ -161,9 +268,28 @@ namespace AstralRaftNet
             }
 
             AstralLog.Info("LeaveGame teardown scene=" + sceneName);
-            AstralTransport.StopListen();
-            AstralTransport.DisconnectPeers();
-            AstralTransport.ClearJoinState();
+            AstralTransport.EndSession();
+        }
+    }
+
+    /// <summary>
+    /// 回到主菜单同样视为一次联机会话结束：有些退出路径不一定走到 LeaveGame，
+    /// 这里按场景兜底，把世界接收标志、超时计时器、重试计数和残留消息一并清掉。
+    /// </summary>
+    [HarmonyPatch(typeof(Raft_Network), "OnSceneLoaded", new[]
+    {
+        typeof(Scene), typeof(LoadSceneMode)
+    })]
+    internal static class Patch_MenuLoaded
+    {
+        private static void Postfix(Scene scene)
+        {
+            if (scene.name != Raft_Network.MenuSceneName)
+            {
+                return;
+            }
+
+            AstralTransport.EndSession();
         }
     }
 
@@ -183,76 +309,181 @@ namespace AstralRaftNet
 
         private static IEnumerator AstralSendWorld(Raft_Network network, Network_UserId id)
         {
-            int forced = ForceRemoteInitialized(network);
-            AstralLog.Info("SendWorld astral to=" + id.Id + " forcedInit=" + forced);
-            yield return null;
-            ForceRemoteInitialized(network);
+            // 客机看门狗会重发 RequestWorld：同一目标已有下发在途时忽略重复请求。
+            if (!AstralTransport.BeginWorldSend(id.Id))
+            {
+                AstralLog.Info("SendWorld ignored duplicate request to=" + id.Id);
+                yield break;
+            }
 
-            List<Message> messages = null;
             try
             {
-                messages = AstralReflection.Method(typeof(Raft_Network), "GetWorld")
-                    .Invoke(network, null) as List<Message>;
-            }
-            catch (Exception ex)
-            {
-                AstralLog.Error("GetWorld failed: " + ex);
-                yield break;
-            }
-
-            if (messages == null)
-            {
-                AstralLog.Error("GetWorld returned null");
-                yield break;
-            }
-
-            Message_Compound compound = null;
-            MethodInfo sendP2P = AstralReflection.Method(
-                typeof(Raft_Network),
-                nameof(Raft_Network.SendP2P),
-                typeof(Network_UserId),
-                typeof(Message),
-                typeof(EP2PSend),
-                typeof(NetworkChannel));
-            int total = messages.Count;
-            const int chunkSize = 200;
-            int chunks = AstralWireFormat.ChunkCount(total, chunkSize);
-            AstralLog.Info(
-                "SendWorld astral total=" + total + " chunks=" + chunks + " to=" + id.Id);
-
-            // 分片下发：之前一次性发一个巨型 Compound，客机单帧应用上万条会卡死。
-            int sent = 0;
-            for (int offset = 0; offset < total; offset += chunkSize)
-            {
-                int count = AstralWireFormat.ChunkLength(total, chunkSize, offset / chunkSize);
-                compound = new Message_Compound(messages.GetRange(offset, count));
-                try
+                // 房主可能还在加载主场景：此时 GetWorld 只能拿到空表/半张表，
+                // 而空表末尾固定带 WorldReceived，客机会误以为世界已下发并把失败固化。
+                // 所以先等场景加载完成且 NetworkedBehaviours 建起来；超过上限则
+                // 一条世界消息都不发，交给客机 60 秒看门狗重试。
+                float deadline = Time.realtimeSinceStartup + AstralTransport.HostWorldWaitSeconds;
+                bool loggedWait = false;
+                while (!AstralTransport.HostWorldReady(network))
                 {
-                    sendP2P.Invoke(
-                        network,
-                        new object[]
-                        {
-                            id,
-                            compound,
-                            (EP2PSend)2,
-                            (NetworkChannel)0
-                        });
-                    sent += count;
+                    if (Time.realtimeSinceStartup >= deadline)
+                    {
+                        AstralLog.Error("SendWorld aborted: host world not ready after "
+                            + (int)AstralTransport.HostWorldWaitSeconds + "s, to=" + id.Id
+                            + ", client will retry");
+                        yield break;
+                    }
+
+                    if (!loggedWait)
+                    {
+                        loggedWait = true;
+                        AstralLog.Info("SendWorld waiting for host world ready, to=" + id.Id);
+                    }
+
+                    yield return null;
                 }
-                catch (Exception ex)
+
+                int forced = ForceRemoteInitialized(network);
+                AstralLog.Info("SendWorld astral to=" + id.Id + " forcedInit=" + forced);
+                yield return null;
+
+                // 让出一帧后房主可能正在退出：再确认一次，避免拿到卸载中的半张表。
+                if (!AstralTransport.HostWorldReady(network))
                 {
-                    AstralLog.Error("SendWorld chunk failed at " + offset + ": " + ex);
+                    AstralLog.Error("SendWorld aborted: host left game scene before snapshot, to=" + id.Id);
                     yield break;
                 }
 
-                // 每两片让出一帧，避免房主自己在下发时整帧卡住。
-                if ((offset / chunkSize + 1) % 2 == 0)
-                {
-                    yield return null;
-                }
-            }
+                ForceRemoteInitialized(network);
 
-            AstralLog.Info("SendWorld astral done messages=" + sent + "/" + total + " to=" + id.Id);
+                // 归属门槛读的是 hostID，采集前再兜一次：任何绕过 HostGame 的路径
+                // （直接 HostGame(ALLOW_NONE) / 以后新增入口）都不会把 hostID 留在 1。
+                Patch_HostGame.EnsureHostIdentity(network, "snapshot");
+
+                // 采集前把「谁在打包方块」摊开：hostID、房主玩家 steamID、
+                // 房主 BlockCreator 是否注册在表里、身份对齐发生在什么时候。
+                // 有了这三项，placed>0 && sent==0 就能直接归因，不用再猜时序。
+                LogHostSnapshotIdentity(network, id);
+
+                List<Message> messages = null;
+                try
+                {
+                    messages = AstralReflection.Method(typeof(Raft_Network), "GetWorld")
+                        .Invoke(network, null) as List<Message>;
+                }
+                catch (Exception ex)
+                {
+                    AstralLog.Error("GetWorld failed: " + ex);
+                    yield break;
+                }
+
+                if (messages == null)
+                {
+                    AstralLog.Error("GetWorld returned null");
+                    yield break;
+                }
+
+                // GetWorld 至少带 WorldGuid + WorldReceived 两条头；只有头说明世界没建起来。
+                if (messages.Count < 2)
+                {
+                    AstralLog.Error("GetWorld returned header-only snapshot total=" + messages.Count
+                        + ", refuse to send to=" + id.Id);
+                    yield break;
+                }
+
+                // 快照里必须带上房主已有的方块。原版 BlockCreator.Serialize_Create 只在
+                // playerNetwork.steamID == network.HostID 时才发方块；如果房主有方块而快照
+                // 一条都没有，说明归属判定或加载时序有问题，宁可让客机重试，也不能发一张
+                // 缺建筑的半张表，让客机把「世界已下发」固化下来。
+                int blocksPlaced = 0;
+                try
+                {
+                    List<Block> placed = BlockCreator.GetPlacedBlocks();
+                    blocksPlaced = placed != null ? placed.Count : 0;
+                }
+                catch (Exception ex)
+                {
+                    AstralLog.Error("read placed blocks failed: " + ex.Message);
+                }
+
+                int blocksSent = 0;
+                for (int i = 0; i < messages.Count; i++)
+                {
+                    Message_BlockCreator_Create create = messages[i] as Message_BlockCreator_Create;
+                    if (create != null && create.rgdBlocks != null)
+                    {
+                        // 累加：正常情况下只有房主玩家的 BlockCreator 会产出，但一旦出现
+                        // 多个 Create 消息，赋值会只记最后一条，导致对账失真。
+                        blocksSent += create.rgdBlocks.Length;
+                    }
+                }
+
+                AstralLog.Info("SendWorld snapshot blocks placed=" + blocksPlaced
+                    + " sent=" + blocksSent + " total=" + messages.Count + " to=" + id.Id);
+
+                if (blocksPlaced > 0 && blocksSent == 0)
+                {
+                    // 依然下发，避免客机完全进不来；但必须让房主看见，否则又是「建筑没了」的沉默故障。
+                    AstralLog.Error("SendWorld: host has " + blocksPlaced
+                        + " blocks but snapshot carries 0, check BlockCreator gate "
+                        + "(playerNetwork.steamID == network.HostID)");
+                    AstralOverlay.ShowNotice("联机世界快照缺少房主已有建筑（" + blocksPlaced
+                        + " 处），请把日志发给作者");
+                }
+
+                Message_Compound compound = null;
+                MethodInfo sendP2P = AstralReflection.Method(
+                    typeof(Raft_Network),
+                    nameof(Raft_Network.SendP2P),
+                    typeof(Network_UserId),
+                    typeof(Message),
+                    typeof(EP2PSend),
+                    typeof(NetworkChannel));
+                int total = messages.Count;
+                const int chunkSize = 200;
+                int chunks = AstralWireFormat.ChunkCount(total, chunkSize);
+                AstralLog.Info(
+                    "SendWorld astral total=" + total + " chunks=" + chunks + " to=" + id.Id);
+
+                // 分片下发：之前一次性发一个巨型 Compound，客机单帧应用上万条会卡死。
+                int sent = 0;
+                for (int offset = 0; offset < total; offset += chunkSize)
+                {
+                    int count = AstralWireFormat.ChunkLength(total, chunkSize, offset / chunkSize);
+                    compound = new Message_Compound(messages.GetRange(offset, count));
+                    try
+                    {
+                        sendP2P.Invoke(
+                            network,
+                            new object[]
+                            {
+                                id,
+                                compound,
+                                (EP2PSend)2,
+                                (NetworkChannel)0
+                            });
+                        sent += count;
+                    }
+                    catch (Exception ex)
+                    {
+                        AstralLog.Error("SendWorld chunk failed at " + offset + ": " + ex);
+                        yield break;
+                    }
+
+                    // 每两片让出一帧，避免房主自己在下发时整帧卡住。
+                    if ((offset / chunkSize + 1) % 2 == 0)
+                    {
+                        yield return null;
+                    }
+                }
+
+                AstralLog.Info("SendWorld astral done messages=" + sent + "/" + total + " to=" + id.Id);
+            }
+            finally
+            {
+                // 协程被 StopCoroutine 或场景切走时也要释放，否则该客机永远被当成在途。
+                AstralTransport.EndWorldSend(id.Id);
+            }
         }
 
         private static int ForceRemoteInitialized(Raft_Network network)
@@ -283,6 +514,75 @@ namespace AstralRaftNet
             }
 
             return forced;
+        }
+
+        /// <summary>
+        /// 采集前的房主身份诊断。一次快照只需要一条，用来把
+        /// 「方块没被打包」直接归因到 hostID 归属 / BlockCreator 注册 / 身份对齐时序，
+        /// 不需要再靠复现和猜测。
+        /// </summary>
+        private static void LogHostSnapshotIdentity(Raft_Network network, Network_UserId target)
+        {
+            try
+            {
+                FieldInfo hostField = AstralReflection.Field(typeof(Raft_Network), "hostID");
+                Network_UserId hostId = hostField != null
+                    ? (Network_UserId)hostField.GetValue(network)
+                    : new Network_UserId(0UL);
+
+                Network_Player local = network.GetLocalPlayer();
+                string playerInfo = local == null ? "none" : ("steam=" + local.steamID.Id);
+                bool gate = local != null && local.steamID == hostId;
+
+                BlockCreator creator = local != null ? local.BlockCreator : null;
+                string creatorInfo = "none";
+                if (creator != null)
+                {
+                    bool registered = NetworkUpdateManager.NetworkedBehaviours
+                        .ContainsKey(creator.BehaviourIndex);
+                    MonoBehaviour_Network mapped;
+                    // sameInstance 只表示「这个 index 上注册的就是这个 BlockCreator 实例」，
+                    // 与归属判定无关；归属看 gate。
+                    bool sameInstance = registered
+                        && NetworkUpdateManager.NetworkedBehaviours.TryGetValue(creator.BehaviourIndex, out mapped)
+                        && ReferenceEquals(mapped, creator);
+                    creatorInfo = "idx=" + creator.BehaviourIndex
+                        + " registered=" + registered
+                        + " sameInstance=" + sameInstance;
+                }
+
+                int placed = 0;
+                List<Block> blocks = BlockCreator.GetPlacedBlocks();
+                if (blocks != null)
+                {
+                    placed = blocks.Count;
+                }
+
+                float now = Time.realtimeSinceStartup;
+                float alignedAt = Patch_OnPlayFabSignedIn.AlignedAt;
+                string alignInfo = alignedAt < 0f
+                    ? "alignAt=none"
+                    : "alignAt=" + alignedAt.ToString("F2")
+                        + " alignDelta=" + (now - alignedAt).ToString("F2") + "s";
+
+                AstralLog.Info("SendWorld host identity"
+                    + " hostID=" + hostId.Id
+                    + " player=" + playerInfo
+                    + " gate=" + gate
+                    + " blockCreator=" + creatorInfo
+                    + " placed=" + placed
+                    + " behaviours=" + NetworkUpdateManager.NetworkedBehaviours.Count
+                    + " " + alignInfo
+                    + " sentAt=" + now.ToString("F2")
+                    + " to=" + target.Id
+                    + (Patch_OnPlayFabSignedIn.AlignedNote.Length == 0
+                        ? string.Empty
+                        : " alignNote=" + Patch_OnPlayFabSignedIn.AlignedNote));
+            }
+            catch (Exception ex)
+            {
+                AstralLog.Error("host identity diag: " + ex.Message);
+            }
         }
     }
 

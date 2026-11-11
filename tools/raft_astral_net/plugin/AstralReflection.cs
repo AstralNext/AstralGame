@@ -67,6 +67,7 @@ namespace AstralRaftNet
             Field(typeof(Raft_Network), "gameManagerStartCalled", typeof(bool)),
             Field(typeof(Raft_Network), "remoteUsers", typeof(Dictionary<Network_UserId, Network_Player>)),
             Field(typeof(Raft_Network), "m_hostedPlayFab", typeof(bool)),
+            Field(typeof(Raft_Network), "playerInfos", typeof(Dictionary<Network_UserId, PlayerInfo>)),
 
             // Raft_Network 方法
             Method(typeof(Raft_Network), "WorldHasBeenLoaded", typeof(System.Collections.IEnumerator), NoArgs),
@@ -79,6 +80,8 @@ namespace AstralRaftNet
             Method(typeof(Raft_Network), "LoadScene", typeof(void), new[] { typeof(string) }),
             Method(typeof(Raft_Network), "SendP2P", typeof(void),
                 new[] { typeof(Network_UserId), typeof(Message), typeof(EP2PSend), typeof(NetworkChannel) }),
+            Method(typeof(Raft_Network), "OnDisconnect", typeof(void),
+                new[] { typeof(Network_UserId), typeof(DisconnectReason), typeof(bool) }),
 
             // 其它运行时类型
             Field(typeof(PersonController), "controller", typeof(Component)),

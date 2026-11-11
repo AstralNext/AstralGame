@@ -183,6 +183,20 @@ namespace AstralRaftNet
             return list;
         }
 
+        /// <summary>删掉一条已经不可用的房间条目（握手失败/房间已关闭）。</summary>
+        public static void Forget(ulong steamId)
+        {
+            if (steamId == 0UL)
+            {
+                return;
+            }
+
+            lock (Sync)
+            {
+                Rooms.Remove(steamId);
+            }
+        }
+
         public static bool TryGet(CSteamID steamId, out LanRoom room)
         {
             room = null;

@@ -13,6 +13,7 @@ using kcp2k;
 using PlayFab.Party;
 using Steamworks;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace AstralRaftNet
 {
@@ -32,6 +33,15 @@ namespace AstralRaftNet
         // 中继帧：可靠帧的 channel 字节最高位置 1，负载前 8 字节是原始发送者 SteamID。
         private const byte ChannelRelayFlag = AstralWireFormat.ChannelRelayFlag;
 
+        // 控制帧：channel 2 保留给 Astral 自己的会话事件（目前只有「某玩家已离开」），
+        // 走可靠通道但不进游戏的 Message 管道，避免占用原版消息类型。
+        private const int ControlChannel = 2;
+        private const byte ControlPlayerLeft = 1;
+
+        // 房主侧判定 peer 掉线的空闲上限（毫秒）。客机进游戏后每帧都有更新包，
+        // 20 秒一包都没收到就认为对方已经断开（崩溃 / 拔网线 / 直接退进程）。
+        private const int PeerIdleTimeoutMs = 20000;
+
         // 每帧最多应用/反序列化的网络消息数。首次进房世界快照上万条，
         // 单帧全量应用会直接卡死主线程，必须分帧。
         private const int ApplyBudgetPerFrame = 200;
@@ -42,9 +52,11 @@ namespace AstralRaftNet
         private const float WorldTimeoutSeconds = 60f;
         // 超时后自动重试的最大次数（不含首次请求）；用完即停，不会无限循环。
         private const int MaxWorldAutoRetries = 3;
+        // 房主等待自身世界就绪的上限（秒）。必须短于客机 WorldTimeoutSeconds，
+        // 超时后一条世界消息都不发，交给客机看门狗重试。
+        public const float HostWorldWaitSeconds = 30f;
 
-        // 单机/离线没有 SteamID 时使用的自建身份，持久化保证存档归属稳定。
-        private const string PrefLocalId = "AstralLocalId";
+        // 单机/离线没有 SteamID 时不再自建身份：联机与存档归属一律只认游戏本身的 SteamID。
 
         private static readonly ConcurrentQueue<Action> MainThread = new ConcurrentQueue<Action>();
         private static readonly ConcurrentQueue<QueuedPacket>[] Incoming =
@@ -60,8 +72,6 @@ namespace AstralRaftNet
         private static FastInvokeHandler _parseRemoteInvoke;
         private static Raft_Network _cachedNetwork;
         private static bool _worldInitDone;
-        private static readonly object LocalIdLock = new object();
-        private static ulong _generatedLocalId;
 
         private static readonly Dictionary<ulong, Peer> Peers = new Dictionary<ulong, Peer>();
         private static readonly object PeersLock = new object();
@@ -73,6 +83,7 @@ namespace AstralRaftNet
         private static volatile bool _listening;
         private static byte[] _handshakeWelcome;
         private static IPEndPoint _handshakeTarget;
+        private static int _handshakeReplies;
         private static ulong _announcedHostSteam;
         private static int _listenPort = DefaultPort;
         private static string _status = "idle";
@@ -90,6 +101,10 @@ namespace AstralRaftNet
         // 这里记录应用期间已经发到过的 peer，之后只补发没收到的那部分。
         private static readonly HashSet<ulong> RelaySent = new HashSet<ulong>();
         private static bool _relayTracking;
+
+        // 世界下发在途目标：客机看门狗重发 RequestWorld 时，同一目标只保留一份下发。
+        private static readonly HashSet<ulong> WorldSendInFlight = new HashSet<ulong>();
+        private static readonly object WorldSendLock = new object();
 
         // 分帧展开 Compound 的游标，跨帧保持。
         private static Message_Compound _expandingCompound;
@@ -160,8 +175,8 @@ namespace AstralRaftNet
         }
 
         /// <summary>
-        /// 联机身份：只认真实 SteamID。拿不到时返回 0，调用方必须报错，
-        /// 不允许静默改用别的 ID。LocalId 只在离线单机给存档归属用。
+        /// 联机身份：只认游戏本身的真实 SteamID。拿不到时返回 0，
+        /// 调用方必须报错；不存在任何自建 ID 兜底。
         /// </summary>
         public static ulong SteamId
         {
@@ -175,48 +190,6 @@ namespace AstralRaftNet
                 catch (Exception)
                 {
                     return 0UL;
-                }
-            }
-        }
-
-        /// <summary>
-        /// 离线身份：仅在拿不到 SteamID 的单机/离线场景用于存档归属，
-        /// 不参与联机握手、peer 标识或 hostID。
-        /// </summary>
-        public static ulong LocalId
-        {
-            get
-            {
-                ulong steam = SteamId;
-                if (steam != 0UL)
-                {
-                    return steam;
-                }
-
-                lock (LocalIdLock)
-                {
-                    if (_generatedLocalId != 0UL)
-                    {
-                        return _generatedLocalId;
-                    }
-
-                    string saved = PlayerPrefs.GetString(PrefLocalId, string.Empty);
-                    ulong id;
-                    if (!ulong.TryParse(saved, out id) || id == 0UL)
-                    {
-                        id = BitConverter.ToUInt64(Guid.NewGuid().ToByteArray(), 0);
-                        if (id == 0UL)
-                        {
-                            id = 1UL;
-                        }
-
-                        PlayerPrefs.SetString(PrefLocalId, id.ToString());
-                        PlayerPrefs.Save();
-                        AstralLog.Info("generated local id " + id);
-                    }
-
-                    _generatedLocalId = id;
-                    return id;
                 }
             }
         }
@@ -242,6 +215,105 @@ namespace AstralRaftNet
             _expandingItem = default(PendingMessage);
             _relayTracking = false;
             RelaySent.Clear();
+        }
+
+        /// <summary>
+        /// 结束一次联机会话（回主菜单 / LeaveGame）。清掉会话状态和上一局残留的
+        /// 消息队列，但保留地址、端口、密码、离线身份等跨局设置。
+        /// </summary>
+        public static void EndSession()
+        {
+            bool dirty = _connecting
+                || _sceneLoadStarted
+                || _astralWorldReceived
+                || _worldTimedOut
+                || _joinHostSteam != 0UL
+                || _listening
+                || PeerCount > 0
+                || Pending.Count > 0
+                || !IncomingMessages.IsEmpty
+                || FakePlayers.Count > 0;
+
+            // 主动离开时先告诉房主：房主才能立刻把我们从 peer 表和玩家列表里删掉。
+            // 不发这条就只能等 20 秒空闲超时，期间重连会撞上旧 peer。
+            SendPlayerLeftToHost();
+            StopListen();
+            DisconnectPeers();
+            ClearJoinState();
+
+            QueuedPacket unused;
+            for (int i = 0; i < Incoming.Length; i++)
+            {
+                while (Incoming[i].TryDequeue(out unused))
+                {
+                }
+            }
+
+            while (IncomingMessages.TryDequeue(out unused))
+            {
+            }
+
+            Pending.Clear();
+            FakePlayers.Clear();
+            lock (WorldSendLock)
+            {
+                WorldSendInFlight.Clear();
+            }
+
+            if (dirty)
+            {
+                AstralLog.Info("astral session ended, client/host state cleared");
+            }
+        }
+
+        /// <summary>
+        /// 房主是否已经处于可提供世界的状态。场景没加载完或 NetworkedBehaviours 还没建起来时
+        /// GetWorld 只能产出空表/半张表，此时绝不能下发。
+        /// </summary>
+        public static bool HostWorldReady(Raft_Network network)
+        {
+            if (network == null || !Raft_Network.IsHost)
+            {
+                return false;
+            }
+
+            if (!LoadSceneManager.IsGameSceneLoaded || LoadSceneManager.IsLoadingScene)
+            {
+                return false;
+            }
+
+            if (SceneManager.GetActiveScene().name != Raft_Network.GameSceneName)
+            {
+                return false;
+            }
+
+            // 加载存档期间 NetworkedBehaviours 是逐步填充的：房主玩家先注册，
+            // 存档里已有的方块要等 RestoreRGDGame 跑完才全部就位。此时 GetWorld
+            // 拿到的是「不含旧存档物件」的半张表，客机应用后会永久缺建筑，
+            // 只有之后实时建造的才同步。必须等存档恢复结束再快照。
+            if (SaveAndLoad.IsGameLoading)
+            {
+                return false;
+            }
+
+            return NetworkUpdateManager.NetworkedBehaviours.Count > 0;
+        }
+
+        /// <summary>登记一次世界下发；同一客机已有下发在途时返回 false。</summary>
+        public static bool BeginWorldSend(ulong steamId)
+        {
+            lock (WorldSendLock)
+            {
+                return WorldSendInFlight.Add(steamId);
+            }
+        }
+
+        public static void EndWorldSend(ulong steamId)
+        {
+            lock (WorldSendLock)
+            {
+                WorldSendInFlight.Remove(steamId);
+            }
         }
 
         private static void TickWorldInit()
@@ -311,6 +383,12 @@ namespace AstralRaftNet
             int deserializeBudget = DeserializeBudgetPerFrame;
             while (deserializeBudget > 0 && Pending.Count < PendingHighWater && IncomingMessages.TryDequeue(out packet))
             {
+                if (packet.Channel == ControlChannel)
+                {
+                    HandleControlPacket(packet);
+                    continue;
+                }
+
                 try
                 {
                     Message message = AstralMessages.Deserialize(packet.Data);
@@ -588,8 +666,28 @@ namespace AstralRaftNet
                     Message_Player_Create create = message as Message_Player_Create;
                     if (create != null)
                     {
-                        AstralLog.Info("recv CreatePlayer user=" + create.UserId.Id + " local=" + network.LocalSteamID.Id);
+                        // bedRespawnPoint 为空时原版 AddPlayer(msg) 会静默 return，
+                        // 这里把同一时刻的场景状态一起打出来，便于区分「没收到」和「收到了没建」。
+                        GameObject bed = AstralReflection.Field(typeof(Raft_Network), "bedRespawnPoint")
+                            .GetValue(network) as GameObject;
+                        AstralLog.Info("recv CreatePlayer user=" + create.UserId.Id
+                            + " local=" + network.LocalSteamID.Id
+                            + " bed=" + (bed != null));
                     }
+                }
+
+                if (message != null && message.Type == Messages.BlockCreator_Create)
+                {
+                    Message_BlockCreator_Create create = message as Message_BlockCreator_Create;
+                    int count = create != null && create.rgdBlocks != null ? create.rgdBlocks.Length : 0;
+                    AstralLog.Info("recv BlockCreator_Create blocks=" + count
+                        + " behaviourIndex=" + (create != null ? create.BehaviourIndex : 0u)
+                        + " localPlayer=" + (network.GetLocalPlayer() != null));
+                }
+                else if (message != null && message.Type == Messages.BlockCreator_CreateEndMessage)
+                {
+                    AstralLog.Info("recv BlockCreator_CreateEnd behaviourIndex="
+                        + ((Message_NetworkBehaviour)message).BehaviourIndex);
                 }
 
                 ParseArgs[0] = message;
@@ -604,6 +702,8 @@ namespace AstralRaftNet
                     _worldTimedOut = false;
                     _status = "world received peers=" + PeerCount;
                     AstralLog.Info("world snapshot applied, localPlayer=" + (network.GetLocalPlayer() != null));
+                    // 快照应用结束，把这一轮聚合的丢弃计数强制刷一次，避免最后一秒的统计丢失。
+                    AstralDiag.Flush(true);
                     SnapLocalPlayerToBed(network);
                 }
 
@@ -698,26 +798,51 @@ namespace AstralRaftNet
 
         public static void StartListen(int port)
         {
-            if (_listening)
+            Port = port;
+
+            // 只在"已经在监听且实际绑定端口与请求一致"时才算成功，
+            // 否则必须重绑，避免出现"广播 6488、实际绑 6489"这种静默错位。
+            if (_listening && BoundPort() == Port)
             {
                 StartLanBroadcast();
                 return;
             }
 
-            Port = port;
+            if (_listening || PeerCount > 0)
+            {
+                // 已经建立的 KCP 会话绑在旧 socket 上，重绑会让它们全部失效，
+                // 这里显式断开并留日志，而不是让对面莫名其妙掉线。
+                AstralLog.Info("listen port change " + BoundPort() + " -> " + Port + ", drop peers=" + PeerCount);
+                DisconnectPeers();
+            }
+
             try
             {
-                // 联机身份必须是真实 SteamID；拿不到就报错，不静默换成 LocalId。
+                // 联机身份必须是游戏本身的真实 SteamID；拿不到就报错，没有任何自建 ID 兜底。
                 if (SteamId == 0UL)
                 {
+                    _listening = false;
                     _status = "listen failed: no steam id";
                     AstralLog.Error("listen refused: no valid SteamID, online play needs Steam");
+                    AstralOverlay.ShowNotice("联机监听失败：没有拿到 SteamID");
+                    StopLanBroadcast();
                     return;
                 }
 
                 EnsureSocket(Port);
+                int bound = BoundPort();
+                if (bound <= 0 || bound != Port)
+                {
+                    _listening = false;
+                    _status = "listen failed: bound " + bound;
+                    AstralLog.Error("listen abort: want=" + Port + " bound=" + bound);
+                    AstralOverlay.ShowNotice("联机监听失败：端口 " + Port + " 没有绑定成功");
+                    StopLanBroadcast();
+                    return;
+                }
+
                 _listening = true;
-                _status = "listen udp 0.0.0.0:" + Port;
+                _status = "listen udp 0.0.0.0:" + bound;
                 AstralLog.Info(_status);
             }
             catch (Exception ex)
@@ -725,14 +850,65 @@ namespace AstralRaftNet
                 _listening = false;
                 _status = "listen failed";
                 AstralLog.Error("listen failed: " + ex.Message);
+                AstralOverlay.ShowNotice("联机监听失败：" + ex.Message);
+                StopLanBroadcast();
                 return;
             }
 
             StartLanBroadcast();
         }
 
+        /// <summary>实际 UDP socket 的绑定端口；没绑定返回 0。</summary>
+        public static int BoundPort()
+        {
+            UdpClient udp = _udp;
+            if (udp == null)
+            {
+                return 0;
+            }
+
+            try
+            {
+                IPEndPoint bound = udp.Client.LocalEndPoint as IPEndPoint;
+                return bound == null ? 0 : bound.Port;
+            }
+            catch (Exception ex)
+            {
+                AstralLog.Error("read udp endpoint: " + ex.Message);
+                return 0;
+            }
+        }
+
+        private static void StopLanBroadcast()
+        {
+            try
+            {
+                AstralLanDiscovery.StopBroadcast();
+            }
+            catch (Exception ex)
+            {
+                AstralLog.Info("stop LAN broadcast: " + ex.Message);
+            }
+        }
+
         private static void StartLanBroadcast()
         {
+            // 广播端口必须等于实际绑定端口，否则客机会连到一个没人监听的端口。
+            int bound = BoundPort();
+            if (!_listening || bound <= 0)
+            {
+                AstralLog.Error("LAN broadcast skipped: not listening, bound=" + bound);
+                StopLanBroadcast();
+                return;
+            }
+
+            if (bound != Port)
+            {
+                AstralLog.Error("LAN broadcast skipped: port mismatch broadcast=" + Port + " bound=" + bound);
+                StopLanBroadcast();
+                return;
+            }
+
             string name = "ASGAME";
             try
             {
@@ -757,7 +933,7 @@ namespace AstralRaftNet
                 AstralLog.Info("LAN broadcast password flag unavailable, assume open: " + ex.Message);
             }
 
-            AstralLanDiscovery.StartBroadcast(Port, password, name);
+            AstralLanDiscovery.StartBroadcast(bound, password, name);
         }
 
         public static void StopListen()
@@ -963,12 +1139,13 @@ namespace AstralRaftNet
                 return;
             }
 
-            // 联机身份必须是真实 SteamID；拿不到就报错，不静默换成 LocalId。
+            // 联机身份必须是游戏本身的真实 SteamID；拿不到就报错，没有任何自建 ID 兜底。
             ulong localId = SteamId;
             if (localId == 0UL)
             {
                 _status = "connect failed: no steam id";
                 AstralLog.Error("join refused: no valid SteamID, online play needs Steam");
+                AstralOverlay.ShowNotice("加入失败：没有拿到 SteamID");
                 return;
             }
 
@@ -1006,29 +1183,43 @@ namespace AstralRaftNet
                 CSteamID localId = new CSteamID(localSteamId);
                 string localName = SteamFriends.GetPersonaName() ?? "player";
                 _handshakeWelcome = null;
+                _handshakeReplies = 0;
                 // WELCOME 只接受来自这个端点的包，避免同网段任意主机抢先冒充房主。
                 _handshakeTarget = hostEp;
+                AstralLog.Info("udp handshake start target=" + hostEp
+                    + " localSteam=" + localId.m_SteamID);
 
+                int v2Sent = 0;
                 byte[] hello = BuildHelloV2(localId, localName, password);
                 for (int attempt = 0; attempt < 12 && _handshakeWelcome == null; attempt++)
                 {
-                    SendUdp(hostEp, hello);
+                    if (SendUdp(hostEp, hello))
+                    {
+                        v2Sent++;
+                    }
+
                     for (int wait = 0; wait < 16 && _handshakeWelcome == null; wait++)
                     {
                         Thread.Sleep(25);
                     }
                 }
 
+                int legacySent = 0;
                 if (_handshakeWelcome == null)
                 {
                     // 旧版房主只认老的带明文密码的 HELLO。为了能加入旧房主必须回退一次，
                     // 这会在链路上暴露明文密码，日志里明确提示双方升级。
-                    AstralLog.Info("handshake v2 no reply from " + hostEp
-                        + ", fallback to legacy HELLO (cleartext password); upgrade both sides to avoid");
+                    AstralLog.Info("handshake v2 no reply from " + hostEp + " (sent=" + v2Sent
+                        + " replies=" + _handshakeReplies
+                        + "), fallback to legacy HELLO (cleartext password); upgrade both sides to avoid");
                     byte[] legacy = BuildLegacyHello(localId, localName, password);
                     for (int attempt = 0; attempt < 12 && _handshakeWelcome == null; attempt++)
                     {
-                        SendUdp(hostEp, legacy);
+                        if (SendUdp(hostEp, legacy))
+                        {
+                            legacySent++;
+                        }
+
                         for (int wait = 0; wait < 16 && _handshakeWelcome == null; wait++)
                         {
                             Thread.Sleep(25);
@@ -1039,8 +1230,14 @@ namespace AstralRaftNet
                 byte[] welcome = _handshakeWelcome;
                 if (welcome == null || welcome.Length < 11 || welcome[0] != KindWelcome)
                 {
-                    throw new TimeoutException("udp handshake timeout");
+                    throw new TimeoutException("udp handshake timeout target=" + hostEp
+                        + " v2Sent=" + v2Sent + " legacySent=" + legacySent
+                        + " replies=" + _handshakeReplies
+                        + " (host UDP port not listening or blocked)");
                 }
+
+                AstralLog.Info("udp handshake reply target=" + hostEp + " v2Sent=" + v2Sent
+                    + " legacySent=" + legacySent + " replies=" + _handshakeReplies);
 
                 ulong hostSteam = BitConverter.ToUInt64(welcome, 1);
                 CSteamID hostId = new CSteamID(hostSteam);
@@ -1083,6 +1280,10 @@ namespace AstralRaftNet
                 _handshakeTarget = null;
                 _status = "connect failed";
                 AstralLog.Error("connect failed: " + ex.Message);
+
+                // 这次握手没成功，把发现缓存里的这条房间条目删掉，
+                // 避免玩家继续点到同一个"看起来还在、其实没人监听"的陈旧条目。
+                AstralLanDiscovery.Forget(_announcedHostSteam);
             }
         }
 
@@ -1099,7 +1300,7 @@ namespace AstralRaftNet
 
             ApplyHostGameMode(hostMode, friendlyFire, crossplay);
 
-            // 本机联机身份 = 真实 SteamID；LocalId 不参与联机。
+            // 本机联机身份 = 游戏本身的真实 SteamID。
             CSteamID localId = new CSteamID(SteamId);
             if (hostId == localId)
             {
@@ -1406,11 +1607,30 @@ namespace AstralRaftNet
                 Name = "AstralUdpRecv"
             };
             _recvThread.Start();
+
+            // 端口的唯一真源是 socket 本身：绑定成功后把实际端口写回 _listenPort，
+            // 后续广播 / 状态显示都读这个值。want == 0 是客机的临时端口，不能写回。
+            if (want != 0)
+            {
+                IPEndPoint actual = udp.Client.LocalEndPoint as IPEndPoint;
+                if (actual != null && actual.Port > 0)
+                {
+                    _listenPort = actual.Port;
+                }
+            }
+
             AstralLog.Info("udp bind " + udp.Client.LocalEndPoint);
         }
 
         private static void CloseSocket()
         {
+            // socket 没了就绝不能再自称在监听，否则 StartLanBroadcast 会拿旧端口广播。
+            _listening = false;
+            if (!_status.StartsWith("connected", StringComparison.Ordinal))
+            {
+                _status = "idle";
+            }
+
             _recvRunning = false;
             UdpClient udp = _udp;
             _udp = null;
@@ -1442,18 +1662,51 @@ namespace AstralRaftNet
             }
         }
 
-        private static void SendUdp(IPEndPoint to, byte[] data)
+        private static bool SendUdp(IPEndPoint to, byte[] data)
         {
             UdpClient udp = _udp;
             if (udp == null || to == null || data == null || data.Length == 0)
             {
+                LogDrop("udp send skipped: socket=" + (udp != null) + " to=" + to
+                    + " len=" + (data == null ? 0 : data.Length));
+                return false;
+            }
+
+            try
+            {
+                lock (UdpSendLock)
+                {
+                    udp.Send(data, data.Length, to);
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                LogDrop("udp send to " + to + " failed: " + ex.Message);
+                return false;
+            }
+        }
+
+        // 限流日志：接收线程可能被扫描包刷屏，这里最多每秒一条。
+        private static int _lastDropLogTick;
+        private static int _suppressedDropLogs;
+
+        private static void LogDrop(string message)
+        {
+            int now = Environment.TickCount;
+            if (unchecked(now - _lastDropLogTick) < 1000)
+            {
+                _suppressedDropLogs++;
                 return;
             }
 
-            lock (UdpSendLock)
-            {
-                udp.Send(data, data.Length, to);
-            }
+            _lastDropLogTick = now;
+            string suffix = _suppressedDropLogs == 0
+                ? string.Empty
+                : " (suppressed " + _suppressedDropLogs + ")";
+            _suppressedDropLogs = 0;
+            AstralLog.Info(message + suffix);
         }
 
         private static void TickKcp()
@@ -1468,6 +1721,45 @@ namespace AstralRaftNet
             for (int i = 0; i < snapshot.Count; i++)
             {
                 snapshot[i].Tick(now);
+            }
+
+            if (!_listening || !Raft_Network.IsHost)
+            {
+                return;
+            }
+
+            List<ulong> dead = null;
+            for (int i = 0; i < snapshot.Count; i++)
+            {
+                Peer peer = snapshot[i];
+                if (peer == null)
+                {
+                    continue;
+                }
+
+                int idle = unchecked((int)(now - peer.LastReceiveTick));
+                if (idle <= PeerIdleTimeoutMs)
+                {
+                    continue;
+                }
+
+                if (dead == null)
+                {
+                    dead = new List<ulong>();
+                }
+
+                dead.Add(peer.SteamId);
+                AstralLog.Info("peer " + peer.SteamId + " idle " + (idle / 1000) + "s, dropping");
+            }
+
+            if (dead == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < dead.Count; i++)
+            {
+                OnPeerLost(dead[i], "idle timeout");
             }
         }
 
@@ -1542,6 +1834,7 @@ namespace AstralRaftNet
                     return;
                 }
 
+                _handshakeReplies++;
                 _handshakeWelcome = data;
                 return;
             }
@@ -1549,8 +1842,11 @@ namespace AstralRaftNet
             Peer peer = FindPeerByEndpoint(from);
             if (peer == null)
             {
+                LogDrop("drop udp kind=" + kind + " from " + from + ": no peer");
                 return;
             }
+
+            peer.MarkAlive();
 
             if (kind == KindUnreliable)
             {
@@ -1604,6 +1900,7 @@ namespace AstralRaftNet
         {
             if (!_listening || hello.Length < 11)
             {
+                LogDrop("drop HELLO from " + from + ": listening=" + _listening + " len=" + hello.Length);
                 return;
             }
 
@@ -1611,6 +1908,7 @@ namespace AstralRaftNet
             CSteamID remoteId = new CSteamID(remoteSteam);
             if (!remoteId.IsValid())
             {
+                LogDrop("drop HELLO from " + from + ": invalid steamId=" + remoteSteam);
                 return;
             }
 
@@ -1651,6 +1949,7 @@ namespace AstralRaftNet
         {
             if (!_listening || hello.Length < 12)
             {
+                LogDrop("drop HELLO v2 from " + from + ": listening=" + _listening + " len=" + hello.Length);
                 return;
             }
 
@@ -1664,6 +1963,7 @@ namespace AstralRaftNet
             CSteamID remoteId = new CSteamID(remoteSteam);
             if (!remoteId.IsValid())
             {
+                LogDrop("drop HELLO v2 from " + from + ": invalid steamId=" + remoteSteam);
                 return;
             }
 
@@ -1672,6 +1972,8 @@ namespace AstralRaftNet
             int nonceOffset = offset + 1;
             if (hello.Length < nonceOffset + AstralHandshake.NonceSize)
             {
+                LogDrop("drop HELLO v2 from " + from + ": truncated name/nonce len=" + hello.Length
+                    + " nameLen=" + nameLen);
                 return;
             }
 
@@ -1729,31 +2031,234 @@ namespace AstralRaftNet
             }
 
             string localName = SteamFriends.GetPersonaName() ?? "host";
+
+            string previous = null;
+            bool rejoining = false;
             lock (PeersLock)
             {
                 Peer existing;
                 if (Peers.TryGetValue(remoteSteam, out existing) && existing != null)
                 {
-                    // 同一个 SteamID 不允许从另一个 IP 端点抢走已有的 peer；
-                    // 同机切端口（地址相同）则允许更新。
-                    if (existing.Remote != null && from != null
-                        && !existing.Remote.Address.Equals(from.Address))
-                    {
-                        AstralLog.Error("reject peer " + remoteSteam + " from " + from
-                            + ", already bound to " + existing.Remote);
-                        return;
-                    }
-
-                    existing.Remote = from;
-                    SendUdp(from, BuildWelcome(localSteam, localName));
-                    return;
+                    previous = existing.Remote != null ? existing.Remote.ToString() : "?";
+                    // 只有旧 peer 真正跑过 KCP（说明上一局已经进入游戏）才算重连；
+                    // 握手阶段 HELLO 会重发十几次，不能每次都当成换会话去删玩家。
+                    rejoining = existing.HasKcp;
                 }
+            }
+
+            if (rejoining)
+            {
+                // 同一 SteamID 再次握手一律按「新会话」处理：
+                // 旧 peer 的 KCP 序列号/窗口状态属于上一局，如果只改 Remote 复用旧 KCP，
+                // 新会话从 seq=1 开始的包会被旧状态当成重复包整包丢弃，可靠通道永远收不到东西。
+                // 因此这里整体换掉 peer，并清掉房主侧残留的玩家对象（否则 InternalAddPlayer
+                // 会因为 "already exists" 拒绝重新加入）。
+                AstralLog.Info("peer " + remoteSteam + " rejoin from " + from + ", replacing " + previous);
+                MainThread.Enqueue(() => ResetPeerSession(remoteSteam));
+            }
+            else if (previous != null)
+            {
+                AstralLog.Info("peer " + remoteSteam + " hello retry from " + from + ", endpoint " + previous);
             }
 
             SendUdp(from, BuildWelcome(localSteam, localName));
             CreatePeer(remoteSteam, from, localSteam);
             AstralLog.Info("peer " + remoteSteam + " from " + from
                 + (legacy ? " (legacy hello, cleartext password)" : " (hello v2)"));
+        }
+
+        /// <summary>
+        /// 同 SteamID 重连时的房主侧清理：把上一局的幽灵玩家从 remoteUsers/playerInfos 删掉，
+        /// 并通知其余客机一起删，否则新人会撞上 "already exists"，别人也一直看到旧头像。
+        /// 必须主线程执行（会 Destroy 玩家对象）。
+        /// </summary>
+        private static void ResetPeerSession(ulong steamId)
+        {
+            if (!Raft_Network.IsHost)
+            {
+                return;
+            }
+
+            RemoveRemotePlayer(steamId);
+            NotifyPlayerLeft(steamId);
+        }
+
+        private static void SendPlayerLeftToHost()
+        {
+            if (_joinHostSteam == 0UL || Raft_Network.IsHost)
+            {
+                return;
+            }
+
+            ulong self = SteamId;
+            if (self == 0UL)
+            {
+                return;
+            }
+
+            byte[] payload = new byte[9];
+            payload[0] = ControlPlayerLeft;
+            Buffer.BlockCopy(BitConverter.GetBytes(self), 0, payload, 1, 8);
+            if (TrySendRaw(_joinHostSteam, payload, ControlChannel, false))
+            {
+                AstralLog.Info("sent leave notice to host " + _joinHostSteam);
+            }
+        }
+
+        private static void NotifyPlayerLeft(ulong steamId)
+        {
+            byte[] payload = new byte[9];
+            payload[0] = ControlPlayerLeft;
+            Buffer.BlockCopy(BitConverter.GetBytes(steamId), 0, payload, 1, 8);
+
+            List<ulong> ids;
+            lock (PeersLock)
+            {
+                ids = new List<ulong>(Peers.Keys);
+            }
+
+            int sent = 0;
+            for (int i = 0; i < ids.Count; i++)
+            {
+                if (ids[i] == steamId)
+                {
+                    continue;
+                }
+
+                if (TrySendRaw(ids[i], payload, ControlChannel, false))
+                {
+                    sent++;
+                }
+            }
+
+            if (sent > 0)
+            {
+                AstralLog.Info("notify player left " + steamId + " to=" + sent + " peers");
+            }
+        }
+
+        private static void HandleControlPacket(QueuedPacket packet)
+        {
+            if (packet.Unreliable || packet.Relayed || packet.Data == null || packet.Data.Length < 9)
+            {
+                return;
+            }
+
+            if (packet.Data[0] != ControlPlayerLeft)
+            {
+                return;
+            }
+
+            ulong target = BitConverter.ToUInt64(packet.Data, 1);
+            if (target == 0UL)
+            {
+                return;
+            }
+
+            if (Raft_Network.IsHost)
+            {
+                // 客机只能声明自己离开，不能替别人退房。
+                if (target != packet.SteamId)
+                {
+                    AstralLog.Error("ignore control leave " + target + " from " + packet.SteamId);
+                    return;
+                }
+
+                OnPeerLost(target, "client left");
+                return;
+            }
+
+            if (_joinHostSteam == 0UL || packet.SteamId != _joinHostSteam)
+            {
+                return;
+            }
+
+            AstralLog.Info("host says player " + target + " left");
+            RemoveRemotePlayer(target);
+        }
+
+        /// <summary>
+        /// peer 掉线（空闲超时 / 主动离开）后的收口：移除 peer，房主还要删玩家并通知其余客机。
+        /// </summary>
+        private static void OnPeerLost(ulong steamId, string why)
+        {
+            AstralLog.Info("peer " + steamId + " lost (" + why + ")");
+            RemovePeer(steamId);
+            if (!Raft_Network.IsHost)
+            {
+                return;
+            }
+
+            RemoveRemotePlayer(steamId);
+            NotifyPlayerLeft(steamId);
+        }
+
+        /// <summary>
+        /// 把某个玩家从 remoteUsers / playerInfos 里真正删掉。
+        /// 原版靠 PlayFab 的 OnRemotePlayerLeftNetwork 回调做这件事；Astral 不走 PlayFab，
+        /// 所以必须自己调 OnDisconnect，否则只会留下一个永远在线的幽灵玩家。
+        /// </summary>
+        private static void RemoveRemotePlayer(ulong steamId)
+        {
+            Raft_Network network = GetNetwork();
+            if (network == null || steamId == 0UL)
+            {
+                return;
+            }
+
+            if (steamId == SteamId)
+            {
+                // 防御：任何通知都不应该把本地玩家自己删掉。
+                AstralLog.Error("refuse to remove local player " + steamId);
+                return;
+            }
+
+            Network_UserId id = new Network_UserId(steamId);
+            try
+            {
+                FieldInfo infosField = AstralReflection.Field(typeof(Raft_Network), "playerInfos");
+                Dictionary<Network_UserId, PlayerInfo> infos = infosField == null
+                    ? null
+                    : infosField.GetValue(network) as Dictionary<Network_UserId, PlayerInfo>;
+                if (infos != null)
+                {
+                    infos.Remove(id);
+                }
+            }
+            catch (Exception ex)
+            {
+                AstralLog.Error("remove player info " + steamId + ": " + ex.Message);
+            }
+
+            try
+            {
+                FieldInfo usersField = AstralReflection.Field(typeof(Raft_Network), "remoteUsers");
+                Dictionary<Network_UserId, Network_Player> users = usersField == null
+                    ? null
+                    : usersField.GetValue(network) as Dictionary<Network_UserId, Network_Player>;
+                if (users == null || !users.ContainsKey(id))
+                {
+                    return;
+                }
+
+                MethodInfo onDisconnect = AstralReflection.Method(
+                    typeof(Raft_Network), "OnDisconnect",
+                    typeof(Network_UserId), typeof(DisconnectReason), typeof(bool));
+                if (onDisconnect == null)
+                {
+                    return;
+                }
+
+                onDisconnect.Invoke(network, new object[]
+                {
+                    id, DisconnectReason.SelfDisconnected, true
+                });
+                AstralLog.Info("removed remote player " + steamId + ", players=" + users.Count);
+            }
+            catch (Exception ex)
+            {
+                AstralLog.Error("remove remote player " + steamId + ": " + ex.Message);
+            }
         }
 
         private static void CreatePeer(ulong remoteSteam, IPEndPoint remote, ulong localSteam)
@@ -1792,7 +2297,8 @@ namespace AstralRaftNet
 
         private static void EnqueueReliablePayload(ulong steamId, int channel, byte[] payload, bool relayed)
         {
-            if (!ValidChannel(channel) || payload == null)
+            // 控制帧走可靠通道但 channel 2 不是游戏消息通道，单独放行。
+            if (payload == null || (channel != ControlChannel && !ValidChannel(channel)))
             {
                 return;
             }
@@ -2018,6 +2524,7 @@ namespace AstralRaftNet
             {
                 SteamId = steamId;
                 Remote = remote;
+                LastReceiveTick = (uint)Environment.TickCount;
                 _kcp = new Kcp(conv, Output);
                 _kcp.SetNoDelay(1, 10, 2, true);
                 _kcp.SetWindowSize(512, 512);
@@ -2025,6 +2532,17 @@ namespace AstralRaftNet
 
             public ulong SteamId { get; private set; }
             public IPEndPoint Remote { get; set; }
+
+            /// <summary>最后一次收到该 peer 任何 UDP 包的时间（Environment.TickCount）。</summary>
+            public uint LastReceiveTick { get; private set; }
+
+            /// <summary>是否已经收到过该 peer 的 KCP 包（说明它真的进入了游戏会话）。</summary>
+            public bool HasKcp { get; private set; }
+
+            public void MarkAlive()
+            {
+                LastReceiveTick = (uint)Environment.TickCount;
+            }
 
             private void Output(byte[] data, int size)
             {
@@ -2088,6 +2606,8 @@ namespace AstralRaftNet
 
             public void InputKcp(byte[] data, int offset, int size)
             {
+                MarkAlive();
+                HasKcp = true;
                 lock (_kcpLock)
                 {
                     _kcp.Input(data, offset, size);
