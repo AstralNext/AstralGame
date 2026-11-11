@@ -936,7 +936,15 @@ impl Engine {
                 join_token,
                 nickname,
                 reply,
-            } => self.lobby_create(game_id, name, gate, max_members, join_token, nickname, reply),
+            } => self.lobby_create(
+                game_id,
+                name,
+                gate,
+                max_members,
+                join_token,
+                nickname,
+                reply,
+            ),
             Cmd::LobbySearch { game_id, reply } => self.lobby_search(game_id, reply),
             Cmd::LobbyJoin {
                 lobby_id,
@@ -1000,7 +1008,7 @@ impl Engine {
                     .activate_invite_dialog(LobbyId::from_raw(lobby_id));
                 INVITE_DIALOG_CALLED.store(true, Ordering::Relaxed);
                 let _ = reply.send(Ok(
-                    "已请求唤起 Steam 邀请面板（只打开面板，不代表已发送邀请）".to_string()
+                    "已请求唤起 Steam 邀请面板（只打开面板，不代表已发送邀请）".to_string(),
                 ));
             }
             Cmd::LobbyInviteFriend {
@@ -1022,8 +1030,10 @@ impl Engine {
                 let _ = reply.send(if accepted {
                     Ok("Steam 已受理大厅邀请；对方是否可见取决于在线状态与好友关系".to_string())
                 } else {
-                    Err("Steam 未受理该邀请：请确认对方在好友列表中，或改用邀请面板 / 搜索房间"
-                        .to_string())
+                    Err(
+                        "Steam 未受理该邀请：请确认对方在好友列表中，或改用邀请面板 / 搜索房间"
+                            .to_string(),
+                    )
                 });
             }
             Cmd::LobbyDiag { reply } => {
@@ -1269,7 +1279,10 @@ impl Engine {
                 });
                 let _ = tx.send(LobbyEvent::Joined(mapped));
             });
-        debug_log("lobby_join_start", format!("lobby={lobby_id} game={game_id}"));
+        debug_log(
+            "lobby_join_start",
+            format!("lobby={lobby_id} game={game_id}"),
+        );
         self.pending_lobby = Some(PendingLobby {
             op: LobbyOp::Join {
                 game_id,
@@ -1295,9 +1308,9 @@ impl Engine {
         self.client
             .matchmaking()
             .join_lobby(LobbyId::from_raw(lobby_id), move |res| {
-                let mapped = res.map(|l| l.raw()).map_err(|_| {
-                    "大厅已关闭或已满员（Steam 无法加入）".to_string()
-                });
+                let mapped = res
+                    .map(|l| l.raw())
+                    .map_err(|_| "大厅已关闭或已满员（Steam 无法加入）".to_string());
                 let _ = tx.send(LobbyEvent::Joined(mapped));
             });
         debug_log("lobby_peek_start", format!("lobby={lobby_id}"));
@@ -1398,7 +1411,10 @@ impl Engine {
                 self.client
                     .matchmaking()
                     .leave_lobby(LobbyId::from_raw(lobby_id));
-                debug_log("lobby_create_tunnel_fail", format!("lobby={lobby_id} err={e}"));
+                debug_log(
+                    "lobby_create_tunnel_fail",
+                    format!("lobby={lobby_id} err={e}"),
+                );
                 let _ = reply.send(Err(e));
             }
             Err(_) => {
@@ -1440,7 +1456,7 @@ impl Engine {
                 format!("lobby={lobby_id} reason=missing_meta pairs={}", pairs.len()),
             );
             let _ = reply.send(Err(
-                "房间信息不完整（缺少 ag_game / ag_ver / ag_gate），已取消加入".to_string()
+                "房间信息不完整（缺少 ag_game / ag_ver / ag_gate），已取消加入".to_string(),
             ));
             return;
         };
@@ -2227,12 +2243,9 @@ impl Engine {
                         hello.version, hello.game_id
                     ),
                 );
-                let game_matches = self.game_id.is_empty()
-                    || hello.game_id.eq_ignore_ascii_case(&self.game_id);
-                if hello.token != self.join_token
-                    || hello.steam_id != from_steam
-                    || !game_matches
-                {
+                let game_matches =
+                    self.game_id.is_empty() || hello.game_id.eq_ignore_ascii_case(&self.game_id);
+                if hello.token != self.join_token || hello.steam_id != from_steam || !game_matches {
                     debug_log(
                         "hello_reject",
                         format!(
@@ -2712,7 +2725,10 @@ impl Engine {
         let still_there = self.members.contains_key(&sid);
         debug_log(
             "debug_ghost_probe",
-            format!("before={before} injected={injected} after={after} removed={}", !still_there),
+            format!(
+                "before={before} injected={injected} after={after} removed={}",
+                !still_there
+            ),
         );
         if still_there {
             return Err(format!("诊断失败：成员仍在表中（{injected} -> {after}）"));

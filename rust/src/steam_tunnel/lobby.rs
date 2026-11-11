@@ -172,9 +172,7 @@ pub fn parse_snapshot(
 ///
 /// `expected_game_id` 为空表示「全部」：跳过游戏比对，只校验协议版本。
 pub fn validate(snapshot: &LobbySnapshot, expected_game_id: &str) -> Result<(), String> {
-    if !expected_game_id.is_empty()
-        && !snapshot.game_id.eq_ignore_ascii_case(expected_game_id)
-    {
+    if !expected_game_id.is_empty() && !snapshot.game_id.eq_ignore_ascii_case(expected_game_id) {
         return Err("游戏标识不一致".to_string());
     }
     if snapshot.version != PROTOCOL_VERSION {
@@ -288,12 +286,19 @@ mod tests {
     fn connect_lobby_argument_forms() {
         assert_eq!(parse_connect_lobby("+connect_lobby 123"), Some(123));
         assert_eq!(parse_connect_lobby("+connect_lobby=456"), Some(456));
-        assert_eq!(parse_connect_lobby("  +connect_lobby   \"789\" "), Some(789));
+        assert_eq!(
+            parse_connect_lobby("  +connect_lobby   \"789\" "),
+            Some(789)
+        );
         assert_eq!(parse_connect_lobby("+connect 1.2.3.4:27015"), None);
         assert_eq!(parse_connect_lobby("+connect_lobby 0"), None);
         assert_eq!(parse_connect_lobby(""), None);
 
-        let argv = vec!["AstralGame.exe".to_string(), "+connect_lobby".to_string(), "42".to_string()];
+        let argv = vec![
+            "AstralGame.exe".to_string(),
+            "+connect_lobby".to_string(),
+            "42".to_string(),
+        ];
         assert_eq!(parse_connect_lobby_args(argv), Some(42));
         let none = vec!["AstralGame.exe".to_string()];
         assert_eq!(parse_connect_lobby_args(none), None);

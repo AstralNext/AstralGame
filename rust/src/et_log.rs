@@ -98,7 +98,9 @@ fn resolve_dir() -> Option<PathBuf> {
         }
         eprintln!("[et_log] {DIR_ENV} 指向的目录不可写: {}", custom.display());
     }
-    candidate_dirs().into_iter().find(|dir| is_writable_dir(dir))
+    candidate_dirs()
+        .into_iter()
+        .find(|dir| is_writable_dir(dir))
 }
 
 /// 优先 exe 旁的 `logs`（便携版/开发版可直接找到），安装到 Program Files 时
