@@ -7,7 +7,7 @@
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <OutputPath>..\bin\plugin\</OutputPath>
     <DefineConstants>$(DefineConstants);ASTRAL_RAFT</DefineConstants>
-    <RaftManaged Condition="'$(RaftManaged)' == '' AND Exists('C:\Users\baika\Downloads\cs\Assembly-CSharp.dll')">C:\Users\baika\Downloads\cs</RaftManaged>
+    <RaftManaged Condition="'$(RaftManaged)' == '' AND Exists('E:\r4\Raft_Data\Managed\Assembly-CSharp.dll')">E:\r4\Raft_Data\Managed</RaftManaged>
     <RaftManaged Condition="'$(RaftManaged)' == '' AND Exists('E:\Raft\Raft_Data\Managed\Assembly-CSharp.dll')">E:\Raft\Raft_Data\Managed</RaftManaged>
   </PropertyGroup>
   <!-- 引入共享模板，移除同名本地文件（SDK 项目默认包含 ./*.cs） -->
