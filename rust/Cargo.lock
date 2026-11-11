@@ -4463,7 +4463,7 @@ dependencies = [
 
 [[package]]
 name = "rust_lib_astral_game"
-version = "1.8.1"
+version = "1.8.2"
 dependencies = [
  "anyhow",
  "async-trait",
