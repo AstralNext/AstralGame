@@ -17,7 +17,10 @@ const LOCAL_SYNTHETIC_PEER_ID: u32 = 0;
 
 lazy_static! {
     static ref RT: Runtime = Runtime::new().expect("failed to create tokio runtime");
-    static ref MANAGER: NativeInstanceManager = native_cli_instance_manager();
+    // 上游把签名改成了 (shared_runtime, thread_count) -> Result；这里保持旧行为：
+    // 不开共享 runtime，每个实例自己建 runtime。
+    static ref MANAGER: NativeInstanceManager =
+        native_cli_instance_manager(false, 0).expect("failed to create easytier instance manager");
 }
 
 /// Android VpnService 把 TUN fd detach 后交给 Rust，fd 的所有权随之转移。
