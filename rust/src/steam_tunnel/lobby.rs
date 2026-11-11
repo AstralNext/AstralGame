@@ -17,7 +17,6 @@ pub const KEY_GATE: &str = "ag_gate";
 pub const KEY_NAME: &str = "ag_name";
 pub const KEY_HOST: &str = "ag_host";
 pub const KEY_PLAYERS: &str = "ag_players";
-pub const KEY_CAP: &str = "ag_cap";
 
 /// 组网协议版本；与 `proto::VERSION` 是两回事，这里只用于大厅筛选。
 pub const PROTOCOL_VERSION: &str = "1";
@@ -185,6 +184,7 @@ pub fn validate(snapshot: &LobbySnapshot, expected_game_id: &str) -> Result<(), 
 }
 
 /// 进房前的门槛校验：`double` 需要额外密码，`open` 需要用户显式确认。
+#[cfg(test)]
 pub fn gate_requires_extra_password(gate: Gate) -> bool {
     gate == Gate::Double
 }

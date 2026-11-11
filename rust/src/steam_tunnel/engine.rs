@@ -179,9 +179,7 @@ enum LobbyOp {
         join_token: String,
         nickname: String,
     },
-    Peek {
-        game_id: String,
-    },
+    Peek,
     Search {
         game_id: String,
     },
@@ -1315,19 +1313,14 @@ impl Engine {
             });
         debug_log("lobby_peek_start", format!("lobby={lobby_id}"));
         self.pending_lobby = Some(PendingLobby {
-            op: LobbyOp::Peek {
-                game_id: String::new(),
-            },
+            op: LobbyOp::Peek,
             reply: LobbyReply::One(reply),
             deadline: Instant::now() + LOBBY_TIMEOUT,
         });
     }
 
     fn poll_lobby_events(&mut self) {
-        loop {
-            let Ok(ev) = self.lobby_rx.try_recv() else {
-                break;
-            };
+        while let Ok(ev) = self.lobby_rx.try_recv() {
             match ev {
                 LobbyEvent::Created(res) => self.on_lobby_created(res),
                 LobbyEvent::Joined(res) => self.on_lobby_joined(res),
@@ -1461,7 +1454,7 @@ impl Engine {
             return;
         };
         let (game_id, join_token, nickname) = match pending.op {
-            LobbyOp::Peek { .. } => {
+            LobbyOp::Peek => {
                 // 只读元数据：邀请链接不知道游戏标识，只校验协议版本。
                 if snapshot.version != lobby::PROTOCOL_VERSION {
                     mm.leave_lobby(lid);
