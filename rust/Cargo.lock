@@ -1430,7 +1430,7 @@ checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 [[package]]
 name = "easytier"
 version = "2.7.0"
-source = "git+https://github.com/ldoubil/EasyTier.git?branch=feat%2Fupstream-merge#5073a5919267c64a4248c37204d9000d7054b144"
+source = "git+https://github.com/ldoubil/EasyTier.git?branch=main-astral#3c5622336f8ede479be04acf1d7f2229008e1855"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -1536,7 +1536,7 @@ dependencies = [
 [[package]]
 name = "easytier-core"
 version = "2.7.0"
-source = "git+https://github.com/ldoubil/EasyTier.git?branch=feat%2Fupstream-merge#5073a5919267c64a4248c37204d9000d7054b144"
+source = "git+https://github.com/ldoubil/EasyTier.git?branch=main-astral#3c5622336f8ede479be04acf1d7f2229008e1855"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -1609,7 +1609,7 @@ dependencies = [
 [[package]]
 name = "easytier-proto"
 version = "2.7.0"
-source = "git+https://github.com/ldoubil/EasyTier.git?branch=feat%2Fupstream-merge#5073a5919267c64a4248c37204d9000d7054b144"
+source = "git+https://github.com/ldoubil/EasyTier.git?branch=main-astral#3c5622336f8ede479be04acf1d7f2229008e1855"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4076,7 +4076,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash",
  "rustls",
- "socket2 0.6.5",
+ "socket2 0.5.10",
  "thiserror 2.0.21",
  "tokio",
  "tracing",
@@ -4117,7 +4117,7 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2 0.6.5",
+ "socket2 0.5.10",
  "tracing",
  "windows-sys 0.61.2",
 ]
