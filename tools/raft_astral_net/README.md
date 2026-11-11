@@ -33,7 +33,7 @@ copy bin\plugin\AstralRaftNet.dll dist\AstralRaftNet.dll
 
 - **Astral 是 Raft 唯一的联机通道。** `SendP2P` / `RPC` / `RPCExclude` / `Platform_HostGame` / `ReadP2P_Channel_Connecting` 等由补丁无条件接管，官方 PlayFab 房、Steam 好友房、跨平台房一律不再走通。这是设计目标，不是待修缺陷，不要为「让原版还能用」加回放行或回退分支。
 - **没有开关。** 不再提供「启用Astral局域网」选项，也不读取 `AstralLanEnabled` / `AstralLanEnabledVersion`；安装补丁即生效。唯一例外是游戏内联机权限选「不允许」（`ALLOW_NONE`，单机模式）时不监听、不广播。
-- **身份。** SteamID 可用时使用真实 SteamID；单机/离线没有 SteamID 时，插件生成并持久化自建唯一 ID（`PlayerPrefs` 键 `AstralLocalId`），不回落到原版 PlayFab 身份。
+- **身份。** 只使用游戏本身的真实 SteamID，不回落到原版 PlayFab 身份，也不生成任何自建 ID。拿不到有效 SteamID 时明确报错（日志 + 界面提示），联机与存档归属均不可用。
 
 ## 手动注入（备用）
 
