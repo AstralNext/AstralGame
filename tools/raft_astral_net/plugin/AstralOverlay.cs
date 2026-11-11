@@ -380,7 +380,7 @@ namespace AstralRaftNet
                     port = AstralTransport.DefaultPort;
                 }
 
-                AstralTransport.Port = port;
+                // 端口只由 StartListen 收口，不再单独写 Port，避免广播端口和实际绑定端口分叉。
                 AstralTransport.StartListen(port);
             }
 
@@ -404,12 +404,19 @@ namespace AstralRaftNet
             if (GUILayout.Button("加入 IP:端口"))
             {
                 int port;
-                if (int.TryParse(_portText, out port))
+                if (!int.TryParse(_portText, out port) || port <= 0 || port > 65535)
                 {
-                    AstralTransport.Port = port;
+                    port = AstralTransport.DefaultPort;
                 }
 
-                AstralTransport.ConnectAndJoin(_address, _password);
+                // 地址里没写端口时把面板上的端口补进去，不再依赖全局 Port。
+                string target = _address;
+                if (!string.IsNullOrEmpty(target) && target.IndexOf(':') < 0)
+                {
+                    target = target + ":" + port;
+                }
+
+                AstralTransport.ConnectAndJoin(target, _password);
             }
 
             GUILayout.Space(6f);
