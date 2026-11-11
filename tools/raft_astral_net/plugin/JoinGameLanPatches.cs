@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Reflection;
 using HarmonyLib;
 using Steamworks;
 using UnityEngine;
@@ -6,7 +8,7 @@ using UnityEngine.UI;
 
 namespace AstralRaftNet
 {
-    [HarmonyPatch(typeof(JoinGameBoxConsole), nameof(JoinGameBoxConsole.Open))]
+    [HarmonyPatch(typeof(JoinGameBoxConsole), nameof(JoinGameBoxConsole.Open), new Type[0])]
     internal static class Patch_JoinConsoleOpen
     {
         private static void Postfix(JoinGameBoxConsole __instance)
@@ -18,7 +20,7 @@ namespace AstralRaftNet
         }
     }
 
-    [HarmonyPatch(typeof(JoinGameBoxConsole), "Update")]
+    [HarmonyPatch(typeof(JoinGameBoxConsole), "Update", new Type[0])]
     internal static class Patch_JoinConsoleUpdate
     {
         private static void Postfix(JoinGameBoxConsole __instance)
@@ -27,7 +29,7 @@ namespace AstralRaftNet
         }
     }
 
-    [HarmonyPatch(typeof(JoinGameBoxConsole), "RefreshGames")]
+    [HarmonyPatch(typeof(JoinGameBoxConsole), "RefreshGames", new Type[0])]
     internal static class Patch_JoinConsoleRefresh
     {
         private static bool Prefix(JoinGameBoxConsole __instance)
@@ -39,16 +41,17 @@ namespace AstralRaftNet
         }
     }
 
-    [HarmonyPatch(typeof(JoinGameBoxConsole), nameof(JoinGameBoxConsole.Join))]
+    [HarmonyPatch(typeof(JoinGameBoxConsole), nameof(JoinGameBoxConsole.Join), new Type[0])]
     internal static class Patch_JoinConsoleJoin
     {
         private static bool Prefix(JoinGameBoxConsole __instance)
         {
-            return !AstralJoinConsole.TryJoin(__instance);
+            AstralJoinConsole.TryJoin(__instance);
+            return false;
         }
     }
 
-    [HarmonyPatch(typeof(JoinGameBox), nameof(JoinGameBox.Open))]
+    [HarmonyPatch(typeof(JoinGameBox), nameof(JoinGameBox.Open), new Type[0])]
     internal static class Patch_JoinOpenLan
     {
         private static void Postfix(JoinGameBox __instance)
@@ -58,7 +61,7 @@ namespace AstralRaftNet
         }
     }
 
-    [HarmonyPatch(typeof(JoinGameBox), "RefreshGames")]
+    [HarmonyPatch(typeof(JoinGameBox), "RefreshGames", new Type[0])]
     internal static class Patch_RefreshGames
     {
         private static bool Prefix(JoinGameBox __instance)
@@ -69,7 +72,7 @@ namespace AstralRaftNet
         }
     }
 
-    [HarmonyPatch(typeof(JoinGameBox), nameof(JoinGameBox.JoinSelectedGame))]
+    [HarmonyPatch(typeof(JoinGameBox), nameof(JoinGameBox.JoinSelectedGame), new Type[0])]
     internal static class Patch_JoinSelectedGame
     {
         private static bool Prefix(JoinGameBox __instance)
@@ -79,26 +82,26 @@ namespace AstralRaftNet
         }
     }
 
-    [HarmonyPatch(typeof(JoinGame_Selection), nameof(JoinGame_Selection.Set))]
+    [HarmonyPatch(typeof(JoinGame_Selection), nameof(JoinGame_Selection.Set), new[]
+    {
+        typeof(CSteamID), typeof(bool)
+    })]
     internal static class Patch_JoinSelectionSet
     {
         private static bool Prefix(JoinGame_Selection __instance, CSteamID steamID, bool passwordProtected)
         {
             LanRoom room;
-            if (!AstralLanDiscovery.TryGet(steamID, out room))
-            {
-                return true;
-            }
+            bool known = AstralLanDiscovery.TryGet(steamID, out room);
 
             __instance.steamID = steamID;
             __instance.passwordProtected = passwordProtected;
-            Text name = AccessTools.Field(typeof(JoinGame_Selection), "text_GameName").GetValue(__instance) as Text;
+            Text name = AstralReflection.Field(typeof(JoinGame_Selection), "text_GameName").GetValue(__instance) as Text;
             if (name != null)
             {
-                name.text = room.DisplayName;
+                name.text = known ? room.DisplayName : string.Empty;
             }
 
-            Image lockImage = AccessTools.Field(typeof(JoinGame_Selection), "image_passwordLock").GetValue(__instance) as Image;
+            Image lockImage = AstralReflection.Field(typeof(JoinGame_Selection), "image_passwordLock").GetValue(__instance) as Image;
             if (lockImage != null)
             {
                 lockImage.gameObject.SetActive(passwordProtected);
@@ -117,8 +120,8 @@ namespace AstralRaftNet
                 return;
             }
 
-            AccessTools.Field(typeof(JoinGameBoxConsole), "multiplayerAllowed").SetValue(box, true);
-            AccessTools.Field(typeof(JoinGameBoxConsole), "crossplayAllowed").SetValue(box, true);
+            AstralReflection.Field(typeof(JoinGameBoxConsole), "multiplayerAllowed").SetValue(box, true);
+            AstralReflection.Field(typeof(JoinGameBoxConsole), "crossplayAllowed").SetValue(box, true);
             GameObject offline = Field<GameObject>(box, "onlineFeaturesNotAvailable");
             if (offline != null)
             {
@@ -222,7 +225,7 @@ namespace AstralRaftNet
             }
 
             list.Clear();
-            AccessTools.Field(typeof(JoinGameBoxConsole), "selectedGame").SetValue(box, null);
+            AstralReflection.Field(typeof(JoinGameBoxConsole), "selectedGame").SetValue(box, null);
 
             List<LanRoom> rooms = AstralLanDiscovery.Snapshot();
             for (int i = 0; i < rooms.Count; i++)
@@ -232,15 +235,17 @@ namespace AstralRaftNet
                 list.Add(item);
                 JoinableSession session = default(JoinableSession);
                 session.onlineId = room.DisplayName;
+                // 这里只把发现包里的 SteamID 当作"选中项索引"，不当作会话身份；
+                // 真正的房主身份由 AstralTransport 握手确认。
                 session.steamID = new CSteamID(room.SteamId);
                 item.SetInfo(session, room.Password);
-                Text mode = AccessTools.Field(typeof(JoinGameConsole_Selection), "gameMode").GetValue(item) as Text;
+                Text mode = AstralReflection.Field(typeof(JoinGameConsole_Selection), "gameMode").GetValue(item) as Text;
                 if (mode != null)
                 {
                     mode.text = "ASGAME";
                 }
 
-                Text cross = AccessTools.Field(typeof(JoinGameConsole_Selection), "crossPlay").GetValue(item) as Text;
+                Text cross = AstralReflection.Field(typeof(JoinGameConsole_Selection), "crossPlay").GetValue(item) as Text;
                 if (cross != null)
                 {
                     cross.text = "LAN";
@@ -253,30 +258,28 @@ namespace AstralRaftNet
             }
         }
 
-        public static bool TryJoin(JoinGameBoxConsole box)
+        public static void TryJoin(JoinGameBoxConsole box)
         {
             JoinGameConsole_Selection selected = Field<JoinGameConsole_Selection>(box, "selectedGame");
             if (selected == null || !selected.session.steamID.IsValid())
             {
-                return false;
+                return;
             }
 
             LanRoom room;
             if (!AstralLanDiscovery.TryGet(selected.session.steamID, out room))
             {
                 AstralLog.Error("LAN room expired, refresh");
-                return true;
+                return;
             }
 
             AstralLog.Info("join LAN " + room.EndPoint);
-            AstralTransport.ConnectAndJoin(room.EndPoint, GameManager.Password ?? string.Empty);
+            AstralTransport.ConnectAndJoin(room.EndPoint, GameManager.Password ?? string.Empty, room.SteamId);
             ConnectingBox connecting = Field<ConnectingBox>(box, "connectingBox");
             if (connecting != null)
             {
                 connecting.gameObject.SetActive(true);
             }
-
-            return true;
         }
 
         private static void RelabelEmpty(GameObject go, string label)
@@ -308,12 +311,19 @@ namespace AstralRaftNet
 
         private static T Field<T>(object instance, string name) where T : class
         {
+            FieldInfo field = AstralReflection.Field(instance.GetType(), name);
+            if (field == null)
+            {
+                return null;
+            }
+
             try
             {
-                return AccessTools.Field(instance.GetType(), name).GetValue(instance) as T;
+                return field.GetValue(instance) as T;
             }
-            catch
+            catch (Exception ex)
             {
+                AstralLog.Error("read field " + instance.GetType().Name + "." + name + ": " + ex.Message);
                 return null;
             }
         }
@@ -353,7 +363,7 @@ namespace AstralRaftNet
                 }
             }
 
-            GameObject none = AccessTools.Field(typeof(JoinGameBox), "noGamesFoundsText").GetValue(box) as GameObject;
+            GameObject none = AstralReflection.Field(typeof(JoinGameBox), "noGamesFoundsText").GetValue(box) as GameObject;
             if (none != null)
             {
                 DisableLocalize(none);
@@ -367,10 +377,10 @@ namespace AstralRaftNet
 
         public static void Populate(JoinGameBox box)
         {
-            ScrollRect scroll = AccessTools.Field(typeof(JoinGameBox), "scrollRect").GetValue(box) as ScrollRect;
-            JoinGame_Selection prefab = AccessTools.Field(typeof(JoinGameBox), "gameSelectionPrefab").GetValue(box) as JoinGame_Selection;
-            List<JoinGame_Selection> list = AccessTools.Field(typeof(JoinGameBox), "joinGameSelections").GetValue(box) as List<JoinGame_Selection>;
-            GameObject none = AccessTools.Field(typeof(JoinGameBox), "noGamesFoundsText").GetValue(box) as GameObject;
+            ScrollRect scroll = AstralReflection.Field(typeof(JoinGameBox), "scrollRect").GetValue(box) as ScrollRect;
+            JoinGame_Selection prefab = AstralReflection.Field(typeof(JoinGameBox), "gameSelectionPrefab").GetValue(box) as JoinGame_Selection;
+            List<JoinGame_Selection> list = AstralReflection.Field(typeof(JoinGameBox), "joinGameSelections").GetValue(box) as List<JoinGame_Selection>;
+            GameObject none = AstralReflection.Field(typeof(JoinGameBox), "noGamesFoundsText").GetValue(box) as GameObject;
             if (scroll == null || prefab == null || list == null)
             {
                 return;
@@ -385,7 +395,7 @@ namespace AstralRaftNet
             }
 
             list.Clear();
-            AccessTools.Field(typeof(JoinGameBox), "selectedGame").SetValue(box, null);
+            AstralReflection.Field(typeof(JoinGameBox), "selectedGame").SetValue(box, null);
 
             List<LanRoom> rooms = AstralLanDiscovery.Snapshot();
             for (int i = 0; i < rooms.Count; i++)
@@ -402,29 +412,27 @@ namespace AstralRaftNet
             }
         }
 
-        public static bool TryJoinSelected(JoinGameBox box)
+        public static void TryJoinSelected(JoinGameBox box)
         {
-            JoinGame_Selection selected = AccessTools.Field(typeof(JoinGameBox), "selectedGame").GetValue(box) as JoinGame_Selection;
+            JoinGame_Selection selected = AstralReflection.Field(typeof(JoinGameBox), "selectedGame").GetValue(box) as JoinGame_Selection;
             if (selected == null || !selected.steamID.IsValid())
             {
-                return false;
+                return;
             }
 
             LanRoom room;
             if (!AstralLanDiscovery.TryGet(selected.steamID, out room))
             {
                 AstralLog.Error("LAN room expired, refresh");
-                return true;
+                return;
             }
 
             AstralLog.Info("join LAN " + room.EndPoint);
-            AstralTransport.ConnectAndJoin(room.EndPoint, GameManager.Password ?? string.Empty);
+            AstralTransport.ConnectAndJoin(room.EndPoint, GameManager.Password ?? string.Empty, room.SteamId);
             if (box.connectingBox != null)
             {
                 box.connectingBox.gameObject.SetActive(true);
             }
-
-            return true;
         }
 
         private static void DisableLocalize(GameObject go)

@@ -1,4 +1,3 @@
-using HarmonyLib;
 using PlayFab.ClientModels;
 using PlayFab.Party;
 using Unity.Collections;
@@ -48,7 +47,8 @@ namespace AstralRaftNet
                 Id = steamId.ToString("X"),
                 Type = "title_player_account"
             };
-            AccessTools.Method(typeof(PlayFabPlayer), "_SetEntityKey").Invoke(player, new object[] { key });
+            AstralReflection.Method(typeof(PlayFabPlayer), "_SetEntityKey", typeof(EntityKey))
+                .Invoke(player, new object[] { key });
             return player;
         }
     }

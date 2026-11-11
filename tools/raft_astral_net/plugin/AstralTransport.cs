@@ -10,6 +10,7 @@ using System.Text;
 using System.Threading;
 using HarmonyLib;
 using kcp2k;
+using PlayFab.Party;
 using Steamworks;
 using UnityEngine;
 
@@ -25,6 +26,25 @@ namespace AstralRaftNet
         private const byte KindWelcome = 2;
         private const byte KindKcp = 3;
         private const byte KindUnreliable = 4;
+        // 握手 v2：密码不明文，只发 nonce + SHA256(nonce||password)。
+        private const byte KindHelloV2 = 5;
+
+        // 中继帧：可靠帧的 channel 字节最高位置 1，负载前 8 字节是原始发送者 SteamID。
+        private const byte ChannelRelayFlag = AstralWireFormat.ChannelRelayFlag;
+
+        // 每帧最多应用/反序列化的网络消息数。首次进房世界快照上万条，
+        // 单帧全量应用会直接卡死主线程，必须分帧。
+        private const int ApplyBudgetPerFrame = 200;
+        private const int DeserializeBudgetPerFrame = 400;
+        private const int PendingHighWater = 1000;
+
+        // 世界下发超时（秒）。超时后自动重试，重试次数用完才提示玩家。
+        private const float WorldTimeoutSeconds = 60f;
+        // 超时后自动重试的最大次数（不含首次请求）；用完即停，不会无限循环。
+        private const int MaxWorldAutoRetries = 3;
+
+        // 单机/离线没有 SteamID 时使用的自建身份，持久化保证存档归属稳定。
+        private const string PrefLocalId = "AstralLocalId";
 
         private static readonly ConcurrentQueue<Action> MainThread = new ConcurrentQueue<Action>();
         private static readonly ConcurrentQueue<QueuedPacket>[] Incoming =
@@ -38,10 +58,10 @@ namespace AstralRaftNet
         private static readonly object[] ParseArgs = new object[2];
         private static MethodInfo _parseRemote;
         private static FastInvokeHandler _parseRemoteInvoke;
-        private static FieldInfo _localSteamField;
-        private static ulong _boundSteamId;
         private static Raft_Network _cachedNetwork;
         private static bool _worldInitDone;
+        private static readonly object LocalIdLock = new object();
+        private static ulong _generatedLocalId;
 
         private static readonly Dictionary<ulong, Peer> Peers = new Dictionary<ulong, Peer>();
         private static readonly object PeersLock = new object();
@@ -52,7 +72,8 @@ namespace AstralRaftNet
         private static volatile bool _recvRunning;
         private static volatile bool _listening;
         private static byte[] _handshakeWelcome;
-        private static IPEndPoint _handshakeFrom;
+        private static IPEndPoint _handshakeTarget;
+        private static ulong _announcedHostSteam;
         private static int _listenPort = DefaultPort;
         private static string _status = "idle";
         private static volatile bool _connecting;
@@ -61,6 +82,19 @@ namespace AstralRaftNet
         private static bool _astralWorldReceived;
         private static float _lastWorldRequest;
         private static float _lastLandmarkWaitLog;
+        private static float _joinWatchdogStart;
+        private static volatile bool _worldTimedOut;
+        private static int _worldAutoRetries;
+
+        // 中继去重：房主应用某条客机消息期间，游戏自身可能已经用 RPC/RPCExclude 转发过，
+        // 这里记录应用期间已经发到过的 peer，之后只补发没收到的那部分。
+        private static readonly HashSet<ulong> RelaySent = new HashSet<ulong>();
+        private static bool _relayTracking;
+
+        // 分帧展开 Compound 的游标，跨帧保持。
+        private static Message_Compound _expandingCompound;
+        private static int _expandingIndex;
+        private static PendingMessage _expandingItem;
 
         public static int Port
         {
@@ -108,6 +142,7 @@ namespace AstralRaftNet
             DeliverMessages();
             TryRequestWorldAsClient();
             TickWorldInit();
+            TickWorldTimeout();
             if (IsJoining && !_astralWorldReceived)
             {
                 StopConnectingBox();
@@ -124,75 +159,89 @@ namespace AstralRaftNet
             get { return _astralWorldReceived; }
         }
 
-        public static bool IsActive
+        /// <summary>
+        /// 联机身份：只认真实 SteamID。拿不到时返回 0，调用方必须报错，
+        /// 不允许静默改用别的 ID。LocalId 只在离线单机给存档归属用。
+        /// </summary>
+        public static ulong SteamId
         {
-            get { return AstralSettings.EnableLan || _listening || IsJoining || PeerCount > 0; }
+            get
+            {
+                try
+                {
+                    CSteamID steam = SteamUser.GetSteamID();
+                    return steam.IsValid() ? steam.m_SteamID : 0UL;
+                }
+                catch (Exception)
+                {
+                    return 0UL;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 离线身份：仅在拿不到 SteamID 的单机/离线场景用于存档归属，
+        /// 不参与联机握手、peer 标识或 hostID。
+        /// </summary>
+        public static ulong LocalId
+        {
+            get
+            {
+                ulong steam = SteamId;
+                if (steam != 0UL)
+                {
+                    return steam;
+                }
+
+                lock (LocalIdLock)
+                {
+                    if (_generatedLocalId != 0UL)
+                    {
+                        return _generatedLocalId;
+                    }
+
+                    string saved = PlayerPrefs.GetString(PrefLocalId, string.Empty);
+                    ulong id;
+                    if (!ulong.TryParse(saved, out id) || id == 0UL)
+                    {
+                        id = BitConverter.ToUInt64(Guid.NewGuid().ToByteArray(), 0);
+                        if (id == 0UL)
+                        {
+                            id = 1UL;
+                        }
+
+                        PlayerPrefs.SetString(PrefLocalId, id.ToString());
+                        PlayerPrefs.Save();
+                        AstralLog.Info("generated local id " + id);
+                    }
+
+                    _generatedLocalId = id;
+                    return id;
+                }
+            }
         }
 
         public static void ClearJoinState()
         {
             _connecting = false;
             _joinHostSteam = 0UL;
+            _announcedHostSteam = 0UL;
+            _handshakeWelcome = null;
+            _handshakeTarget = null;
             _sceneLoadStarted = false;
             _astralWorldReceived = false;
             _worldInitDone = false;
             _cachedNetwork = null;
-            _boundSteamId = 0UL;
+            _worldAutoRetries = 0;
             _lastWorldRequest = 0f;
             _lastLandmarkWaitLog = 0f;
-        }
-
-        public static void BindLocalSteamId(Raft_Network network = null)
-        {
-            if (!IsActive)
-            {
-                return;
-            }
-
-            try
-            {
-                CSteamID steam = SteamUser.GetSteamID();
-                if (!steam.IsValid())
-                {
-                    return;
-                }
-
-                if (_boundSteamId == steam.m_SteamID && _cachedNetwork != null)
-                {
-                    return;
-                }
-
-                if (network == null)
-                {
-                    network = GetNetwork();
-                }
-
-                if (network == null)
-                {
-                    return;
-                }
-
-                if (_localSteamField == null)
-                {
-                    _localSteamField = AccessTools.Field(typeof(Raft_Network), "localSteamID");
-                }
-
-                Network_UserId id = new Network_UserId(steam.m_SteamID);
-                Network_UserId current = (Network_UserId)_localSteamField.GetValue(network);
-                _boundSteamId = steam.m_SteamID;
-                _cachedNetwork = network;
-                if (current.Id == id.Id)
-                {
-                    return;
-                }
-
-                _localSteamField.SetValue(network, id);
-                AstralLog.Info("bind localSteamID steam=" + steam.m_SteamID + " was=" + current.Id);
-            }
-            catch (Exception ex)
-            {
-                AstralLog.Error("bind localSteamID: " + ex.Message);
-            }
+            _joinWatchdogStart = 0f;
+            _worldTimedOut = false;
+            _expandingCompound = null;
+            _expandingIndex = 0;
+            _expandingItem = default(PendingMessage);
+            _relayTracking = false;
+            RelaySent.Clear();
         }
 
         private static void TickWorldInit()
@@ -202,7 +251,6 @@ namespace AstralRaftNet
                 return;
             }
 
-            BindLocalSteamId(null);
             if (!_astralWorldReceived)
             {
                 return;
@@ -216,16 +264,15 @@ namespace AstralRaftNet
                     return;
                 }
 
-                BindLocalSteamId(network);
-                object running = AccessTools.Field(typeof(Raft_Network), "worldLoadedCoroutine").GetValue(network);
+                object running = AstralReflection.Field(typeof(Raft_Network), "worldLoadedCoroutine").GetValue(network);
                 if (running == null)
                 {
-                    MethodInfo method = AccessTools.Method(typeof(Raft_Network), "WorldHasBeenLoaded");
+                    MethodInfo method = AstralReflection.Method(typeof(Raft_Network), "WorldHasBeenLoaded");
                     IEnumerator routine = method.Invoke(network, null) as IEnumerator;
                     if (routine != null)
                     {
                         Coroutine started = network.StartCoroutine(routine);
-                        AccessTools.Field(typeof(Raft_Network), "worldLoadedCoroutine").SetValue(network, started);
+                        AstralReflection.Field(typeof(Raft_Network), "worldLoadedCoroutine").SetValue(network, started);
                         AstralLog.Info("start WorldHasBeenLoaded");
                     }
                 }
@@ -261,7 +308,8 @@ namespace AstralRaftNet
         private static void DeliverMessages()
         {
             QueuedPacket packet;
-            while (IncomingMessages.TryDequeue(out packet))
+            int deserializeBudget = DeserializeBudgetPerFrame;
+            while (deserializeBudget > 0 && Pending.Count < PendingHighWater && IncomingMessages.TryDequeue(out packet))
             {
                 try
                 {
@@ -272,10 +320,18 @@ namespace AstralRaftNet
                         continue;
                     }
 
+                    Message_Compound compound = message as Message_Compound;
+                    deserializeBudget -= compound != null && compound.messages != null
+                        ? Math.Max(1, compound.messages.Count)
+                        : 1;
                     Pending.Enqueue(new PendingMessage
                     {
                         SteamId = packet.SteamId,
-                        Message = message
+                        Message = message,
+                        Raw = packet.Data,
+                        Channel = packet.Channel,
+                        Unreliable = packet.Unreliable,
+                        Relayed = packet.Relayed
                     });
                 }
                 catch (Exception ex)
@@ -284,7 +340,7 @@ namespace AstralRaftNet
                 }
             }
 
-            if (Pending.Count == 0)
+            if (Pending.Count == 0 && _expandingCompound == null)
             {
                 return;
             }
@@ -297,81 +353,255 @@ namespace AstralRaftNet
 
             if (_parseRemoteInvoke == null)
             {
-                _parseRemote = AccessTools.Method(typeof(Raft_Network), "ParseRemoteMessage");
+                _parseRemote = AstralReflection.Method(typeof(Raft_Network), "ParseRemoteMessage",
+                    typeof(Message), typeof(PlayFabPlayer));
                 _parseRemoteInvoke = MethodInvoker.GetHandler(_parseRemote);
             }
 
-            // 原版 PlayFab 回调里会把当前收到的包全部处理完。进房后若每帧只吃几十条，
-            // 玩家位移/木筏同步会越积越多，体感就是卡顿掉帧。
-            int applied = 0;
-            while (Pending.Count > 0)
+            // 每帧只应用固定配额，剩余留在队列里。实体位移等实时消息只是晚一两帧，
+            // 而世界快照不会再把主线程一次性卡死。
+            int budget = ApplyBudgetPerFrame;
+            while (budget > 0)
             {
-                applied += ApplyPending(network, Pending.Dequeue());
-            }
+                if (_expandingCompound != null)
+                {
+                    if (_expandingIndex >= _expandingCompound.messages.Count)
+                    {
+                        FinishExpand();
+                        continue;
+                    }
 
-            if (applied > 200)
-            {
-                AstralLog.Info("applied " + applied + " net messages this frame");
+                    Message child = _expandingCompound.messages[_expandingIndex++];
+                    ApplyOne(network, _expandingItem.SteamId, child);
+                    budget--;
+                    if (_expandingIndex >= _expandingCompound.messages.Count)
+                    {
+                        FinishExpand();
+                    }
+
+                    continue;
+                }
+
+                if (Pending.Count == 0)
+                {
+                    break;
+                }
+
+                PendingMessage item = Pending.Dequeue();
+                if (item.Message != null && item.Message.Type == Messages.Compound)
+                {
+                    Message_Compound compound = item.Message as Message_Compound;
+                    if (compound == null || compound.messages == null)
+                    {
+                        AstralLog.Error("compound empty from=" + item.SteamId);
+                        continue;
+                    }
+
+                    AstralLog.Info("expand Compound children=" + compound.messages.Count + " from=" + item.SteamId);
+                    _expandingCompound = compound;
+                    _expandingIndex = 0;
+                    _expandingItem = item;
+                    continue;
+                }
+
+                ApplyWithRelay(network, item);
+                budget--;
             }
         }
 
-        private static int ApplyPending(Raft_Network network, PendingMessage item)
+        private static void FinishExpand()
         {
-            if (item.Message != null && item.Message.Type == Messages.Compound)
+            // Compound 只由房主在世界下发时生成，客机不会发 Compound，
+            // 因此这里不转发，避免把整份世界快照再回灌给其他客机。
+            _expandingCompound = null;
+            _expandingIndex = 0;
+            _expandingItem = default(PendingMessage);
+        }
+
+        /// <summary>
+        /// 应用一条客机消息；房主应用结束后，把游戏自身没有转发到的 peer 补齐。
+        /// </summary>
+        private static void ApplyWithRelay(Raft_Network network, PendingMessage item)
+        {
+            bool relay = CanRelay(item);
+            if (relay)
             {
-                Message_Compound compound = item.Message as Message_Compound;
-                if (compound == null || compound.messages == null)
-                {
-                    AstralLog.Error("compound empty from=" + item.SteamId);
-                    return 0;
-                }
-
-                AstralLog.Info("expand Compound children=" + compound.messages.Count + " from=" + item.SteamId);
-                int applied = 0;
-                for (int i = 0; i < compound.messages.Count; i++)
-                {
-                    applied += ApplyPending(network, new PendingMessage
-                    {
-                        SteamId = item.SteamId,
-                        Message = compound.messages[i]
-                    });
-                }
-
-                return applied;
+                RelaySent.Clear();
+                _relayTracking = true;
             }
 
             try
             {
+                ApplyOne(network, item.SteamId, item.Message);
+            }
+            finally
+            {
+                _relayTracking = false;
+            }
+
+            if (relay)
+            {
+                RelayToPeers(item, RelaySent);
+            }
+        }
+
+        private static bool CanRelay(PendingMessage item)
+        {
+            if (!_listening || item.Relayed || item.Raw == null || item.SteamId == 0UL || item.Message == null)
+            {
+                return false;
+            }
+
+            if (!Raft_Network.IsHost || IsSessionControl(item.Message.Type))
+            {
+                return false;
+            }
+
+            // 只有房主 + 至少两个客机才需要中继。
+            return PeerCount > 1;
+        }
+
+        /// <summary>
+        /// 会话控制类消息只属于客机 ↔ 房主，不能转给其他客机。
+        /// 例如 PlayerJoined 被转发后，其他客机会误以为有人要加入并回 KickUser。
+        /// </summary>
+        private static bool IsSessionControl(Messages type)
+        {
+            switch (type)
+            {
+                case Messages.RequestWorld:
+                case Messages.PlayerJoined:
+                case Messages.InitiateResult:
+                case Messages.NetworkVersion:
+                case Messages.KickUser:
+                case Messages.Ping:
+                case Messages.Pong:
+                case Messages.WorldReceived:
+                case Messages.WorldGuid:
+                case Messages.Save:
+                case Messages.CreatePlayer:
+                case Messages.Compound:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private static void RelayToPeers(PendingMessage item, HashSet<ulong> alreadySent)
+        {
+            List<ulong> ids;
+            lock (PeersLock)
+            {
+                ids = new List<ulong>(Peers.Keys);
+            }
+
+            int relayed = 0;
+            for (int i = 0; i < ids.Count; i++)
+            {
+                ulong id = ids[i];
+                if (id == item.SteamId || alreadySent.Contains(id))
+                {
+                    continue;
+                }
+
+                if (TrySendRelayed(id, item.Raw, item.Channel, item.Unreliable, item.SteamId))
+                {
+                    relayed++;
+                }
+            }
+
+            if (relayed > 0)
+            {
+                AstralLog.Info(
+                    "relay " + item.Message.Type + " from=" + item.SteamId + " to=" + relayed + " peers");
+            }
+        }
+
+        /// <summary>
+        /// 转发时保留原始发送者：负载前 8 字节写入来源 SteamID，
+        /// 接收端据此还原 remoteID，避免所有中继消息都被当成房主发的。
+        /// </summary>
+        private static bool TrySendRelayed(ulong steamId, byte[] raw, int channel, bool unreliable, ulong origin)
+        {
+            if (raw == null || origin == 0UL)
+            {
+                return false;
+            }
+
+            Peer peer;
+            lock (PeersLock)
+            {
+                if (!Peers.TryGetValue(steamId, out peer))
+                {
+                    return false;
+                }
+            }
+
+            byte[] framed = AstralWireFormat.FrameRelay(raw, origin);
+            byte marked = (byte)(channel | ChannelRelayFlag);
+
+            try
+            {
+                if (unreliable && framed.Length <= MaxUnreliable)
+                {
+                    peer.SendUnreliable(marked, framed);
+                }
+                else
+                {
+                    peer.SendReliable(marked, framed);
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                AstralLog.Error("relay send failed to=" + steamId + ": " + ex.Message);
+                RemovePeer(steamId);
+                return false;
+            }
+        }
+
+        private static ulong ReadRelayOrigin(ref byte[] payload)
+        {
+            ulong origin;
+            return AstralWireFormat.TryUnframeRelay(ref payload, out origin) ? origin : 0UL;
+        }
+
+        private static int ApplyOne(Raft_Network network, ulong steamId, Message message)
+        {
+            try
+            {
                 object fake;
-                if (!FakePlayers.TryGetValue(item.SteamId, out fake) || fake == null)
+                if (!FakePlayers.TryGetValue(steamId, out fake) || fake == null)
                 {
-                    fake = AstralMessages.FakePlayer(item.SteamId);
-                    FakePlayers[item.SteamId] = fake;
+                    fake = AstralMessages.FakePlayer(steamId);
+                    FakePlayers[steamId] = fake;
                 }
 
-                if (item.Message != null && ShouldLog(item.Message.Type))
+                if (message != null && ShouldLog(message.Type))
                 {
-                    AstralLog.Info("recv " + item.Message.Type + " from=" + item.SteamId + " left=" + Pending.Count);
+                    AstralLog.Info("recv " + message.Type + " from=" + steamId + " left=" + Pending.Count);
                 }
 
-                if (item.Message != null && item.Message.Type == Messages.CreatePlayer)
+                if (message != null && message.Type == Messages.CreatePlayer)
                 {
-                    Message_Player_Create create = item.Message as Message_Player_Create;
+                    Message_Player_Create create = message as Message_Player_Create;
                     if (create != null)
                     {
                         AstralLog.Info("recv CreatePlayer user=" + create.UserId.Id + " local=" + network.LocalSteamID.Id);
                     }
                 }
 
-                ParseArgs[0] = item.Message;
+                ParseArgs[0] = message;
                 ParseArgs[1] = fake;
                 _parseRemoteInvoke(network, ParseArgs);
                 ParseArgs[0] = null;
                 ParseArgs[1] = null;
 
-                if (item.Message != null && item.Message.Type == Messages.WorldReceived)
+                if (message != null && message.Type == Messages.WorldReceived)
                 {
                     _astralWorldReceived = true;
+                    _worldTimedOut = false;
                     _status = "world received peers=" + PeerCount;
                     AstralLog.Info("world snapshot applied, localPlayer=" + (network.GetLocalPlayer() != null));
                     SnapLocalPlayerToBed(network);
@@ -382,7 +612,7 @@ namespace AstralRaftNet
             catch (TargetInvocationException ex)
             {
                 Exception inner = ex.InnerException ?? ex;
-                AstralLog.Error("parse " + (item.Message != null ? item.Message.Type.ToString() : "?") + ": " + inner);
+                AstralLog.Error("parse " + (message != null ? message.Type.ToString() : "?") + ": " + inner);
                 return 1;
             }
             catch (Exception ex)
@@ -406,7 +636,7 @@ namespace AstralRaftNet
             try
             {
                 Network_Player local = network.GetLocalPlayer();
-                FieldInfo bedField = AccessTools.Field(typeof(Raft_Network), "bedRespawnPoint");
+                FieldInfo bedField = AstralReflection.Field(typeof(Raft_Network), "bedRespawnPoint");
                 GameObject bed = bedField != null ? bedField.GetValue(network) as GameObject : null;
                 if (bed == null)
                 {
@@ -428,7 +658,7 @@ namespace AstralRaftNet
                 Behaviour controller = null;
                 if (local.PersonController != null)
                 {
-                    FieldInfo controllerField = AccessTools.Field(typeof(PersonController), "controller");
+                    FieldInfo controllerField = AstralReflection.Field(typeof(PersonController), "controller");
                     if (controllerField != null)
                     {
                         controller = controllerField.GetValue(local.PersonController) as Behaviour;
@@ -477,10 +707,17 @@ namespace AstralRaftNet
             Port = port;
             try
             {
+                // 联机身份必须是真实 SteamID；拿不到就报错，不静默换成 LocalId。
+                if (SteamId == 0UL)
+                {
+                    _status = "listen failed: no steam id";
+                    AstralLog.Error("listen refused: no valid SteamID, online play needs Steam");
+                    return;
+                }
+
                 EnsureSocket(Port);
                 _listening = true;
                 _status = "listen udp 0.0.0.0:" + Port;
-                BindLocalSteamId(null);
                 AstralLog.Info(_status);
             }
             catch (Exception ex)
@@ -505,8 +742,9 @@ namespace AstralRaftNet
                     name = name + " · " + SaveAndLoad.CurrentGameFileName;
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                AstralLog.Info("LAN broadcast name unavailable, use " + name + ": " + ex.Message);
             }
 
             bool password = false;
@@ -514,8 +752,9 @@ namespace AstralRaftNet
             {
                 password = GameManager.HasPassword;
             }
-            catch
+            catch (Exception ex)
             {
+                AstralLog.Info("LAN broadcast password flag unavailable, assume open: " + ex.Message);
             }
 
             AstralLanDiscovery.StartBroadcast(Port, password, name);
@@ -568,67 +807,6 @@ namespace AstralRaftNet
             FakePlayers.Clear();
             ClearJoinState();
             _status = "idle";
-        }
-
-        public static bool IsPeer(CSteamID steamId)
-        {
-            return steamId.IsValid() && IsPeer(steamId.m_SteamID);
-        }
-
-        public static bool IsPeer(ulong steamId)
-        {
-            if (steamId == 0UL)
-            {
-                return false;
-            }
-
-            lock (PeersLock)
-            {
-                return Peers.ContainsKey(steamId);
-            }
-        }
-
-        public static bool TryPeek(int channel, out uint size)
-        {
-            QueuedPacket packet;
-            if (!ValidChannel(channel) || !Incoming[channel].TryPeek(out packet))
-            {
-                size = 0;
-                return false;
-            }
-
-            size = (uint)packet.Data.Length;
-            return true;
-        }
-
-        public static bool TryRead(int channel, byte[] dest, uint destSize, out uint size, out CSteamID steamId)
-        {
-            QueuedPacket packet;
-            if (!ValidChannel(channel) || !Incoming[channel].TryDequeue(out packet))
-            {
-                size = 0;
-                steamId = new CSteamID(0UL);
-                return false;
-            }
-
-            int copy = Math.Min(packet.Data.Length, (int)destSize);
-            Buffer.BlockCopy(packet.Data, 0, dest, 0, copy);
-            size = (uint)packet.Data.Length;
-            steamId = new CSteamID(packet.SteamId);
-            return true;
-        }
-
-        public static bool TrySend(CSteamID steamId, byte[] data, uint cubData, int channel, EP2PSend eP2PSendType)
-        {
-            if (!steamId.IsValid() || !ValidChannel(channel) || data == null)
-            {
-                return false;
-            }
-
-            int length = (int)Math.Min(cubData, (uint)data.Length);
-            byte[] payload = new byte[length];
-            Buffer.BlockCopy(data, 0, payload, 0, length);
-            return TrySendRaw(steamId.m_SteamID, payload, channel, IsUnreliable(eP2PSendType));
         }
 
         public static bool TrySendMessage(ulong steamId, Message message, int channel, EP2PSend sendType)
@@ -743,6 +921,13 @@ namespace AstralRaftNet
                     }
                 }
 
+                // 房主应用客机消息期间，游戏自身的 RPC/RPCExclude 会主动转发一部分消息；
+                // 记录这些 peer，之后只补发没被转发到的，避免重复投递。
+                if (_relayTracking)
+                {
+                    RelaySent.Add(steamId);
+                }
+
                 return true;
             }
             catch (Exception ex)
@@ -754,6 +939,15 @@ namespace AstralRaftNet
         }
 
         public static void ConnectAndJoin(string hostPort, string password)
+        {
+            ConnectAndJoin(hostPort, password, 0UL);
+        }
+
+        /// <param name="announcedSteam">
+        /// 发现广播里声称的房主 SteamID。只用于"发现"，真实身份以握手 WELCOME 为准，
+        /// 两者不一致时以握手值为准并记录日志。
+        /// </param>
+        public static void ConnectAndJoin(string hostPort, string password, ulong announcedSteam)
         {
             string host;
             int port;
@@ -769,14 +963,25 @@ namespace AstralRaftNet
                 return;
             }
 
-            AstralSettings.EnableLan = true;
+            // 联机身份必须是真实 SteamID；拿不到就报错，不静默换成 LocalId。
+            ulong localId = SteamId;
+            if (localId == 0UL)
+            {
+                _status = "connect failed: no steam id";
+                AstralLog.Error("join refused: no valid SteamID, online play needs Steam");
+                return;
+            }
+
             _connecting = true;
+            _announcedHostSteam = announcedSteam;
+            _handshakeWelcome = null;
+            _handshakeTarget = null;
             _status = "connecting " + host + ":" + port;
             StopConnectingBox();
-            ThreadPool.QueueUserWorkItem(_ => ConnectWorker(host, port, password ?? string.Empty));
+            ThreadPool.QueueUserWorkItem(_ => ConnectWorker(host, port, password ?? string.Empty, localId));
         }
 
-        private static void ConnectWorker(string host, int port, string password)
+        private static void ConnectWorker(string host, int port, string password, ulong localSteamId)
         {
             try
             {
@@ -798,18 +1003,36 @@ namespace AstralRaftNet
                 }
 
                 IPEndPoint hostEp = new IPEndPoint(ip, port);
-                CSteamID localId = SteamUser.GetSteamID();
+                CSteamID localId = new CSteamID(localSteamId);
                 string localName = SteamFriends.GetPersonaName() ?? "player";
-                byte[] hello = BuildHello(localId, localName, password);
                 _handshakeWelcome = null;
-                _handshakeFrom = null;
+                // WELCOME 只接受来自这个端点的包，避免同网段任意主机抢先冒充房主。
+                _handshakeTarget = hostEp;
 
-                for (int attempt = 0; attempt < 20 && _handshakeWelcome == null; attempt++)
+                byte[] hello = BuildHelloV2(localId, localName, password);
+                for (int attempt = 0; attempt < 12 && _handshakeWelcome == null; attempt++)
                 {
                     SendUdp(hostEp, hello);
                     for (int wait = 0; wait < 16 && _handshakeWelcome == null; wait++)
                     {
                         Thread.Sleep(25);
+                    }
+                }
+
+                if (_handshakeWelcome == null)
+                {
+                    // 旧版房主只认老的带明文密码的 HELLO。为了能加入旧房主必须回退一次，
+                    // 这会在链路上暴露明文密码，日志里明确提示双方升级。
+                    AstralLog.Info("handshake v2 no reply from " + hostEp
+                        + ", fallback to legacy HELLO (cleartext password); upgrade both sides to avoid");
+                    byte[] legacy = BuildLegacyHello(localId, localName, password);
+                    for (int attempt = 0; attempt < 12 && _handshakeWelcome == null; attempt++)
+                    {
+                        SendUdp(hostEp, legacy);
+                        for (int wait = 0; wait < 16 && _handshakeWelcome == null; wait++)
+                        {
+                            Thread.Sleep(25);
+                        }
                     }
                 }
 
@@ -843,8 +1066,10 @@ namespace AstralRaftNet
                     crossplay = (flags & 2) != 0;
                 }
 
-                IPEndPoint remote = _handshakeFrom ?? hostEp;
-                CreatePeer(hostSteam, remote, localId.m_SteamID);
+                // 发现包里的身份只是线索；握手结果才是本次会话的房主身份。
+                AstralLanDiscovery.ConfirmHandshake(_announcedHostSteam, hostSteam);
+                _handshakeTarget = null;
+                CreatePeer(hostSteam, hostEp, localId.m_SteamID);
 
                 _joinHostSteam = hostSteam;
                 _connecting = false;
@@ -855,6 +1080,7 @@ namespace AstralRaftNet
             catch (Exception ex)
             {
                 _connecting = false;
+                _handshakeTarget = null;
                 _status = "connect failed";
                 AstralLog.Error("connect failed: " + ex.Message);
             }
@@ -871,10 +1097,10 @@ namespace AstralRaftNet
                 return;
             }
 
-            BindLocalSteamId(network);
             ApplyHostGameMode(hostMode, friendlyFire, crossplay);
 
-            CSteamID localId = SteamUser.GetSteamID();
+            // 本机联机身份 = 真实 SteamID；LocalId 不参与联机。
+            CSteamID localId = new CSteamID(SteamId);
             if (hostId == localId)
             {
                 AstralLog.Error("不能加入自己。请用另一台电脑/另一个Raft，填房主的虚拟IP，不要填 127.0.0.1");
@@ -893,23 +1119,30 @@ namespace AstralRaftNet
             {
                 AstralLog.Info("udp ready, skip duplicate LoadScene host=" + hostId.m_SteamID);
                 // 上次 RequestWorldAsClient 协程句柄可能仍挂着，不清掉就不会再要世界。
-                AccessTools.Field(typeof(Raft_Network), "worldRequestedCoroutine").SetValue(network, null);
-                AccessTools.Field(typeof(Raft_Network), "worldLoadedCoroutine").SetValue(network, null);
+                AstralReflection.Field(typeof(Raft_Network), "worldRequestedCoroutine").SetValue(network, null);
+                AstralReflection.Field(typeof(Raft_Network), "worldLoadedCoroutine").SetValue(network, null);
+                _joinWatchdogStart = Time.realtimeSinceStartup;
+                _worldTimedOut = false;
+                _worldAutoRetries = 0;
                 TryRequestWorldAsClient();
                 _status = "reconnected " + hostId.m_SteamID;
                 return;
             }
 
             GameManager.Password = password ?? string.Empty;
-            AccessTools.Field(typeof(Raft_Network), "isHost").SetValue(null, false);
-            AccessTools.Field(typeof(Raft_Network), "connectedToHost").SetValue(network, true);
-            AccessTools.Field(typeof(Raft_Network), "hostID").SetValue(network, new Network_UserId(hostId.m_SteamID));
-            AccessTools.Field(typeof(Raft_Network), "m_currentSteamHost").SetValue(network, hostId);
-            AccessTools.Field(typeof(Raft_Network), "gameManagerStartCalled").SetValue(network, false);
-            AccessTools.Field(typeof(Raft_Network), "worldLoadedCoroutine").SetValue(network, null);
-            AccessTools.Field(typeof(Raft_Network), "worldRequestedCoroutine").SetValue(network, null);
+            AstralReflection.Field(typeof(Raft_Network), "isHost").SetValue(null, false);
+            AstralReflection.Field(typeof(Raft_Network), "connectedToHost").SetValue(network, true);
+            AstralReflection.Field(typeof(Raft_Network), "hostID").SetValue(network, new Network_UserId(hostId.m_SteamID));
+            AstralReflection.Field(typeof(Raft_Network), "m_currentSteamHost").SetValue(network, hostId);
+            AstralReflection.Field(typeof(Raft_Network), "gameManagerStartCalled").SetValue(network, false);
+            AstralReflection.Field(typeof(Raft_Network), "worldLoadedCoroutine").SetValue(network, null);
+            AstralReflection.Field(typeof(Raft_Network), "worldRequestedCoroutine").SetValue(network, null);
             _sceneLoadStarted = true;
-            AccessTools.Method(typeof(Raft_Network), "LoadScene").Invoke(network, new object[] { Raft_Network.GameSceneName });
+            _joinWatchdogStart = Time.realtimeSinceStartup;
+            _worldTimedOut = false;
+            _worldAutoRetries = 0;
+            AstralReflection.Method(typeof(Raft_Network), "LoadScene", typeof(string))
+                .Invoke(network, new object[] { Raft_Network.GameSceneName });
             _status = "joining " + hostId.m_SteamID;
             AstralLog.Info("Astral join load scene host=" + hostId.m_SteamID + " localSteam=" + network.LocalSteamID.Id + " mode=" + GameManager.GameMode);
         }
@@ -942,16 +1175,11 @@ namespace AstralRaftNet
 
                 // 与原版 OnSceneLoaded 一致：走 RequestWorldAsClient 协程，
                 // 内部会等 hostID + IsAllLandmarksLoaded，再 Platform_RequestWorldAsClient。
-                // 以前直接调 Platform_RequestWorldAsClient，地标未就绪就要世界 → 第一次卡死，
-                // 第二次场景/地标已热 → 立刻成功。
-                FieldInfo coroField = AccessTools.Field(typeof(Raft_Network), "worldRequestedCoroutine");
+                // 重试不要求场景已加载完成：IsGameSceneLoaded 只在 WorldHasBeenRecieved 之后
+                // 才置 true，拿它当守卫会让「重试世界」在加载界面里永远点不动。
+                FieldInfo coroField = AstralReflection.Field(typeof(Raft_Network), "worldRequestedCoroutine");
                 object running = coroField != null ? coroField.GetValue(network) : null;
                 if (running != null)
-                {
-                    return;
-                }
-
-                if (!LoadSceneManager.IsGameSceneLoaded || LoadSceneManager.IsLoadingScene)
                 {
                     return;
                 }
@@ -973,7 +1201,7 @@ namespace AstralRaftNet
                 }
 
                 _lastWorldRequest = Time.realtimeSinceStartup;
-                MethodInfo method = AccessTools.Method(typeof(Raft_Network), "RequestWorldAsClient");
+                MethodInfo method = AstralReflection.Method(typeof(Raft_Network), "RequestWorldAsClient");
                 IEnumerator routine = method.Invoke(network, null) as IEnumerator;
                 if (routine == null)
                 {
@@ -996,6 +1224,100 @@ namespace AstralRaftNet
             {
                 AstralLog.Error("request world: " + ex.Message);
             }
+        }
+
+        public static bool WorldTimedOut
+        {
+            get { return _worldTimedOut; }
+        }
+
+        /// <summary>
+        /// 玩家手动重试世界下发：重置自动重试预算，清掉协程句柄后重新走 RequestWorldAsClient。
+        /// </summary>
+        public static void RetryWorld()
+        {
+            if (_joinHostSteam == 0UL)
+            {
+                AstralLog.Info("retry world skipped: not in an Astral session");
+                return;
+            }
+
+            _worldAutoRetries = 0;
+            RetryWorldInternal(true);
+        }
+
+        private static void RetryWorldInternal(bool manual)
+        {
+            _astralWorldReceived = false;
+            _worldTimedOut = false;
+            _lastWorldRequest = 0f;
+            _joinWatchdogStart = Time.realtimeSinceStartup;
+            _status = manual
+                ? "retry world"
+                : "auto retry world " + _worldAutoRetries + "/" + MaxWorldAutoRetries;
+            try
+            {
+                Raft_Network network = GetNetwork();
+                if (network != null)
+                {
+                    FieldInfo coroField = AstralReflection.Field(typeof(Raft_Network), "worldRequestedCoroutine");
+                    object running = coroField != null ? coroField.GetValue(network) : null;
+                    Coroutine coroutine = running as Coroutine;
+                    if (coroutine != null)
+                    {
+                        network.StopCoroutine(coroutine);
+                    }
+
+                    if (coroField != null)
+                    {
+                        coroField.SetValue(network, null);
+                    }
+
+                    AstralReflection.Field(typeof(Raft_Network), "worldLoadedCoroutine").SetValue(network, null);
+                }
+            }
+            catch (Exception ex)
+            {
+                AstralLog.Error("retry world reset: " + ex.Message);
+            }
+
+            AstralLog.Info((manual ? "retry world" : "auto retry world")
+                + " host=" + _joinHostSteam
+                + " attempt=" + _worldAutoRetries + "/" + MaxWorldAutoRetries);
+            TryRequestWorldAsClient();
+        }
+
+        private static void TickWorldTimeout()
+        {
+            if (_astralWorldReceived || _joinHostSteam == 0UL || _joinWatchdogStart <= 0f)
+            {
+                _worldTimedOut = false;
+                return;
+            }
+
+            if (_worldTimedOut || Time.realtimeSinceStartup - _joinWatchdogStart < WorldTimeoutSeconds)
+            {
+                return;
+            }
+
+            if (_worldAutoRetries < MaxWorldAutoRetries)
+            {
+                _worldAutoRetries++;
+                AstralLog.Error("world timeout " + (int)WorldTimeoutSeconds + "s, auto retry "
+                    + _worldAutoRetries + "/" + MaxWorldAutoRetries);
+                AstralOverlay.ShowNotice("等待世界下发超时，正在自动重试（"
+                    + _worldAutoRetries + "/" + MaxWorldAutoRetries + "）");
+                RetryWorldInternal(false);
+                return;
+            }
+
+            _worldTimedOut = true;
+            _status = "world timeout " + (int)WorldTimeoutSeconds + "s";
+            string notice = "等待房主下发世界超时（" + (int)WorldTimeoutSeconds
+                + " 秒，已自动重试 " + MaxWorldAutoRetries
+                + " 次）。按 F7 打开面板点「重试世界」，或确认房主仍停留在游戏中。";
+            AstralLog.Error(notice);
+            AstralOverlay.ShowNotice(notice);
         }
 
         private static void ApplyHostGameMode(GameMode hostMode, bool friendlyFire, bool crossplay)
@@ -1026,8 +1348,9 @@ namespace AstralRaftNet
                 box.StopAllCoroutines();
                 box.gameObject.SetActive(false);
             }
-            catch
+            catch (Exception ex)
             {
+                AstralLog.Info("hide ConnectingBox failed: " + ex.Message);
             }
         }
 
@@ -1042,12 +1365,35 @@ namespace AstralRaftNet
 
         private static void EnsureSocket(int bindPort)
         {
+            int want = bindPort < 0 ? 0 : bindPort;
             if (_udp != null)
             {
-                return;
+                int actual = 0;
+                try
+                {
+                    IPEndPoint bound = _udp.Client.LocalEndPoint as IPEndPoint;
+                    if (bound != null)
+                    {
+                        actual = bound.Port;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    AstralLog.Error("read udp endpoint: " + ex.Message);
+                }
+
+                // want == 0 表示"随便给个端口"，复用现有 socket 即可；
+                // 否则必须确保实际监听端口与将要广播的端口一致，不能出现"广播 6488、实际随机端口"。
+                if (want == 0 || actual == want)
+                {
+                    return;
+                }
+
+                AstralLog.Info("rebind udp " + actual + " -> " + want);
+                CloseSocket();
             }
 
-            IPEndPoint local = new IPEndPoint(IPAddress.Any, bindPort < 0 ? 0 : bindPort);
+            IPEndPoint local = new IPEndPoint(IPAddress.Any, want);
             UdpClient udp = new UdpClient(local);
             udp.Client.SendBufferSize = 1024 * 1024;
             udp.Client.ReceiveBufferSize = 1024 * 1024;
@@ -1074,8 +1420,24 @@ namespace AstralRaftNet
                 {
                     udp.Close();
                 }
-                catch
+                catch (Exception ex)
                 {
+                    AstralLog.Info("udp close: " + ex.Message);
+                }
+            }
+
+            // 等旧接收线程退出，避免它在新 socket 建立后继续读取同一个 _udp 字段造成双线程抢包。
+            Thread recv = _recvThread;
+            _recvThread = null;
+            if (recv != null && recv != Thread.CurrentThread)
+            {
+                try
+                {
+                    recv.Join(500);
+                }
+                catch (Exception ex)
+                {
+                    AstralLog.Info("udp recv thread join: " + ex.Message);
                 }
             }
         }
@@ -1113,17 +1475,13 @@ namespace AstralRaftNet
         {
             byte[] data;
             IPEndPoint from = new IPEndPoint(IPAddress.Any, 0);
-            while (_recvRunning)
+            // 固定本次线程负责的 socket：重绑后旧线程必须退出，不能继续读 _udp 上的新 socket。
+            UdpClient bound = _udp;
+            while (_recvRunning && bound != null && ReferenceEquals(_udp, bound))
             {
                 try
                 {
-                    UdpClient udp = _udp;
-                    if (udp == null)
-                    {
-                        break;
-                    }
-
-                    data = udp.Receive(ref from);
+                    data = bound.Receive(ref from);
                     if (data == null || data.Length < 1)
                     {
                         continue;
@@ -1133,7 +1491,7 @@ namespace AstralRaftNet
                 }
                 catch (SocketException)
                 {
-                    if (!_recvRunning)
+                    if (!_recvRunning || !ReferenceEquals(_udp, bound))
                     {
                         break;
                     }
@@ -1155,6 +1513,12 @@ namespace AstralRaftNet
         private static void HandleUdpDatagram(byte[] data, IPEndPoint from)
         {
             byte kind = data[0];
+            if (kind == KindHelloV2)
+            {
+                HandleHelloV2(data, from);
+                return;
+            }
+
             if (kind == KindHello)
             {
                 HandleHello(data, from);
@@ -1163,7 +1527,21 @@ namespace AstralRaftNet
 
             if (kind == KindWelcome)
             {
-                _handshakeFrom = from;
+                // 只接受"正在连接且来源端点就是本次目标"的 WELCOME，
+                // 否则同网段任何主机都能抢先返回一个伪造的房主身份。
+                if (!_connecting || data.Length < 11)
+                {
+                    AstralLog.Info("ignore WELCOME from " + from + " (not connecting)");
+                    return;
+                }
+
+                if (_handshakeTarget == null || from == null || !_handshakeTarget.Equals(from))
+                {
+                    AstralLog.Info("ignore WELCOME from unexpected endpoint " + from
+                        + " expected " + _handshakeTarget);
+                    return;
+                }
+
                 _handshakeWelcome = data;
                 return;
             }
@@ -1181,7 +1559,9 @@ namespace AstralRaftNet
                     return;
                 }
 
-                int channel = data[1];
+                int rawChannel = data[1];
+                bool relayed = (rawChannel & ChannelRelayFlag) != 0;
+                int channel = rawChannel & 0x7F;
                 if (!ValidChannel(channel))
                 {
                     return;
@@ -1189,10 +1569,23 @@ namespace AstralRaftNet
 
                 byte[] payload = new byte[data.Length - 2];
                 Buffer.BlockCopy(data, 2, payload, 0, payload.Length);
+                ulong sender = peer.SteamId;
+                if (relayed)
+                {
+                    sender = ReadRelayOrigin(ref payload);
+                    if (sender == 0UL)
+                    {
+                        return;
+                    }
+                }
+
                 IncomingMessages.Enqueue(new QueuedPacket
                 {
-                    SteamId = peer.SteamId,
-                    Data = payload
+                    SteamId = sender,
+                    Data = payload,
+                    Channel = channel,
+                    Unreliable = true,
+                    Relayed = relayed
                 });
                 return;
             }
@@ -1203,6 +1596,10 @@ namespace AstralRaftNet
             }
         }
 
+        /// <summary>
+        /// 旧版 HELLO：名称字段后直接跟明文密码长度 + 密码。
+        /// 保留是为了能和新版客户端之外的旧客户端互通，日志里会明确提示升级。
+        /// </summary>
         private static void HandleHello(byte[] hello, IPEndPoint from)
         {
             if (!_listening || hello.Length < 11)
@@ -1237,26 +1634,126 @@ namespace AstralRaftNet
                     return;
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                AstralLog.Error("legacy hello password check failed from " + remoteSteam + ": " + ex.Message);
+                return;
             }
 
-            CSteamID localId = SteamUser.GetSteamID();
+            AcceptPeer(remoteSteam, from, true);
+        }
+
+        /// <summary>
+        /// 握手 v2：名称字段后是 hasPassword + nonce(16) + proof(32)。
+        /// proof = SHA256(nonce || password)，比较使用常量时间。
+        /// </summary>
+        private static void HandleHelloV2(byte[] hello, IPEndPoint from)
+        {
+            if (!_listening || hello.Length < 12)
+            {
+                return;
+            }
+
+            if (hello[1] != AstralHandshake.Version2)
+            {
+                AstralLog.Info("ignore HELLO protocol " + hello[1] + " from " + from);
+                return;
+            }
+
+            ulong remoteSteam = BitConverter.ToUInt64(hello, 2);
+            CSteamID remoteId = new CSteamID(remoteSteam);
+            if (!remoteId.IsValid())
+            {
+                return;
+            }
+
+            ushort nameLen = BitConverter.ToUInt16(hello, 10);
+            int offset = 12 + nameLen;
+            int nonceOffset = offset + 1;
+            if (hello.Length < nonceOffset + AstralHandshake.NonceSize)
+            {
+                return;
+            }
+
+            bool clientHasPassword = hello[offset] != 0;
+            byte[] nonce = new byte[AstralHandshake.NonceSize];
+            Buffer.BlockCopy(hello, nonceOffset, nonce, 0, nonce.Length);
+
+            bool hostHasPassword;
+            string hostPassword;
+            try
+            {
+                hostHasPassword = GameManager.HasPassword;
+                hostPassword = GameManager.Password ?? string.Empty;
+            }
+            catch (Exception ex)
+            {
+                AstralLog.Error("read host password failed, reject hello from " + remoteSteam + ": " + ex.Message);
+                return;
+            }
+
+            if (hostHasPassword)
+            {
+                int proofOffset = nonceOffset + AstralHandshake.NonceSize;
+                if (!clientHasPassword || hello.Length < proofOffset + AstralHandshake.ProofSize)
+                {
+                    AstralLog.Error("reject HELLO v2 from " + remoteSteam + ": password required");
+                    return;
+                }
+
+                byte[] proof = new byte[AstralHandshake.ProofSize];
+                Buffer.BlockCopy(hello, proofOffset, proof, 0, proof.Length);
+                byte[] expected = AstralHandshake.ComputeProof(nonce, hostPassword);
+                if (!AstralHandshake.FixedTimeEquals(proof, expected))
+                {
+                    AstralLog.Error("bad password proof from " + remoteSteam);
+                    return;
+                }
+            }
+            else if (clientHasPassword)
+            {
+                // 房主没设密码时客户端多发一个证明无害，直接放行。
+                AstralLog.Info("hello v2 from " + remoteSteam + " carries password proof but host has none");
+            }
+
+            AcceptPeer(remoteSteam, from, false);
+        }
+
+        private static void AcceptPeer(ulong remoteSteam, IPEndPoint from, bool legacy)
+        {
+            ulong localSteam = SteamId;
+            if (localSteam == 0UL)
+            {
+                AstralLog.Error("reject peer " + remoteSteam + ": host has no valid SteamID");
+                return;
+            }
+
             string localName = SteamFriends.GetPersonaName() ?? "host";
             lock (PeersLock)
             {
                 Peer existing;
                 if (Peers.TryGetValue(remoteSteam, out existing) && existing != null)
                 {
+                    // 同一个 SteamID 不允许从另一个 IP 端点抢走已有的 peer；
+                    // 同机切端口（地址相同）则允许更新。
+                    if (existing.Remote != null && from != null
+                        && !existing.Remote.Address.Equals(from.Address))
+                    {
+                        AstralLog.Error("reject peer " + remoteSteam + " from " + from
+                            + ", already bound to " + existing.Remote);
+                        return;
+                    }
+
                     existing.Remote = from;
-                    SendUdp(from, BuildWelcome(localId, localName));
+                    SendUdp(from, BuildWelcome(localSteam, localName));
                     return;
                 }
             }
 
-            SendUdp(from, BuildWelcome(localId, localName));
-            CreatePeer(remoteSteam, from, localId.m_SteamID);
-            AstralLog.Info("peer " + remoteSteam + " from " + from);
+            SendUdp(from, BuildWelcome(localSteam, localName));
+            CreatePeer(remoteSteam, from, localSteam);
+            AstralLog.Info("peer " + remoteSteam + " from " + from
+                + (legacy ? " (legacy hello, cleartext password)" : " (hello v2)"));
         }
 
         private static void CreatePeer(ulong remoteSteam, IPEndPoint remote, ulong localSteam)
@@ -1293,7 +1790,7 @@ namespace AstralRaftNet
             return null;
         }
 
-        private static void EnqueueReliablePayload(ulong steamId, int channel, byte[] payload)
+        private static void EnqueueReliablePayload(ulong steamId, int channel, byte[] payload, bool relayed)
         {
             if (!ValidChannel(channel) || payload == null)
             {
@@ -1303,7 +1800,10 @@ namespace AstralRaftNet
             IncomingMessages.Enqueue(new QueuedPacket
             {
                 SteamId = steamId,
-                Data = payload
+                Data = payload,
+                Channel = channel,
+                Unreliable = false,
+                Relayed = relayed
             });
         }
 
@@ -1361,7 +1861,32 @@ namespace AstralRaftNet
             AstralLog.Info("peer closed " + steamId);
         }
 
-        private static byte[] BuildHello(CSteamID id, string name, string password)
+        private static byte[] BuildHelloV2(CSteamID id, string name, string password)
+        {
+            byte[] nameBytes = Encoding.UTF8.GetBytes(name ?? string.Empty);
+            bool hasPassword = !string.IsNullOrEmpty(password);
+            byte[] nonce = AstralHandshake.NewNonce();
+            int offset = 12 + nameBytes.Length;
+            int length = offset + 1 + nonce.Length + (hasPassword ? AstralHandshake.ProofSize : 0);
+            byte[] body = new byte[length];
+            body[0] = KindHelloV2;
+            body[1] = AstralHandshake.Version2;
+            WriteU64(body, 2, id.m_SteamID);
+            WriteU16(body, 10, (ushort)nameBytes.Length);
+            Buffer.BlockCopy(nameBytes, 0, body, 12, nameBytes.Length);
+            body[offset] = (byte)(hasPassword ? 1 : 0);
+            Buffer.BlockCopy(nonce, 0, body, offset + 1, nonce.Length);
+            if (hasPassword)
+            {
+                byte[] proof = AstralHandshake.ComputeProof(nonce, password);
+                Buffer.BlockCopy(proof, 0, body, offset + 1 + nonce.Length, proof.Length);
+            }
+
+            return body;
+        }
+
+        /// <summary>旧协议，明文密码，只在降级兼容旧房主时使用。</summary>
+        private static byte[] BuildLegacyHello(CSteamID id, string name, string password)
         {
             byte[] nameBytes = Encoding.UTF8.GetBytes(name ?? string.Empty);
             byte[] passwordBytes = Encoding.UTF8.GetBytes(password ?? string.Empty);
@@ -1376,12 +1901,12 @@ namespace AstralRaftNet
             return body;
         }
 
-        private static byte[] BuildWelcome(CSteamID id, string name)
+        private static byte[] BuildWelcome(ulong id, string name)
         {
             byte[] nameBytes = Encoding.UTF8.GetBytes(name ?? string.Empty);
             byte[] body = new byte[1 + 8 + 2 + nameBytes.Length + 2];
             body[0] = KindWelcome;
-            WriteU64(body, 1, id.m_SteamID);
+            WriteU64(body, 1, id);
             WriteU16(body, 9, (ushort)nameBytes.Length);
             Buffer.BlockCopy(nameBytes, 0, body, 11, nameBytes.Length);
             int extra = 11 + nameBytes.Length;
@@ -1391,8 +1916,9 @@ namespace AstralRaftNet
             {
                 mode = GameManager.GameMode;
             }
-            catch
+            catch (Exception ex)
             {
+                AstralLog.Info("welcome: GameMode unavailable, fallback Normal: " + ex.Message);
             }
 
             try
@@ -1402,8 +1928,9 @@ namespace AstralRaftNet
                     flags |= 1;
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                AstralLog.Info("welcome: FriendlyFire unavailable, default off: " + ex.Message);
             }
 
             try
@@ -1413,8 +1940,9 @@ namespace AstralRaftNet
                     flags |= 2;
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                AstralLog.Info("welcome: Crossplay unavailable, default off: " + ex.Message);
             }
 
             body[extra] = (byte)mode;
@@ -1464,12 +1992,19 @@ namespace AstralRaftNet
         {
             public ulong SteamId;
             public byte[] Data;
+            public int Channel;
+            public bool Unreliable;
+            public bool Relayed;
         }
 
         private struct PendingMessage
         {
             public ulong SteamId;
             public Message Message;
+            public byte[] Raw;
+            public int Channel;
+            public bool Unreliable;
+            public bool Relayed;
         }
 
         private sealed class Peer
@@ -1616,10 +2151,23 @@ namespace AstralRaftNet
                         break;
                     }
 
-                    int channel = buf[pos + 4];
+                    int rawChannel = buf[pos + 4];
+                    bool relayed = (rawChannel & ChannelRelayFlag) != 0;
+                    int channel = rawChannel & 0x7F;
                     byte[] payload = new byte[payloadLen];
                     Buffer.BlockCopy(buf, pos + 5, payload, 0, payloadLen);
-                    EnqueueReliablePayload(SteamId, channel, payload);
+                    ulong sender = SteamId;
+                    if (relayed)
+                    {
+                        sender = ReadRelayOrigin(ref payload);
+                        if (sender == 0UL)
+                        {
+                            pos += 5 + payloadLen;
+                            continue;
+                        }
+                    }
+
+                    EnqueueReliablePayload(sender, channel, payload, relayed);
                     pos += 5 + payloadLen;
                 }
 

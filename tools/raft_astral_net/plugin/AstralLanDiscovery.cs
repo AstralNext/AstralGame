@@ -11,12 +11,17 @@ namespace AstralRaftNet
 {
     internal sealed class LanRoom
     {
+        // 发现广播里的字段一律不可信：SteamId / Name / Password / TcpPort 都可能被伪造，
+        // 只用于"发现有房间"。真实身份以 UDP 握手返回的房主 SteamID 为准。
         public ulong SteamId;
         public string Ip;
         public int TcpPort;
         public string Name;
         public bool Password;
         public DateTime LastSeenUtc;
+
+        /// <summary>握手确认后的房主 SteamID；0 表示尚未验证。</summary>
+        public ulong VerifiedSteamId;
 
         public string EndPoint
         {
@@ -28,7 +33,7 @@ namespace AstralRaftNet
             get
             {
                 string name = string.IsNullOrEmpty(Name) ? SteamId.ToString() : Name;
-                return name + "  " + EndPoint;
+                return name + (VerifiedSteamId == 0UL ? "（未验证）" : string.Empty) + "  " + EndPoint;
             }
         }
     }
@@ -205,6 +210,42 @@ namespace AstralRaftNet
             }
         }
 
+        /// <summary>
+        /// 握手成功后确认房主身份。announcedSteam 来自发现广播（不可信），
+        /// verifiedSteam 来自 WELCOME（本次会话的真实身份）。两者不一致时以握手值为准。
+        /// </summary>
+        public static void ConfirmHandshake(ulong announcedSteam, ulong verifiedSteam)
+        {
+            if (verifiedSteam == 0UL)
+            {
+                return;
+            }
+
+            lock (Sync)
+            {
+                LanRoom room;
+                bool found = Rooms.TryGetValue(announcedSteam, out room);
+                if (!found)
+                {
+                    Rooms.TryGetValue(verifiedSteam, out room);
+                }
+
+                if (room == null)
+                {
+                    AstralLog.Info("handshake confirmed host=" + verifiedSteam + " (no discovery entry)");
+                    return;
+                }
+
+                if (announcedSteam != 0UL && announcedSteam != verifiedSteam)
+                {
+                    AstralLog.Info("discovery steam mismatch: broadcast=" + announcedSteam
+                        + " handshake=" + verifiedSteam + ", use handshake value");
+                }
+
+                room.VerifiedSteamId = verifiedSteam;
+            }
+        }
+
         private static void BroadcastLoop()
         {
             while (_broadcastRunning)
@@ -350,6 +391,8 @@ namespace AstralRaftNet
             }
         }
 
+        private static bool _steamLogOnce;
+
         private static byte[] BuildAnnounce()
         {
             ulong steamId = 0;
@@ -357,8 +400,13 @@ namespace AstralRaftNet
             {
                 steamId = SteamUser.GetSteamID().m_SteamID;
             }
-            catch
+            catch (Exception ex)
             {
+                if (!_steamLogOnce)
+                {
+                    _steamLogOnce = true;
+                    AstralLog.Info("announce: steam id unavailable, announce 0: " + ex.Message);
+                }
             }
 
             byte[] nameBytes = Encoding.UTF8.GetBytes(_name ?? "ASGAME");

@@ -1,3 +1,4 @@
+using System;
 using HarmonyLib;
 using Steamworks;
 
@@ -9,16 +10,27 @@ namespace AstralRaftNet
     })]
     internal static class Patch_SendP2P
     {
+        private static FastInvokeHandler _parseLocal;
+
         private static bool Prefix(Raft_Network __instance, Network_UserId steamID, Message message, EP2PSend sendType, NetworkChannel channel)
         {
-            if (message == null || !AstralTransport.IsActive)
+            if (message == null)
             {
-                return true;
+                return false;
             }
 
             if (steamID == __instance.LocalSteamID)
             {
-                return true;
+                // 本地回环：单机/房主给自己发消息，直接本地应用，不属于联机通道。
+                if (_parseLocal == null)
+                {
+                    _parseLocal = MethodInvoker.GetHandler(
+                        AstralReflection.Method(typeof(Raft_Network), "ParseLocalMessage",
+                            typeof(Message), typeof(Network_UserId)));
+                }
+
+                _parseLocal(__instance, new object[] { message, steamID });
+                return false;
             }
 
             if (!AstralTransport.TrySendMessageOrHost(steamID.Id, message, (int)channel, sendType))
@@ -40,9 +52,9 @@ namespace AstralRaftNet
 
         private static bool Prefix(Raft_Network __instance, Message message, Target target, EP2PSend sendType, NetworkChannel channel)
         {
-            if (AstralTransport.PeerCount == 0 || message == null)
+            if (message == null)
             {
-                return true;
+                return false;
             }
 
             if (target == Target.All)
@@ -50,7 +62,8 @@ namespace AstralRaftNet
                 if (_parseLocal == null)
                 {
                     _parseLocal = MethodInvoker.GetHandler(
-                        AccessTools.Method(typeof(Raft_Network), "ParseLocalMessage"));
+                        AstralReflection.Method(typeof(Raft_Network), "ParseLocalMessage",
+                            typeof(Message), typeof(Network_UserId)));
                 }
 
                 _parseLocal(__instance, new object[] { message, __instance.LocalSteamID });
@@ -61,14 +74,17 @@ namespace AstralRaftNet
         }
     }
 
-    [HarmonyPatch(typeof(Raft_Network), nameof(Raft_Network.RPCExclude))]
+    [HarmonyPatch(typeof(Raft_Network), nameof(Raft_Network.RPCExclude), new[]
+    {
+        typeof(Message), typeof(Target), typeof(Network_UserId), typeof(EP2PSend), typeof(NetworkChannel)
+    })]
     internal static class Patch_RPCExclude
     {
         private static bool Prefix(Message message, Network_UserId excludeID, EP2PSend sendType, NetworkChannel channel)
         {
-            if (AstralTransport.PeerCount == 0 || message == null)
+            if (message == null)
             {
-                return true;
+                return false;
             }
 
             AstralTransport.BroadcastMessage(message, (int)channel, excludeID.Id, sendType);
@@ -76,37 +92,34 @@ namespace AstralRaftNet
         }
     }
 
-    [HarmonyPatch(typeof(Raft_Network), "Platform_HostGame")]
+    [HarmonyPatch(typeof(Raft_Network), "Platform_HostGame", new Type[0])]
     internal static class Patch_PlatformHostGame
     {
         private static bool Prefix(Raft_Network __instance)
         {
-            if (!AstralSettings.EnableLan)
-            {
-                return true;
-            }
-
+            // 原版 PlayFab 官方房/跨平台房在这里被彻底切断：不再调用 CreateAndJoinNetwork。
             if (!LoadSceneManager.IsGameSceneLoaded)
             {
-                AccessTools.Method(typeof(Raft_Network), "LoadScene")
+                AstralReflection.Method(typeof(Raft_Network), "LoadScene", typeof(string))
                     .Invoke(__instance, new object[] { Raft_Network.GameSceneName });
             }
 
-            AccessTools.Field(typeof(Raft_Network), "m_currentSteamHost")
-                .SetValue(__instance, SteamUser.GetSteamID());
-            AccessTools.Field(typeof(Raft_Network), "m_hostedPlayFab")
+            AstralReflection.Field(typeof(Raft_Network), "m_currentSteamHost")
+                .SetValue(__instance, new CSteamID(AstralTransport.SteamId));
+            AstralReflection.Field(typeof(Raft_Network), "m_hostedPlayFab")
                 .SetValue(__instance, false);
             AstralLog.Info("host without PlayFab");
             return false;
         }
     }
 
-    [HarmonyPatch(typeof(Raft_Network), "ReadP2P_Channel_Connecting")]
+    [HarmonyPatch(typeof(Raft_Network), "ReadP2P_Channel_Connecting", new Type[0])]
     internal static class Patch_ReadP2PConnecting
     {
         private static bool Prefix()
         {
-            return !AstralTransport.IsActive;
+            // 原版 Steam 好友加入握手整条废弃：永不处理，避免它重新创建 PlayFab 房。
+            return false;
         }
     }
 }

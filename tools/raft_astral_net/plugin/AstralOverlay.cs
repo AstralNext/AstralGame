@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
-using HarmonyLib;
 using UnityEngine;
 
 namespace AstralRaftNet
@@ -9,6 +8,12 @@ namespace AstralRaftNet
     internal sealed class AstralOverlay : MonoBehaviour
     {
         private static AstralOverlay _instance;
+        private static string _fatalNotice;
+        private static string _notice;
+        private static float _noticeUntil;
+        private static bool _playerNameLogOnce;
+        private static bool _controllerLogOnce;
+        private static bool _startMenuLogOnce;
         private bool _visible;
         private string _address = string.Empty;
         private string _password = string.Empty;
@@ -24,6 +29,8 @@ namespace AstralRaftNet
         private float _tpHintUntil;
         private GUIStyle _logStyle;
         private GUIStyle _badgeStyle;
+        private GUIStyle _fatalStyle;
+        private GUIStyle _noticeStyle;
         private float _nextPlayerRefresh;
         private readonly List<PlayerPick> _players = new List<PlayerPick>();
 
@@ -59,8 +66,30 @@ namespace AstralRaftNet
             }
         }
 
+        /// <summary>
+        /// 补丁整体未生效时展示给玩家的提示，不依赖 Harmony 补丁本身。
+        /// </summary>
+        public static void ShowFatalNotice(string message)
+        {
+            _fatalNotice = message;
+            AstralLog.Error("fatal notice: " + message);
+        }
+
+        /// <summary>
+        /// 非致命提示（例如世界下发超时），过一段时间自动消失。
+        /// </summary>
+        public static void ShowNotice(string message)
+        {
+            _notice = message;
+            _noticeUntil = Time.realtimeSinceStartup + 12f;
+            AstralLog.Info("notice: " + message);
+        }
+
         private void OnGUI()
         {
+            DrawFatalNotice();
+            DrawNotice();
+
             if (OnStartMenu())
             {
                 DrawInjectedBadge();
@@ -85,10 +114,71 @@ namespace AstralRaftNet
 
                 return UnityEngine.Object.FindObjectOfType<StartMenuScreen>() != null;
             }
-            catch
+            catch (Exception ex)
             {
+                if (!_startMenuLogOnce)
+                {
+                    _startMenuLogOnce = true;
+                    AstralLog.Info("detect start menu failed, assume menu: " + ex.Message);
+                }
+
                 return true;
             }
+        }
+
+        private void DrawFatalNotice()
+        {
+            if (string.IsNullOrEmpty(_fatalNotice))
+            {
+                return;
+            }
+
+            if (_fatalStyle == null)
+            {
+                _fatalStyle = new GUIStyle(GUI.skin.box)
+                {
+                    alignment = TextAnchor.MiddleCenter,
+                    fontSize = 15,
+                    wordWrap = true,
+                    padding = new RectOffset(14, 14, 10, 10)
+                };
+                _fatalStyle.normal.textColor = new Color(1f, 0.88f, 0.84f);
+            }
+
+            float width = Mathf.Min(Screen.width - 40f, 760f);
+            Rect rect = new Rect((Screen.width - width) * 0.5f, 60f, width, 96f);
+            Color previous = GUI.color;
+            GUI.color = new Color(0.34f, 0.08f, 0.06f, 0.92f);
+            GUI.Box(rect, _fatalNotice, _fatalStyle);
+            GUI.color = previous;
+        }
+
+        private void DrawNotice()
+        {
+            if (string.IsNullOrEmpty(_notice) || Time.realtimeSinceStartup > _noticeUntil)
+            {
+                return;
+            }
+
+            if (_noticeStyle == null)
+            {
+                _noticeStyle = new GUIStyle(GUI.skin.box)
+                {
+                    alignment = TextAnchor.MiddleCenter,
+                    fontSize = 15,
+                    wordWrap = true,
+                    padding = new RectOffset(14, 14, 10, 10)
+                };
+                _noticeStyle.normal.textColor = new Color(1f, 0.95f, 0.8f);
+            }
+
+            float width = Mathf.Min(Screen.width - 40f, 760f);
+            float top = string.IsNullOrEmpty(_fatalNotice) ? 60f : 166f;
+            Rect rect = new Rect((Screen.width - width) * 0.5f, top, width, 84f);
+            Color previous = GUI.color;
+            GUI.color = new Color(0.28f, 0.2f, 0.05f, 0.92f);
+            GUI.Box(rect, _notice, _noticeStyle);
+            GUI.color = previous;
         }
 
         private void DrawInjectedBadge()
@@ -148,7 +238,7 @@ namespace AstralRaftNet
                 }
 
                 Dictionary<Network_UserId, Network_Player> remoteUsers =
-                    AccessTools.Field(typeof(Raft_Network), "remoteUsers")
+                    AstralReflection.Field(typeof(Raft_Network), "remoteUsers")
                         .GetValue(network) as Dictionary<Network_UserId, Network_Player>;
                 if (remoteUsers == null)
                 {
@@ -176,8 +266,13 @@ namespace AstralRaftNet
                             name = player.characterSettings.Name;
                         }
                     }
-                    catch
+                    catch (Exception ex)
                     {
+                        if (!_playerNameLogOnce)
+                        {
+                            _playerNameLogOnce = true;
+                            AstralLog.Info("player name unavailable, fallback player: " + ex.Message);
+                        }
                     }
 
                     if (string.IsNullOrEmpty(name))
@@ -224,15 +319,20 @@ namespace AstralRaftNet
             {
                 if (local.PersonController != null)
                 {
-                    FieldInfo controllerField = AccessTools.Field(typeof(PersonController), "controller");
+                    FieldInfo controllerField = AstralReflection.Field(typeof(PersonController), "controller");
                     if (controllerField != null)
                     {
                         controller = controllerField.GetValue(local.PersonController) as Behaviour;
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                if (!_controllerLogOnce)
+                {
+                    _controllerLogOnce = true;
+                    AstralLog.Info("teleport: controller unavailable, move without disable: " + ex.Message);
+                }
             }
 
             if (controller != null)
@@ -261,6 +361,13 @@ namespace AstralRaftNet
                 + " · peers=" + AstralTransport.PeerCount
                 + (AstralTransport.WorldReceived ? " · world=ok" : " · world=waiting"));
             GUILayout.Label("状态: " + AstralTransport.Status);
+            if (AstralTransport.IsJoining && !AstralTransport.WorldReceived)
+            {
+                if (GUILayout.Button(AstralTransport.WorldTimedOut ? "世界下发超时，点此重试" : "重新请求世界"))
+                {
+                    AstralTransport.RetryWorld();
+                }
+            }
 
             GUILayout.BeginHorizontal();
             GUILayout.Label("端口", GUILayout.Width(40f));
